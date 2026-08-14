@@ -312,17 +312,34 @@ fn retrieval_golden() {
         json!({}),
     )
     .expect("ingest");
-    let hits = kb.retrieve(
-        input["query"].as_str().unwrap(),
-        case["expect"]["k"].as_u64().unwrap() as usize,
-    );
-    assert!(!hits.is_empty(), "must have hits");
-    assert_eq!(hits[0].doc_id, case["expect"]["hit_doc"].as_str().unwrap());
-    assert!(
-        hits[0]
-            .chunk
-            .contains(case["expect"]["hit_contains"].as_str().unwrap())
-    );
+    match case["name"].as_str().unwrap() {
+        "ingest_and_search_hit" => {
+            let hits = kb.retrieve(
+                input["query"].as_str().unwrap(),
+                case["expect"]["k"].as_u64().unwrap() as usize,
+            );
+            assert!(!hits.is_empty(), "must have hits");
+            assert_eq!(hits[0].doc_id, case["expect"]["hit_doc"].as_str().unwrap());
+            assert!(
+                hits[0]
+                    .chunk
+                    .contains(case["expect"]["hit_contains"].as_str().unwrap())
+            );
+        }
+        "vector_search_hit" => {
+            let hits = kb.retrieve_vector(
+                input["query"].as_str().unwrap(),
+                case["expect"]["k"].as_u64().unwrap() as usize,
+            );
+            assert!(!hits.is_empty(), "vector path must have hits");
+            assert_eq!(hits[0].doc_id, case["expect"]["hit_doc"].as_str().unwrap());
+            assert!(
+                (0.0..=1.0).contains(&hits[0].score),
+                "vector score normalized to [0,1]"
+            );
+        }
+        other => panic!("unknown retrieval case: {other}"),
+    }
 
     drop(effects);
     let _ = std::fs::remove_dir_all(&root);

@@ -1,8 +1,10 @@
 //! # ah-plugins-retrieval
 //!
-//! 真实本地知识库检索:文档分块 + 词法统计(BM25 风格),JSON 持久化。
+//! 真实本地知识库检索:文档分块 + 词法统计(BM25 风格)+ 本地确定性向量
+//! (哈希 n-gram TF embedding + 余弦相似度),JSON 持久化。
 //! 提供 retrieval seam + ingest_knowledge/search_knowledge 两个真实工具,
 //! 让 agent 能通过工具调用检索(过工具执行管线,rails 同样生效)。
+//! 外部模型 embedding(OpenAI/本地模型)留待后续,文档注明。
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -20,12 +22,14 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// 一个分块:文本 + 词频。
+/// 一个分块:文本 + 词频 + 向量(摄入时计算;旧文档为空则检索时补算)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Chunk {
     text: String,
     /// term -> 出现次数(小写词)。
     tokens: HashMap<String, u32>,
+    #[serde(default)]
+    embedding: Vec<f64>,
 }
 
 /// 一篇文档:分块 + 元数据。
@@ -43,6 +47,57 @@ fn tokenize(text: &str) -> Vec<String> {
         .filter(|t| !t.is_empty() && t.len() >= 2)
         .map(str::to_string)
         .collect()
+}
+
+/// 向量维度(哈希 n-gram TF 稠密向量;文档注明为固定启发式维度)。
+const EMBED_DIM: usize = 256;
+
+/// FNV-1a 稳定哈希(与平台无关,保证跨运行一致)。
+fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        hash ^= b as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+/// 特征:小写词 + 字符二元组(支持 CJK 与部分匹配)。
+fn features(text: &str) -> Vec<String> {
+    let mut feats = Vec::new();
+    feats.extend(tokenize(text));
+    let chars: Vec<char> = text.to_lowercase().chars().collect();
+    for pair in chars.windows(2) {
+        let gram: String = pair.iter().collect();
+        if gram.chars().any(|c| c.is_alphanumeric()) {
+            feats.push(format!("bi:{gram}"));
+        }
+    }
+    feats
+}
+
+/// 确定性本地 embedding:哈希特征到 [0, DIM) 的 TF 权重稠密向量。
+fn embed(text: &str) -> Vec<f64> {
+    let mut vector = vec![0.0f64; EMBED_DIM];
+    for feature in features(text) {
+        let idx = (fnv1a(feature.as_bytes()) % EMBED_DIM as u64) as usize;
+        vector[idx] += 1.0;
+    }
+    vector
+}
+
+/// 余弦相似度(零向量返回 0)。
+fn cosine(a: &[f64], b: &[f64]) -> f64 {
+    let mut dot = 0.0;
+    let mut na = 0.0;
+    let mut nb = 0.0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    let denom = na.sqrt() * nb.sqrt();
+    if denom == 0.0 { 0.0 } else { dot / denom }
 }
 
 /// 切块:按空行分段;段过大(>600 字符)再按固定窗口切。
@@ -140,6 +195,7 @@ impl RetrievalProvider for LocalRetrievalProvider {
                     }
                     map
                 },
+                embedding: embed(&text),
                 text,
             })
             .collect();
@@ -193,6 +249,44 @@ impl RetrievalProvider for LocalRetrievalProvider {
         });
         scored.truncate(k);
         scored
+    }
+
+    fn retrieve_vector(&self, query: &str, k: usize) -> Vec<RetrievalHit> {
+        let docs = self.docs.lock().unwrap().clone();
+        if docs.is_empty() {
+            return Vec::new();
+        }
+        let query_vec = self.embedding(query);
+        let mut scored: Vec<RetrievalHit> = Vec::new();
+        for doc in docs.values() {
+            for chunk in &doc.chunks {
+                // 旧文档(无向量)补算;向量来自确定性 embedding。
+                let chunk_vec = if chunk.embedding.is_empty() {
+                    embed(&chunk.text)
+                } else {
+                    chunk.embedding.clone()
+                };
+                let score = cosine(&query_vec, &chunk_vec);
+                if score > 0.0 {
+                    scored.push(RetrievalHit {
+                        doc_id: doc.doc_id.clone(),
+                        chunk: chunk.text.clone(),
+                        score,
+                    });
+                }
+            }
+        }
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        scored.truncate(k);
+        scored
+    }
+
+    fn embedding(&self, text: &str) -> Vec<f64> {
+        embed(text)
     }
 
     fn remove(&self, doc_id: &str) -> Result<(), RetrievalError> {
@@ -278,7 +372,7 @@ impl Tool for SearchKnowledgeTool {
     }
 
     fn description(&self) -> &'static str {
-        "search the knowledge base; arguments: {query, k?}"
+        "search the knowledge base; arguments: {query, k?, mode?} with mode bm25|vector"
     }
 
     fn parameters(&self) -> Value {
@@ -287,6 +381,7 @@ impl Tool for SearchKnowledgeTool {
             "properties": {
                 "query": { "type": "string" },
                 "k": { "type": "integer" },
+                "mode": { "type": "string", "enum": ["bm25", "vector"] },
             },
             "required": ["query"],
         })
@@ -298,8 +393,15 @@ impl Tool for SearchKnowledgeTool {
             .and_then(Value::as_str)
             .ok_or_else(|| ToolError("missing string field query".to_string()))?;
         let k = arguments.get("k").and_then(Value::as_u64).unwrap_or(3) as usize;
-        let hits = self.retrieval.retrieve(query, k);
-        Ok(json!({ "count": hits.len(), "hits": hits }))
+        let mode = arguments
+            .get("mode")
+            .and_then(Value::as_str)
+            .unwrap_or("bm25");
+        let hits = match mode {
+            "vector" => self.retrieval.retrieve_vector(query, k),
+            _ => self.retrieval.retrieve(query, k),
+        };
+        Ok(json!({ "mode": mode, "count": hits.len(), "hits": hits }))
     }
 }
 
@@ -440,6 +542,99 @@ mod tests {
             .expect("search");
         assert_eq!(result["count"], 1);
         assert!(dir.join("d1.json").exists(), "知识库真实落盘");
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn embedding_is_deterministic_and_dense() {
+        let (provider, dir) = provider("embed");
+        let v1 = provider.embedding("machine learning");
+        let v2 = provider.embedding("machine learning");
+        assert_eq!(v1, v2, "same text -> identical vector");
+        assert_eq!(v1.len(), EMBED_DIM, "dense fixed-dimension vector");
+        assert!(v1.iter().any(|x| *x > 0.0), "non-zero features");
+        let v3 = provider.embedding("quantum physics");
+        assert_ne!(v1, v3, "different text -> different vector");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn retrieve_vector_finds_shared_terms_by_cosine() {
+        let (provider, dir) = provider("vec");
+        provider
+            .ingest(
+                "dogs",
+                "Dogs are loyal pets. Puppies need daily care and training.",
+                json!({}),
+            )
+            .expect("ingest dogs");
+        provider
+            .ingest(
+                "stocks",
+                "Stock markets rise and fall with interest rates and earnings.",
+                json!({}),
+            )
+            .expect("ingest stocks");
+
+        let hits = provider.retrieve_vector("puppy dog care", 2);
+        assert!(!hits.is_empty(), "vector path returns hits");
+        assert_eq!(hits[0].doc_id, "dogs", "semantic/shared-term match first");
+        assert!(
+            hits.iter().all(|h| (0.0..=1.0).contains(&h.score)),
+            "score in [0,1]"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn retrieve_vector_handles_cjk_bigrams() {
+        let (provider, dir) = provider("cjk");
+        provider
+            .ingest(
+                "ml",
+                "机器学习与自然语言处理是人工智能的核心方向。",
+                json!({}),
+            )
+            .expect("ingest");
+        let hits = provider.retrieve_vector("机器学习", 1);
+        assert!(!hits.is_empty(), "CJK query matches via char bigrams");
+        assert_eq!(hits[0].doc_id, "ml");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn search_knowledge_tool_supports_vector_mode() {
+        use ah_contracts::keys::TOOLS;
+        use ah_hub::plugin::DynPlugin;
+        use std::sync::Arc as StdArc;
+
+        let dir = std::env::temp_dir().join(format!("ah-retrieval-vecmode-{}", std::process::id()));
+        let ctx = Context::new();
+        let plugins: Vec<DynPlugin> = vec![
+            StdArc::new(ah_plugins_tools::ToolsPlugin),
+            StdArc::new(RetrievalPlugin::new(&dir)),
+        ];
+        let effects = ctx.mount_all(plugins).expect("mount");
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+
+        let _ = registry
+            .invoke(
+                "ingest_knowledge",
+                json!({ "doc_id": "d1", "text": "Rust is a systems programming language." }),
+            )
+            .await
+            .expect("ingest");
+        let result = registry
+            .invoke(
+                "search_knowledge",
+                json!({ "query": "rust", "mode": "vector" }),
+            )
+            .await
+            .expect("search vector");
+        assert_eq!(result["mode"], "vector");
+        assert_eq!(result["count"], 1);
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&dir);

@@ -66,7 +66,7 @@
 | session(38 类) | `sessions` seam + ah-plugins-session-log | 检查点、VCS/fork/restore、tracer | append-only 日志重建
 | context_engine(72 文件) | `context` seam | 压缩、offload、token 预算、reinjection | 已实现(ah-plugins-context:预算组装/摘录压缩+LLM 总结/offload JSONL/reinject);精确 tokenizer 与向量化留待后续 |
 | memory(104 文件) | `memory` seam + ah-plugins-memory-* | graph/lite/coding 记忆、外部 provider | 记忆持久化 + provider 真实接入
-| retrieval(84 文件) | `retrieval` seam | indexing/embedding/reranker/vector store/retriever | 真实向量库与解析链
+| retrieval(84 文件) | `retrieval` seam | indexing/embedding/reranker/vector store/retriever | BM25 + 本地确定性向量(哈希 n-gram TF + 余弦)已落地;reranker 与外部模型 embedding 留待后续 |
 | security(20 类) | `security` seam | guardrail 后端、sanitizer、风险组合 | 规则+LLM 后端
 | sys_operation(56 类) | `fs`/`shell`/`code`/`sandbox` seam + ah-plugins-sysop-* | 本地/远程受限执行 | 现成 sys_operation 资产;补远程沙箱
 | single_agent(60 类) | ah-plugins-core-single-agent | ReAct、中断恢复、skills、ability manager | 中断可恢复;非 mock 模型

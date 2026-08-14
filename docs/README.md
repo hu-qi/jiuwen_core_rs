@@ -52,7 +52,7 @@
   ah-plugins-session-log(真实会话事件日志:JSONL 落盘 + 投影 + 多会话管理 create/fork/resume);
   ah-plugins-workflow(真实工作流引擎:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边);
   ah-plugins-memory(真实持久化记忆 + remember/recall/forget 工具);
-  ah-plugins-retrieval(真实知识库检索:BM25 分块 + ingest_knowledge/search_knowledge 工具);
+  ah-plugins-retrieval(真实知识库检索:BM25 分块 + 本地确定性向量(哈希 n-gram TF + 余弦) + ingest_knowledge/search_knowledge 工具,search 支持 bm25|vector 模式);
   ah-plugins-security(真实安全检测:提示注入/敏感数据 guardrails + tools/pre-execute rail);
   ah-plugins-subagent(真实子代理:隔离会话委派 + 预算 + 上下文注入 + delegate_task 工具);
   ah-plugins-teams(真实多 agent 团队:任务板 + 依赖门控 + 成员校验 + review 票 + settle 多数决 + run_task 真实委派 subagent);

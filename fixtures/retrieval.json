@@ -12,6 +12,16 @@
         "query": "fox"
       },
       "expect": { "hit_doc": "doc1", "hit_contains": "fox", "k": 1 }
+    },
+    {
+      "name": "vector_search_hit",
+      "category": "success",
+      "input": {
+        "doc_id": "doc1",
+        "text": "The quick brown fox jumps over the lazy dog while the cat sleeps.",
+        "query": "lazy dog"
+      },
+      "expect": { "hit_doc": "doc1", "score_in_01": true, "k": 1 }
     }
   ]
 }
