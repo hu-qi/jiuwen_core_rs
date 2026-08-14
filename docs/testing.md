@@ -8,7 +8,7 @@
 | 层 | 内容 | 位置/命令 | 必过门禁
 | --- | --- | --- | --- |
 | 单元 | 内核机制、插件内部逻辑 | 各 crate 内 #[cfg(test)] | cargo test --workspace
-| 契约 | 每个 seam 的 golden fixtures | ah-contracts/tests/ 或各插件 tests/(规划) | cargo test --workspace
+| 契约 | 每个 seam 的 golden fixtures | fixtures/ + ah-app/tests/golden.rs(已落地:9 seam) | cargo test --workspace
 | 差分 | 与 agent-core 行为对等 | 语言中立 fixtures(规划) | cargo test --workspace
 | e2e | 真实 provider/传输/子进程 | integration 标记;缺凭据自动跳过 | CI 存在性检查
 

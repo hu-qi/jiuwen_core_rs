@@ -1,0 +1,28 @@
+{
+  "seam": "evolving",
+  "description": "evolving seam golden fixtures (real trajectory extraction + evaluation)",
+  "categories": ["success", "illegal"],
+  "cases": [
+    {
+      "name": "clean_trajectory_passes",
+      "category": "success",
+      "input": {
+        "task": "list workspace",
+        "events": [
+          { "kind": "user", "content": "list the workspace" },
+          { "kind": "assistant", "tool_calls": [{ "id": "c1", "name": "list_dir", "arguments": { "path": "." } }] },
+          { "kind": "tool_result", "tool_call_id": "c1", "output": "[\"a.txt\"]" },
+          { "kind": "agent_step", "iteration": 1, "tool_calls": 1, "done": true },
+          { "kind": "assistant", "content": "final answer" }
+        ]
+      },
+      "expect": { "verdict": "pass", "score_min": 0.75 }
+    },
+    {
+      "name": "empty_trajectory_fails",
+      "category": "illegal",
+      "input": { "task": "nothing", "events": [] },
+      "expect": { "verdict": "fail", "score_max": 0.4 }
+    }
+  ]
+}

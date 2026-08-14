@@ -1,0 +1,25 @@
+{
+  "seam": "fs",
+  "description": "fs seam golden fixtures (real sysop fs provider)",
+  "categories": ["success", "illegal"],
+  "cases": [
+    {
+      "name": "write_read_roundtrip",
+      "category": "success",
+      "input": { "op": "write_then_read", "rel": "a/b.txt", "content": "hello fixture" },
+      "expect": { "content": "hello fixture", "list_contains": "b.txt", "exists": true }
+    },
+    {
+      "name": "remove_then_gone",
+      "category": "success",
+      "input": { "op": "remove", "rel": "a/b.txt" },
+      "expect": { "exists": false }
+    },
+    {
+      "name": "escape_denied",
+      "category": "illegal",
+      "input": { "op": "read", "rel": "../escape.txt" },
+      "expect": { "error": true }
+    }
+  ]
+}

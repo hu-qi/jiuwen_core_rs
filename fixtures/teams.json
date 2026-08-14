@@ -1,0 +1,28 @@
+{
+  "seam": "teams",
+  "description": "teams seam golden fixtures (real team runtime)",
+  "categories": ["success", "illegal"],
+  "cases": [
+    {
+      "name": "lifecycle_to_done",
+      "category": "success",
+      "input": {
+        "team": { "id": "t1", "name": "Alpha" },
+        "members": [{ "id": "m1", "name": "Alice", "role": "dev" }],
+        "task": { "id": "a", "title": "do a", "dependencies": [] }
+      },
+      "expect": { "final_status": "done" }
+    },
+    {
+      "name": "non_member_claim_rejected",
+      "category": "illegal",
+      "input": {
+        "team": { "id": "t1", "name": "Alpha" },
+        "members": [{ "id": "m1", "name": "Alice", "role": "dev" }],
+        "task": { "id": "a", "title": "do a", "dependencies": [] },
+        "claimant": "intruder"
+      },
+      "expect": { "error": true }
+    }
+  ]
+}

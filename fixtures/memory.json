@@ -1,0 +1,19 @@
+{
+  "seam": "memory",
+  "description": "memory seam golden fixtures (real JSON-file memory)",
+  "categories": ["success", "serialization"],
+  "cases": [
+    {
+      "name": "store_retrieve_search",
+      "category": "success",
+      "input": { "key": "k1", "content": "remembered fact", "tags": ["project"] },
+      "expect": { "retrieved": "remembered fact", "search_hit": true }
+    },
+    {
+      "name": "persisted_across_reopen",
+      "category": "serialization",
+      "input": { "key": "k1", "content": "remembered fact", "tags": ["project"] },
+      "expect": { "restored": "remembered fact" }
+    }
+  ]
+}

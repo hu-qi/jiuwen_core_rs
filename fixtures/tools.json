@@ -1,0 +1,19 @@
+{
+  "seam": "tools",
+  "description": "tools seam golden fixtures (real registry + sysop tools)",
+  "categories": ["success", "illegal"],
+  "cases": [
+    {
+      "name": "invoke_real_read_file",
+      "category": "success",
+      "input": { "tool": "read_file", "file": "probe.txt", "content": "probe content" },
+      "expect": { "output_contains": "probe content" }
+    },
+    {
+      "name": "unknown_tool_rejected",
+      "category": "illegal",
+      "input": { "tool": "no_such_tool", "arguments": {} },
+      "expect": { "error": true }
+    }
+  ]
+}

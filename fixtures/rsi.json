@@ -1,0 +1,19 @@
+{
+  "seam": "rsi",
+  "description": "rsi seam golden fixtures (real dataset generation)",
+  "categories": ["success", "illegal"],
+  "cases": [
+    {
+      "name": "dataset_expansion_count",
+      "category": "success",
+      "input": { "seed_tasks": ["list files"], "count": 4 },
+      "expect": { "count": 4, "unique_ids": 4 }
+    },
+    {
+      "name": "empty_seeds_rejected",
+      "category": "illegal",
+      "input": { "seed_tasks": [], "count": 1 },
+      "expect": { "error": true }
+    }
+  ]
+}

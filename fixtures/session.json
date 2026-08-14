@@ -1,0 +1,29 @@
+{
+  "seam": "session",
+  "description": "session seam golden fixtures (real JSONL session log)",
+  "categories": ["success", "serialization"],
+  "cases": [
+    {
+      "name": "append_and_derive_messages",
+      "category": "success",
+      "input": {
+        "events": [
+          { "kind": "user", "content": "list the workspace" },
+          { "kind": "assistant", "content": "here is the listing" }
+        ]
+      },
+      "expect": { "derived_roles": ["user", "assistant"] }
+    },
+    {
+      "name": "jsonl_roundtrip_resume",
+      "category": "serialization",
+      "input": {
+        "events": [
+          { "kind": "user", "content": "persist me" },
+          { "kind": "assistant", "content": "done" }
+        ]
+      },
+      "expect": { "resumed_event_count": 2 }
+    }
+  ]
+}
