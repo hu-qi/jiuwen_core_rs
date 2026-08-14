@@ -13,6 +13,7 @@ use ah_hub::profile::Profile;
 use ah_plugins_agent_loop::{AgentLoop, AgentLoopPlugin, AgentStep};
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
+use ah_plugins_rails::ShellGuardRailPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_tools::ToolsPlugin;
 use serde_json::json;
@@ -28,6 +29,10 @@ fn plugin_catalog(workspace_root: &std::path::Path) -> Vec<(&'static str, DynPlu
         (
             "ah-plugins-sysop",
             Arc::new(SysopPlugin::new(workspace_root)) as DynPlugin,
+        ),
+        (
+            "ah-plugins-rails",
+            Arc::new(ShellGuardRailPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-agent-loop",
@@ -118,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         output.stdout.trim()
     );
 
-    // tools seam:真实工具调用(write_file -> read_file 往返)。
+    // tools seam:真实工具调用 + 工具执行管线(rails)。
     let registry = ctx
         .service::<dyn ToolRegistry>(&TOOLS)
         .ok_or("tools seam not registered")?;
@@ -138,6 +143,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "[tools] write_file -> read_file roundtrip: {}",
         read["content"]
     );
+
+    // rails:真实 ShellGuard 拒绝危险命令(工具执行管线 pre-execute waterfall)。
+    let safe = registry
+        .invoke(
+            "run_shell",
+            json!({ "command": "echo", "args": ["pipeline-ok"] }),
+        )
+        .await?;
+    println!(
+        "[tools] run_shell echo pipeline-ok -> exit={}",
+        safe["exit_code"]
+    );
+    match registry
+        .invoke("run_shell", json!({ "command": "rm -rf /" }))
+        .await
+    {
+        Ok(_) => println!("[tools] WARNING: dangerous command was NOT blocked!"),
+        Err(error) => println!("[tools] run_shell rm -rf / -> blocked: {error}"),
+    }
 
     // agent-loop:真实 ReAct 循环(工具执行真实;模型 dev=桩 / prod=真实)。
     let _step_listener = ctx.on::<AgentStep>(|step| {

@@ -1,10 +1,11 @@
 # dev profile:
 # - ah-plugins-mock: 仅 llm boot 桩(真实 LLM provider 需凭据,落地前保持)
-# - ah-plugins-tools: 真实工具注册表
+# - ah-plugins-tools: 真实工具注册表(含工具执行管线)
 # - ah-plugins-sysop: 真实 fs/shell 执行(真实副作用)
+# - ah-plugins-rails: 真实 rails(ShellGuard)
 # - ah-plugins-agent-loop: 真实 ReAct 循环
 name = "dev"
 
 [[bundles]]
 id = "boot"
-plugins = ["ah-plugins-mock", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-mock", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-agent-loop"]

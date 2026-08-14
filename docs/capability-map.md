@@ -75,7 +75,7 @@
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
 | tools(638 符号/117 文件) | `tools` seam + ah-plugins-harness-tools | 浏览器/web/LSP/shell/fs/mcp/多模态/移动 GUI | 每个工具真实适配器(现为 MockTransport)
-| rails(143/57 文件) | 事件监听器(waterfall) | 规划/完成/心跳/重试/LSP/MCP/渐进工具 等 | 现为 StaticRail,需逐 rail 实现
+| rails(143/57 文件) | 事件监听器(waterfall) | 规划/完成/心跳/重试/LSP/MCP/渐进工具 等 | 挂载点已就绪(tools/pre-execute);首个真实 rail:ShellGuard(ah-plugins-rails) |
 | subagents(24/8 文件) | `subagents` seam | code/research/plan/browser/mobile/verify | 真实子代理运行时(现为 Unsupported/Mock)
 | cli(113/19 文件) | ah-plugins-harness-cli | REPL、会话存储、渲染 | 现为 CliUiAdapter::unsupported
 | workspace/goal/manifest/resources/schema/security/prompts/kv_cache/lsp | 各插件 | 对应功能 | 逐模块对等

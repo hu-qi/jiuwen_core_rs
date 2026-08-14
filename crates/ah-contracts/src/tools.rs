@@ -58,3 +58,66 @@ pub trait ToolRegistry: Seam {
     /// 按名调用工具。
     async fn invoke(&self, name: &str, arguments: Value) -> Result<Value, ToolError>;
 }
+
+// ------------------------------------------------------------------
+// 工具执行管线事件(event-catalog: tools/pre-execute, tools/post-execute)
+// ------------------------------------------------------------------
+
+/// `tools/pre-execute` 事件:工具执行前发布(waterfall)。
+///
+/// 监听器(rails/鉴权/预算)可:
+/// - 调用 Next::next 委托下游(可改写参数);
+/// - 直接返回拒绝决策(短路,工具不执行)。
+#[derive(Clone, Debug)]
+pub struct ToolInvocation {
+    pub name: String,
+    pub arguments: Value,
+}
+
+impl crate::event::Event for ToolInvocation {
+    const ID: &'static str = "tools/pre-execute";
+}
+
+/// `tools/pre-execute` waterfall 的决策值。
+#[derive(Clone, Debug)]
+pub struct ToolDecision {
+    /// 是否允许执行。
+    pub allow: bool,
+    /// 拒绝原因(allow=false 时必填)。
+    pub reason: Option<String>,
+    /// 实际执行的参数(监听器可改写)。
+    pub arguments: Value,
+}
+
+impl ToolDecision {
+    /// 允许执行。
+    pub fn allow(arguments: Value) -> Self {
+        Self {
+            allow: true,
+            reason: None,
+            arguments,
+        }
+    }
+
+    /// 拒绝执行。
+    pub fn deny(arguments: Value, reason: impl Into<String>) -> Self {
+        Self {
+            allow: false,
+            reason: Some(reason.into()),
+            arguments,
+        }
+    }
+}
+
+/// `tools/post-execute` 事件:工具执行完成后发布(serial)。
+#[derive(Clone, Debug)]
+pub struct ToolExecuted {
+    pub name: String,
+    pub arguments: Value,
+    pub output: Value,
+    pub elapsed_ms: u64,
+}
+
+impl crate::event::Event for ToolExecuted {
+    const ID: &'static str = "tools/post-execute";
+}

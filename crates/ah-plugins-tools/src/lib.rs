@@ -1,39 +1,41 @@
 //! # ah-plugins-tools
 //!
-//! 提供 `tools` seam 的注册表实现(真实基础设施)。
+//! 提供 tools seam 的注册表实现(真实基础设施)。
 //! 注册表本身是通用存储;工具的能力由各插件注册到它上面
 //! (如 ah-plugins-sysop 注册真实的 read_file/run_shell 等)。
+//!
+//! 工具执行经过真实管线:tools/pre-execute(waterfall,可拒绝/改写)→ 执行
+//! → tools/post-execute(serial,顺序通知)。
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use ah_contracts::keys::TOOLS;
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
-use ah_contracts::tools::{Tool, ToolError, ToolRegistry};
+use ah_contracts::tools::{
+    Tool, ToolDecision, ToolError, ToolExecuted, ToolInvocation, ToolRegistry,
+};
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 use serde_json::Value;
 
-/// 内存工具注册表:实现 `ToolRegistry` seam。
+/// 内存工具注册表:实现 ToolRegistry seam,并承载工具执行管线。
 pub struct LocalToolRegistry {
     tools: Arc<Mutex<HashMap<String, Arc<dyn Tool>>>>,
+    ctx: Context,
 }
 
 impl LocalToolRegistry {
-    /// 创建空注册表。
-    pub fn new() -> Self {
+    /// 创建注册表(需要 Context 以发布管线事件)。
+    pub fn new(ctx: Context) -> Self {
         Self {
             tools: Arc::new(Mutex::new(HashMap::new())),
+            ctx,
         }
-    }
-}
-
-impl Default for LocalToolRegistry {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -59,14 +61,47 @@ impl ToolRegistry for LocalToolRegistry {
     }
 
     async fn invoke(&self, name: &str, arguments: Value) -> Result<Value, ToolError> {
+        // 1) pre-execute:waterfall(rails 可拒绝/改写)。
+        let decision = self
+            .ctx
+            .waterfall(
+                ToolInvocation {
+                    name: name.to_string(),
+                    arguments: arguments.clone(),
+                },
+                ToolDecision::allow(arguments.clone()),
+            )
+            .await;
+        if !decision.allow {
+            let reason = decision
+                .reason
+                .unwrap_or_else(|| "rejected by rail".to_string());
+            return Err(ToolError(format!("rejected by rail: {reason}")));
+        }
+
+        // 2) 执行(使用可能被改写后的参数)。
         let tool = self
             .get(name)
             .ok_or_else(|| ToolError(format!("tool not found: {name}")))?;
-        tool.invoke(arguments).await
+        let started = Instant::now();
+        let output = tool.invoke(decision.arguments).await?;
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+
+        // 3) post-execute:serial(顺序通知遥测/审计)。
+        self.ctx
+            .serial(ToolExecuted {
+                name: name.to_string(),
+                arguments: arguments.clone(),
+                output: output.clone(),
+                elapsed_ms,
+            })
+            .await;
+
+        Ok(output)
     }
 }
 
-/// 提供 `tools` seam 的插件。
+/// 提供 tools seam 的插件。
 pub struct ToolsPlugin;
 
 impl Plugin for ToolsPlugin {
@@ -79,7 +114,7 @@ impl Plugin for ToolsPlugin {
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
-        let registry: Arc<dyn ToolRegistry> = Arc::new(LocalToolRegistry::new());
+        let registry: Arc<dyn ToolRegistry> = Arc::new(LocalToolRegistry::new(ctx.clone()));
         Ok(vec![ctx.register(TOOLS, registry)])
     }
 }
@@ -88,7 +123,10 @@ impl Plugin for ToolsPlugin {
 mod tests {
     use super::*;
     use ah_hub::plugin::DynPlugin;
+    use serde_json::json;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
+    /// 回显工具:返回 {ok: true, echo: arguments}。
     struct NoopTool;
 
     #[async_trait]
@@ -101,40 +139,89 @@ mod tests {
             "do nothing"
         }
 
-        async fn invoke(&self, _arguments: Value) -> Result<Value, ToolError> {
-            Ok(serde_json::json!({ "ok": true }))
+        async fn invoke(&self, arguments: Value) -> Result<Value, ToolError> {
+            Ok(json!({ "ok": true, "echo": arguments }))
         }
     }
 
-    #[test]
-    fn registry_register_get_invoke_roundtrip() {
-        let registry = LocalToolRegistry::new();
-        let effect = registry.register(Arc::new(NoopTool));
-
-        assert!(registry.get("noop").is_some());
-        assert_eq!(registry.names(), vec!["noop".to_string()]);
-
-        let result = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(registry.invoke("noop", Value::Null));
-        assert_eq!(result.unwrap(), serde_json::json!({ "ok": true }));
-
-        drop(effect);
-        assert!(registry.get("noop").is_none());
-    }
-
-    #[tokio::test]
-    async fn tools_plugin_registers_tools_seam() {
+    fn mount_with_tool() -> (Context, Vec<Effect>, String) {
         let ctx = Context::new();
         let plugin: DynPlugin = Arc::new(ToolsPlugin);
         let effects = ctx.mount(&plugin).expect("mount");
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools seam");
+        let effect = registry.register(Arc::new(NoopTool));
+        let mut all = effects;
+        all.push(effect);
+        (ctx, all, "noop".to_string())
+    }
 
-        let registry: Arc<dyn ToolRegistry> = ctx
-            .service(&TOOLS)
-            .expect("tools seam should be registered");
-        assert!(registry.names().is_empty());
+    #[tokio::test]
+    async fn invoke_publishes_post_execute_event() {
+        let (ctx, effects, name) = mount_with_tool();
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let s = seen.clone();
+        let _listener = ctx.on_serial::<ToolExecuted, _, _>(move |event| {
+            let s = s.clone();
+            async move {
+                s.lock().unwrap().push(event.name.clone());
+            }
+        });
+
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let output = registry
+            .invoke(&name, json!({ "x": 1 }))
+            .await
+            .expect("invoke");
+        assert_eq!(output["echo"]["x"], 1);
+        assert_eq!(*seen.lock().unwrap(), vec!["noop".to_string()]);
 
         drop(effects);
-        assert!(!ctx.has_service(&TOOLS));
+    }
+
+    #[tokio::test]
+    async fn pre_execute_rewrite_changes_arguments() {
+        let (ctx, effects, name) = mount_with_tool();
+        // pre-execute 改写:给参数加一个字段。
+        let _listener = ctx.on_waterfall::<ToolInvocation, ToolDecision, _, _>(
+            |_event, decision, next| async move {
+                let mut args = decision.arguments.clone();
+                args["rewritten"] = json!(true);
+                next.next(ToolDecision::allow(args)).await
+            },
+        );
+
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let output = registry
+            .invoke(&name, json!({ "x": 1 }))
+            .await
+            .expect("invoke");
+        assert_eq!(output["echo"]["rewritten"], true);
+
+        drop(effects);
+    }
+
+    #[tokio::test]
+    async fn pre_execute_deny_short_circuits_execution() {
+        let (ctx, effects, name) = mount_with_tool();
+        // 拒绝所有调用:不委托 next 即短路。
+        let _listener = ctx.on_waterfall::<ToolInvocation, ToolDecision, _, _>(
+            |_event, decision, _next| async move { ToolDecision::deny(decision.arguments, "nope") },
+        );
+        // post-execute 不应触发。
+        let post = Arc::new(AtomicUsize::new(0));
+        let p = post.clone();
+        let _p_listener = ctx.on_serial::<ToolExecuted, _, _>(move |_e| {
+            let p = p.clone();
+            async move {
+                p.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let error = registry.invoke(&name, json!({})).await.expect_err("denied");
+        assert!(error.0.contains("nope"));
+        assert_eq!(post.load(Ordering::SeqCst), 0);
+
+        drop(effects);
     }
 }

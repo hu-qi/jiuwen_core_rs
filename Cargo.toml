@@ -8,6 +8,7 @@ members = [
     "crates/ah-plugins-sysop",
     "crates/ah-plugins-openai",
     "crates/ah-plugins-agent-loop",
+    "crates/ah-plugins-rails",
     "crates/ah-app",
 ]
 
@@ -24,4 +25,5 @@ ah-plugins-tools = { path = "crates/ah-plugins-tools" }
 ah-plugins-sysop = { path = "crates/ah-plugins-sysop" }
 ah-plugins-openai = { path = "crates/ah-plugins-openai" }
 ah-plugins-agent-loop = { path = "crates/ah-plugins-agent-loop" }
+ah-plugins-rails = { path = "crates/ah-plugins-rails" }
 ah-app = { path = "crates/ah-app" }

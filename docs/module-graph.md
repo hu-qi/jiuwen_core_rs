@@ -11,7 +11,8 @@ ah-app ──> ah-hub ──> ah-contracts
    ├─> ah-plugins-tools  (真实工具注册表)    ──> ah-hub, ah-contracts
    ├─> ah-plugins-sysop  (真实 fs/shell)    ──> ah-hub, ah-contracts
    └─> ah-plugins-openai (真实 LLM HTTP)    ──> ah-hub, ah-contracts
-   └─> ah-plugins-agent-loop (真实 ReAct)  ──> ah-hub, ah-contracts
+   ├─> ah-plugins-agent-loop (真实 ReAct)  ──> ah-hub, ah-contracts
+   └─> ah-plugins-rails (ShellGuard rail)    ──> ah-hub, ah-contracts
                                             └─dev-dep─> ah-plugins-tools(测试)
 ```
 
@@ -32,6 +33,7 @@ ah-plugins-tools            真实工具注册表(已实现)
 ah-plugins-sysop            真实本地 fs/shell 执行(已实现)
 ah-plugins-openai            真实 LLM HTTP provider(已实现,需凭据 e2e)
 ah-plugins-agent-loop        真实 ReAct 循环(已实现,注入 llm+tools)
+ah-plugins-rails             真实 rails(已实现:ShellGuard 拒绝危险 shell 命令)
 ah-plugins-core-*           common/application/runner/single-agent/context 等
 ah-plugins-workflow-engine  工作流/图/controller/operator(迁移 rp301)
 ah-plugins-session-log      会话事件日志(迁移 state.rs/persist.rs)

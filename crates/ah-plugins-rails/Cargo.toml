@@ -1,0 +1,17 @@
+[package]
+name = "ah-plugins-rails"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real rails registered as tools/pre-execute waterfall listeners"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+async-trait = "0.1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[dev-dependencies]
+ah-plugins-sysop = { workspace = true }
+ah-plugins-tools = { workspace = true }

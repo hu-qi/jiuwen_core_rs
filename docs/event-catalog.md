@@ -16,8 +16,8 @@
 | agent/step | emit | AgentLoop | 遥测、日志、UI | **done(已实现)**
 | agent/pre-step | waterfall | agent 循环 | rails、上下文注入 | 规划
 | agent/request | waterfall | agent 循环 | 模型适配、拦截 | 规划
-| tools/pre-execute | waterfall | 工具执行管线 | 策略、鉴权、超时 | 规划(tools seam)
-| tools/post-execute | serial | 工具执行管线 | 遥测、审计 | 规划
+| tools/pre-execute | waterfall | LocalToolRegistry.invoke | rails、鉴权、参数改写 | **done(已实现)**
+| tools/post-execute | serial | LocalToolRegistry.invoke | 遥测、审计 | **done(已实现)**
 | fs/* | waterfall | fs seam | 沙箱、策略 | 规划
 | telemetry/* | emit | 各插件 | 导出器 | 规划(telemetry seam)
 | teams/task | serial | teams seam | 任务板、审计 | 规划(teams)
