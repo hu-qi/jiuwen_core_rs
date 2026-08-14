@@ -55,7 +55,7 @@
   ah-plugins-retrieval(真实知识库检索:BM25 分块 + 本地确定性向量(哈希 n-gram TF + 余弦) + ingest_knowledge/search_knowledge 工具,search 支持 bm25|vector 模式);
   ah-plugins-security(真实安全检测:提示注入/敏感数据 guardrails + tools/pre-execute rail);
   ah-plugins-subagent(真实子代理:隔离会话委派 + 预算 + 上下文注入 + delegate_task 工具);
-  ah-plugins-teams(真实多 agent 团队:任务板 + 依赖门控 + 成员校验 + review 票 + settle 多数决 + run_task 真实委派 subagent);
+  ah-plugins-teams(真实多 agent 团队:内存 + SQLite 持久化两套运行时,任务板 + 依赖门控 + 成员校验 + review 票 + settle 多数决 + run_task 真实委派 subagent);
   ah-plugins-evolving(真实演进:轨迹从会话日志抽取 + 本地判据评估 + LLM judge 附加 + 优化建议);
   ah-plugins-rsi(真实 RSI:数据集生成 + 用例经 subagent 真实执行 + evolving 评估 + 提示精化 + JSONL checkpoint 续跑);
   ah-plugins-context(真实上下文引擎:token 预算组装 + 摘录压缩/LLM 总结 + offload JSONL + 摘要 reinject);

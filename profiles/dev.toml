@@ -9,7 +9,7 @@
 # - ah-plugins-memory: 真实持久化记忆
 # - ah-plugins-retrieval: 真实知识库检索
 # - ah-plugins-subagent: 真实子代理(隔离会话委派)
-# - ah-plugins-teams: 真实多 agent 团队运行时
+# - ah-plugins-teams-sqlite: 真实多 agent 团队运行时(SQLite 持久化)
 # - ah-plugins-evolving: 真实轨迹抽取/评估/优化
 # - ah-plugins-rsi: 真实 RSI 管线(数据集/评测/精化/checkpoint)
 # - ah-plugins-context: 真实上下文引擎(预算组装/压缩/offload)
@@ -23,4 +23,4 @@ name = "dev"
 
 [[bundles]]
 id = "boot"
-plugins = ["ah-plugins-mock", "ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-context", "ah-plugins-store", "ah-plugins-prompt", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-mock", "ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-context", "ah-plugins-store", "ah-plugins-prompt", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-agent-loop"]

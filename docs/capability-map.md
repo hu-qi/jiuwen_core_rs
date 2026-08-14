@@ -37,7 +37,7 @@
 | agent-loop | `agent-loop` | `AgentLoop`(已实现,真实 ReAct,日志驱动,工具错误回喂模型) | done
 | workflow | `workflow` | `WorkflowEngine`(已实现:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边 + 轨迹入日志) | done(契约)/ partial(无流式) |
 | subagent | `subagent` | `SubagentRuntime`(已实现:隔离会话委派 + 预算 + 上下文注入 + delegate_task 工具) | done(契约)/ partial(无进程外/跨产品子代理) |
-| teams | `teams` | `TeamRuntime`(已实现:内存任务板 + 依赖门控 + 成员校验 + review 票 + settle 多数决 + run_task 真实 subagent 委派 + teams/task 事件) | done(契约)/ partial(无持久化) |
+| teams | `teams` | `TeamRuntime`(已实现:内存 + SQLite 持久化两套运行时:任务板/依赖门控/成员校验/review/settle/run_task 真实委派/teams/task 事件) | done(契约+持久化)/ partial(外部 CLI 进程/ZMQ) |
 | evolving | `evolving` | `EvolvingRuntime`(已实现:轨迹从会话日志真实抽取;本地判据评估 + LLM judge 附加;优化建议规则推导 + LLM 附加) | done(契约)/ partial(无持久化/RL) |
 | rsi | `rsi` | `RsiRuntime`(已实现:数据集生成 + 用例真实执行 + evolving 评估 + 报告 + 提示精化 + checkpoint 落盘) | done(契约)/ partial(无 LLM 数据生成/RL) |
 | telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约)/ partial(JSONL 导出真实;OTLP 导出留待后续)

@@ -28,7 +28,7 @@ use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_store::StorePlugin;
 use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_sysop::SysopPlugin;
-use ah_plugins_teams::TeamsPlugin;
+use ah_plugins_teams::{SqliteTeamsPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_tools::ToolsPlugin;
 use ah_plugins_workflow::WorkflowPlugin;
@@ -76,6 +76,10 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-subagent", Arc::new(SubagentPlugin) as DynPlugin),
         ("ah-plugins-teams", Arc::new(TeamsPlugin) as DynPlugin),
+        (
+            "ah-plugins-teams-sqlite",
+            Arc::new(SqliteTeamsPlugin::new(workspace_root.join("teams.db"))) as DynPlugin,
+        ),
         ("ah-plugins-evolving", Arc::new(EvolvingPlugin) as DynPlugin),
         (
             "ah-plugins-rsi",

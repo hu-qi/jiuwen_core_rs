@@ -52,7 +52,7 @@
 | core | context_engine ✅ / store 本地文件后端 ✅ / prompt ✅(+agent-loop 消费)/ retrieval 向量化 ✅ / harness rails ✅(本回合)| 下一步:browser/web/lsp 真实工具(需外部)或 teams 深化 |
 | harness | 剩余 rails ✅(PathGuard/ToolBudget,本回合)/ browser/web/lsp 真实工具 / workspace-goal-manifest 细化 | browser/web/lsp 需外部进程或网络,留待后续 |
 | extensions | store(Redis/GaussDB/ES)/ queue(Pulsar)/ sandbox(远程)/ openai OAuth / a2a / mcp-http | 真实协议路径 |
-| teams 深化 | 外部 CLI 进程 / ZMQ / SQLite 持久化 | teams 基础落地后 |
+| teams 深化 | 外部 CLI 进程 / ZMQ / SQLite 持久化 | SQLite 持久化已落地(本回合,ah-plugins-teams-sqlite);外部 CLI 进程 / ZMQ 留待后续 |
 
 ## 执行顺序(当前)
 

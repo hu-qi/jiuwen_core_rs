@@ -2,6 +2,10 @@
 //!
 //! 真实多 agent 团队运行时:任务板(依赖校验)、review 票与 settle,
 //! run_task 经 SubagentRuntime 真实委派执行;状态迁移发 teams/task 事件。
+//!
+//! 两种运行时(同一 TeamRuntime seam):
+//! - InMemoryTeamRuntime:内存任务板(测试与无磁盘场景);
+//! - sqlite::SqliteTeamRuntime:真实 SQLite 持久化(重启恢复)。
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -19,6 +23,9 @@ use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 use serde_json::{Value, json};
+
+pub mod sqlite;
+pub use sqlite::{SqliteTeamRuntime, SqliteTeamsPlugin};
 
 struct Team {
     spec: TeamSpec,

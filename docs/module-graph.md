@@ -64,7 +64,7 @@ ah-plugins-workflow-engine  工作流/图/controller/operator(迁移 rp301)
 ah-plugins-session-log      会话事件日志(迁移 state.rs/persist.rs)
 ah-plugins-sysop-*          fs/shell/code/sandbox(迁移 sys_operation.rs)
 ah-plugins-harness-*        tools/rails/subagents/cli/workspace
-ah-plugins-teams            团队运行时(迁移 residual.rs)
+ah-plugins-teams            团队运行时(内存 + SQLite 持久化,迁移 residual.rs)
 ah-plugins-evolving         agent_evolving 域
 ah-plugins-rsi              RSI + auto_harness
 ah-plugins-store-*          redis/pulsar/gaussdb/elasticsearch/milvus/chroma
