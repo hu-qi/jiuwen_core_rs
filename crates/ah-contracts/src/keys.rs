@@ -21,3 +21,6 @@ pub const AGENT_LOOP: ServiceKey = ServiceKey::new("agent-loop");
 
 /// `sessions` seam 服务键(会话事件日志)。
 pub const SESSIONS: ServiceKey = ServiceKey::new("sessions");
+
+/// `session-manager` seam 服务键(多会话管理)。
+pub const SESSION_MANAGER: ServiceKey = ServiceKey::new("session-manager");

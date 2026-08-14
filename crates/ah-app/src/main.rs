@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use ah_contracts::fs::FsProvider;
-use ah_contracts::keys::{AGENT_LOOP, FS, LLM, SESSIONS, SHELL, TOOLS};
+use ah_contracts::keys::{AGENT_LOOP, FS, LLM, SESSION_MANAGER, SHELL, TOOLS};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
-use ah_contracts::session::SessionLog;
+use ah_contracts::session::SessionManager;
 use ah_contracts::shell::ShellProvider;
 use ah_contracts::tools::ToolRegistry;
 use ah_hub::context::Context;
@@ -28,6 +28,7 @@ use serde_json::json;
 fn plugin_catalog(
     workspace_root: &std::path::Path,
     session_path: &PathBuf,
+    session_dir: &PathBuf,
 ) -> Vec<(&'static str, DynPlugin)> {
     let mut catalog: Vec<(&'static str, DynPlugin)> = vec![
         ("ah-plugins-mock", Arc::new(MockPlugin) as DynPlugin),
@@ -42,7 +43,7 @@ fn plugin_catalog(
         ),
         (
             "ah-plugins-session-log",
-            Arc::new(SessionLogPlugin::new(session_path)) as DynPlugin,
+            Arc::new(SessionLogPlugin::new(session_path, session_dir)) as DynPlugin,
         ),
         (
             "ah-plugins-agent-loop",
@@ -72,10 +73,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = std::env::temp_dir().join(format!("ah-app-{}", std::process::id()));
     let session_path =
         std::env::temp_dir().join(format!("ah-app-session-{}.jsonl", std::process::id()));
+    let session_dir = std::env::temp_dir().join(format!("ah-app-sessions-{}", std::process::id()));
     println!("[boot] workspace: {}", workspace_root.display());
     println!("[boot] session log: {}", session_path.display());
+    println!("[boot] session dir: {}", session_dir.display());
 
-    let catalog = plugin_catalog(&workspace_root, &session_path);
+    let catalog = plugin_catalog(&workspace_root, &session_path, &session_dir);
     let plugins: Vec<DynPlugin> = profile
         .plugin_names()
         .iter()
@@ -177,15 +180,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent = ctx
         .service::<AgentLoop>(&AGENT_LOOP)
         .ok_or("agent-loop service not registered")?;
-    let answer = agent.run("explore the workspace").await?;
-    println!("[agent] answer: {answer}");
+    let manager = ctx
+        .service::<dyn SessionManager>(&SESSION_MANAGER)
+        .ok_or("session-manager seam not registered")?;
 
-    // 会话日志:展示日志即真相(事件序列 + 投影消息)。
-    let sessions = ctx
-        .service::<dyn SessionLog>(&SESSIONS)
-        .ok_or("sessions seam not registered")?;
-    println!("[session] events:");
-    for event in sessions.events() {
+    // 会话管理:创建 task-a,跑第一轮。
+    let task_a = manager.create("task-a").expect("create task-a");
+    let answer = agent
+        .run_in_session(task_a.clone(), "explore the workspace")
+        .await?;
+    println!("[agent] task-a answer: {answer}");
+    println!("[session] task-a events: {}", task_a.events().len());
+
+    // fork 到 task-b(复制历史),继续新一轮:历史经日志投影自动保留。
+    let task_b = manager.fork("task-a", "task-b").expect("fork task-b");
+    println!(
+        "[session] forked task-b starts with {} events",
+        task_b.events().len()
+    );
+    let answer = agent
+        .run_in_session(task_b.clone(), "follow up: summarize the session")
+        .await?;
+    println!("[agent] task-b answer: {answer}");
+    println!(
+        "[session] task-b events after resume: {} (task-a unchanged: {})",
+        task_b.events().len(),
+        task_a.events().len()
+    );
+    println!("[session] sessions: {:?}", manager.list());
+
+    // 展示 task-b 的完整会话轨迹(含 fork 保留的历史 + 续跑追加)。
+    println!("[session] task-b trace:");
+    for event in task_b.events() {
         println!(
             "  seq={} kind={:?} payload={}",
             event.seq,
@@ -193,8 +219,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             serde_json::to_string(&event.payload)?
         );
     }
-    let messages = sessions.derive_messages();
-    println!("[session] projected messages: {}", messages.len());
+    println!(
+        "[session] task-b projected messages: {}",
+        task_b.derive_messages().len()
+    );
 
     Ok(())
 }

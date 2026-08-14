@@ -70,3 +70,20 @@ pub trait SessionLog: Seam {
     /// 投影:从日志重建模型可见消息序列(日志即真相)。
     fn derive_messages(&self) -> Vec<ChatMessage>;
 }
+
+/// 会话管理器 Seam:多会话的创建/打开/fork/列举。
+///
+/// 每个会话对应一份独立的 append-only 日志文件;fork 复制历史到新会话。
+pub trait SessionManager: Seam {
+    /// 创建(或打开已存在)会话,返回会话日志句柄。
+    fn create(&self, id: &str) -> Result<std::sync::Arc<dyn SessionLog>, SessionError>;
+
+    /// 打开已存在的会话;不存在则报错。
+    fn open(&self, id: &str) -> Result<std::sync::Arc<dyn SessionLog>, SessionError>;
+
+    /// 复制会话 `from` 的历史到新会话 `to`,返回新会话句柄。
+    fn fork(&self, from: &str, to: &str) -> Result<std::sync::Arc<dyn SessionLog>, SessionError>;
+
+    /// 列举全部会话 id。
+    fn list(&self) -> Vec<String>;
+}

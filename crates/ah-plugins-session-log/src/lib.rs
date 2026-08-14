@@ -2,20 +2,23 @@
 //!
 //! 真实 append-only 会话事件日志:JSONL 落盘,启动时从文件恢复,
 //! 投影(derive_messages)从日志重建模型可见消息(日志即真相)。
+//! 提供 sessions(默认会话)与 session-manager(多会话 create/open/fork/list)。
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use ah_contracts::keys::SESSIONS;
+use ah_contracts::keys::{SESSION_MANAGER, SESSIONS};
 use ah_contracts::llm::{ChatMessage, ChatRole, ToolCall};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
-use ah_contracts::session::{SessionError, SessionEvent, SessionEventKind, SessionLog};
+use ah_contracts::session::{
+    SessionError, SessionEvent, SessionEventKind, SessionLog, SessionManager,
+};
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use serde_json::Value;
@@ -38,7 +41,7 @@ pub struct JsonlSessionLog {
 impl JsonlSessionLog {
     /// 打开(或创建)会话日志文件;文件已存在则恢复全部事件。
     pub fn open(path: impl AsRef<Path>, ctx: Context) -> Result<Self, SessionError> {
-        let path = path.as_ref().to_path_buf();
+        let path = path.as_ref();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| SessionError(format!("create dir failed: {e}")))?;
@@ -46,11 +49,11 @@ impl JsonlSessionLog {
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&path)
+            .open(path)
             .map_err(|e| SessionError(format!("open session file failed: {e}")))?;
 
         let mut events = Vec::new();
-        if let Ok(reader) = File::open(&path) {
+        if let Ok(reader) = File::open(path) {
             for line in BufReader::new(reader).lines() {
                 let line = line.map_err(|e| SessionError(format!("read line failed: {e}")))?;
                 if line.trim().is_empty() {
@@ -168,15 +171,84 @@ impl SessionLog for JsonlSessionLog {
     }
 }
 
-/// 会话日志插件:提供 sessions seam。
+/// 会话管理器:按 id 管理独立 JSONL 会话文件(dir/{id}.jsonl)。
+pub struct SessionManagerImpl {
+    dir: PathBuf,
+    ctx: Context,
+}
+
+impl SessionManagerImpl {
+    /// 以会话目录创建管理器。
+    pub fn new(dir: impl Into<PathBuf>, ctx: Context) -> Result<Self, SessionError> {
+        let dir = dir.into();
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| SessionError(format!("create session dir failed: {e}")))?;
+        Ok(Self { dir, ctx })
+    }
+
+    fn path_for(&self, id: &str) -> PathBuf {
+        self.dir.join(format!("{id}.jsonl"))
+    }
+}
+
+impl Seam for SessionManagerImpl {}
+
+impl SessionManager for SessionManagerImpl {
+    fn create(&self, id: &str) -> Result<std::sync::Arc<dyn SessionLog>, SessionError> {
+        let log = JsonlSessionLog::open(self.path_for(id), self.ctx.clone())?;
+        Ok(std::sync::Arc::new(log) as std::sync::Arc<dyn SessionLog>)
+    }
+
+    fn open(&self, id: &str) -> Result<std::sync::Arc<dyn SessionLog>, SessionError> {
+        let path = self.path_for(id);
+        if !path.exists() {
+            return Err(SessionError(format!("session not found: {id}")));
+        }
+        let log = JsonlSessionLog::open(path, self.ctx.clone())?;
+        Ok(std::sync::Arc::new(log) as std::sync::Arc<dyn SessionLog>)
+    }
+
+    fn fork(&self, from: &str, to: &str) -> Result<std::sync::Arc<dyn SessionLog>, SessionError> {
+        let src = self.path_for(from);
+        let dst = self.path_for(to);
+        if !src.exists() {
+            return Err(SessionError(format!("session not found: {from}")));
+        }
+        std::fs::copy(&src, &dst).map_err(|e| SessionError(format!("fork copy failed: {e}")))?;
+        let log = JsonlSessionLog::open(dst, self.ctx.clone())?;
+        Ok(std::sync::Arc::new(log) as std::sync::Arc<dyn SessionLog>)
+    }
+
+    fn list(&self) -> Vec<String> {
+        let mut ids: Vec<String> = std::fs::read_dir(&self.dir)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter_map(|entry| {
+                        let name = entry.file_name().to_string_lossy().into_owned();
+                        name.strip_suffix(".jsonl").map(str::to_string)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        ids.sort();
+        ids
+    }
+}
+
+/// 会话日志插件:提供 sessions(默认会话)与 session-manager(多会话管理)。
 pub struct SessionLogPlugin {
     path: PathBuf,
+    dir: PathBuf,
 }
 
 impl SessionLogPlugin {
-    /// 以日志文件路径创建插件。
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+    /// 以默认会话文件与会话目录创建插件。
+    pub fn new(path: impl Into<PathBuf>, dir: impl Into<PathBuf>) -> Self {
+        Self {
+            path: path.into(),
+            dir: dir.into(),
+        }
     }
 }
 
@@ -186,7 +258,7 @@ impl Plugin for SessionLogPlugin {
     }
 
     fn provides(&self) -> Vec<ServiceKey> {
-        vec![SESSIONS]
+        vec![SESSIONS, SESSION_MANAGER]
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
@@ -195,8 +267,20 @@ impl Plugin for SessionLogPlugin {
                 plugin: self.name(),
                 message: e.0,
             })?;
+        let manager =
+            SessionManagerImpl::new(&self.dir, ctx.clone()).map_err(|e| PluginError::Apply {
+                plugin: self.name(),
+                message: e.0,
+            })?;
         Ok(vec![
-            ctx.register(SESSIONS, Arc::new(log) as Arc<dyn SessionLog>),
+            ctx.register(
+                SESSIONS,
+                std::sync::Arc::new(log) as std::sync::Arc<dyn SessionLog>,
+            ),
+            ctx.register(
+                SESSION_MANAGER,
+                std::sync::Arc::new(manager) as std::sync::Arc<dyn SessionManager>,
+            ),
         ])
     }
 }
@@ -284,5 +368,36 @@ mod tests {
         assert_eq!(messages[3].content, "done");
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn manager_create_open_fork_list() {
+        let dir = std::env::temp_dir().join(format!("ah-sessions-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let manager = SessionManagerImpl::new(&dir, Context::new()).expect("manager");
+
+        // create 并写入
+        let a = manager.create("a").expect("create a");
+        a.append(SessionEventKind::User, json!({ "content": "one" }))
+            .expect("append");
+
+        // list / open 恢复
+        assert_eq!(manager.list(), vec!["a".to_string()]);
+        let opened = manager.open("a").expect("open a");
+        assert_eq!(opened.events().len(), 1);
+
+        // fork 复制历史;原会话继续写不影响 fork 出的
+        let b = manager.fork("a", "b").expect("fork b");
+        assert_eq!(b.events().len(), 1);
+        a.append(SessionEventKind::User, json!({ "content": "two" }))
+            .expect("append a2");
+        assert_eq!(a.events().len(), 2);
+        assert_eq!(b.events().len(), 1, "fork 出的会话不受原会话影响");
+        assert_eq!(manager.list(), vec!["a".to_string(), "b".to_string()]);
+
+        // open 不存在报错
+        assert!(manager.open("missing").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

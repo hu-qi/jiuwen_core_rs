@@ -89,16 +89,27 @@ impl AgentLoop {
             .collect()
     }
 
-    /// 运行一轮任务:日志驱动的 ReAct 循环。
+    /// 在默认会话上运行一轮任务。
     pub async fn run(&self, input: &str) -> Result<String, AgentLoopError> {
+        self.run_in_session(self.sessions.clone(), input).await
+    }
+
+    /// 在指定会话上运行一轮任务:日志驱动的 ReAct 循环。
+    ///
+    /// 会话可为 resume(已有历史)或 fork 出的新会话;历史经日志投影自动保留。
+    pub async fn run_in_session(
+        &self,
+        session: Arc<dyn SessionLog>,
+        input: &str,
+    ) -> Result<String, AgentLoopError> {
         // 1) 用户消息入日志。
-        self.sessions
+        session
             .append(SessionEventKind::User, json!({ "content": input }))
             .map_err(|e| AgentLoopError(format!("session append failed: {e}")))?;
 
         for iteration in 0..self.max_iterations {
             // 2) 从日志投影模型可见消息(日志即真相)。
-            let messages = self.sessions.derive_messages();
+            let messages = session.derive_messages();
             let response = self
                 .llm
                 .chat(ModelRequest {
@@ -111,7 +122,7 @@ impl AgentLoop {
 
             if response.tool_calls.is_empty() {
                 // 3) 最终回答入日志,结束。
-                self.sessions
+                session
                     .append(
                         SessionEventKind::Assistant,
                         json!({ "content": response.content }),
@@ -137,7 +148,7 @@ impl AgentLoop {
                     })
                 })
                 .collect();
-            self.sessions
+            session
                 .append(SessionEventKind::Assistant, json!({ "tool_calls": calls }))
                 .map_err(|e| AgentLoopError(format!("session append failed: {e}")))?;
 
@@ -148,7 +159,7 @@ impl AgentLoop {
                     Ok(value) => value.to_string(),
                     Err(error) => format!("tool error: {error}"),
                 };
-                self.sessions
+                session
                     .append(
                         SessionEventKind::ToolResult,
                         json!({
@@ -246,13 +257,31 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// 组装 dev 式组合:mock llm(桩)+ 真实工具 + 真实 sysop + 会话日志 + 循环。
+    /// 会话目录由 session_path 名称派生,保证每个测试独立、可重复。
     fn build_ctx(root: &std::path::Path, session_path: &std::path::Path) -> (Context, Vec<Effect>) {
+        let session_dir = session_path.parent().unwrap().join(format!(
+            "{}-dir",
+            session_path.file_name().unwrap().to_string_lossy()
+        ));
+        let _ = std::fs::remove_dir_all(&session_dir);
+        build_ctx_with_dir(root, &session_dir)
+    }
+
+    /// 同上,但指定会话目录(供多会话测试)。
+    fn build_ctx_with_dir(
+        root: &std::path::Path,
+        session_dir: &std::path::Path,
+    ) -> (Context, Vec<Effect>) {
         let ctx = Context::new();
+        let default_path = session_dir.join("default.jsonl");
         let plugins: Vec<DynPlugin> = vec![
             StdArc::new(ah_plugins_mock::MockPlugin),
             StdArc::new(ah_plugins_tools::ToolsPlugin),
             StdArc::new(ah_plugins_sysop::SysopPlugin::new(root)),
-            StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(session_path)),
+            StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                &default_path,
+                session_dir,
+            )),
             StdArc::new(AgentLoopPlugin::default()),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
@@ -367,6 +396,46 @@ mod tests {
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_file(&session_path);
+    }
+
+    #[tokio::test]
+    async fn fork_and_resume_preserves_history() {
+        use ah_contracts::session::SessionManager;
+
+        let root = std::env::temp_dir().join(format!("ah-loop-resume-{}", std::process::id()));
+        let session_dir =
+            std::env::temp_dir().join(format!("ah-loop-resume-sessions-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&session_dir);
+        let (ctx, effects) = build_ctx_with_dir(&root, &session_dir);
+
+        let manager = ctx
+            .service::<dyn SessionManager>(&ah_contracts::keys::SESSION_MANAGER)
+            .expect("manager");
+        let agent = ctx.service::<AgentLoop>(&AGENT_LOOP).expect("agent-loop");
+
+        // 第一轮:task-a
+        let a = manager.create("task-a").expect("create");
+        let answer = agent
+            .run_in_session(a.clone(), "first task")
+            .await
+            .expect("run1");
+        assert!(answer.contains("mock final answer"));
+        let a_events = a.events().len();
+        assert!(a_events >= 2);
+
+        // fork 到 task-b:历史复制,续跑追加
+        let b = manager.fork("task-a", "task-b").expect("fork");
+        assert_eq!(b.events().len(), a_events);
+        let _ = agent
+            .run_in_session(b.clone(), "follow up")
+            .await
+            .expect("run2");
+        assert!(b.events().len() > a_events, "resume 追加了事件");
+        assert_eq!(a.events().len(), a_events, "原会话不受影响");
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&session_dir);
     }
 
     #[tokio::test]
