@@ -24,7 +24,7 @@
 | llm | `llm` | `ModelProvider`(已实现;`OpenAiConfig` 支持从 credentials seam 解析 key/base_url,credentials 优先、环境变量兜底) | done(契约)/ partial(真实 provider + credentials 集成 e2e 已落地,其余 provider 未实现) |
 | tools | `tools` | `Tool` + `ToolRegistry`(已实现) | done(契约)/ partial(已有真实工具,注册表通用) |
 | prompt | `prompt` | `PromptBuilder`(规划) | missing
-| store | `store` | `BaseKVStore/BaseDBStore/BaseVectorStore/BaseMessageStore`(规划) | missing
+| store | `store` | `BaseKVStore`/`BaseMessageStore`(已实现,文件后端);DB/Vector 留待后续 | done(契约,本地文件后端)/ partial(外部后端 Redis/GaussDB/ES/Milvus) |
 | session | `sessions` + `session-manager` | `SessionLog` append-only 日志 + JSONL 持久化 + 投影;`SessionManager` 多会话 create/open/fork/list(已实现) | done(契约)/ partial(无分布式/跨进程会话) |
 | context | `context` | `ContextEngine`(规划) | missing
 | memory | `memory` | `MemoryProvider`(已实现:JSON 文件持久化 + remember/recall/forget 工具) | done(契约)/ partial(无图记忆/外部 provider) |
@@ -56,7 +56,7 @@
 | foundation/llm(11 个 provider) | `llm` seam + ah-plugins-openai/anthropic/dashscope/deepseek 等 | 模型调用、流式、工具调用组装、provider 错误 | 每个 provider 真实协议路径 + 差分契约
 | foundation/tool | `tools` seam | tool 元数据、auth、调用、流式 chunk、校验 | 工具调用链真实执行
 | foundation/prompt | `prompt` seam | 模板渲染、结构化 prompt | 确定性渲染
-| foundation/store(kv/db/vector/message/graph/object) | `store` seam + ah-plugins-redis/gaussdb/elasticsearch/milvus/chroma | 持久化、事务、向量检索 | 真实后端集成测试
+| foundation/store(kv/db/vector/message/graph/object) | `store` seam + ah-plugins-store(本地文件后端);redis/gaussdb/elasticsearch/milvus/chroma 待后续 | 持久化(kv/message 已真实落盘) | 本地后端已测;外部后端集成测试留待后续 |
 | application(llm_agent/workflow_agent) | ah-plugins-core-application | 绑定配置/工作流/记忆/会话 | 真实模型循环
 | workflow(78 类) | ah-plugins-workflow-engine | 组件、分支、循环、子工作流、检查点、流式 | 现成 rp301 资产;补 Http/Questioner/Intent 真实语义
 | graph/Pregel(53 类) | 同上 | 状态通道、中断、动态路由 | Pregel 语义完整

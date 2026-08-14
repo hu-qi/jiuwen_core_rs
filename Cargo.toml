@@ -4,6 +4,7 @@ members = [
     "crates/ah-contracts",
     "crates/ah-hub",
     "crates/ah-plugins-context",
+    "crates/ah-plugins-store",
     "crates/ah-plugins-mock",
     "crates/ah-plugins-tools",
     "crates/ah-plugins-sysop",
@@ -34,6 +35,7 @@ license = "Apache-2.0"
 ah-contracts = { path = "crates/ah-contracts" }
 ah-hub = { path = "crates/ah-hub" }
 ah-plugins-context = { path = "crates/ah-plugins-context" }
+ah-plugins-store = { path = "crates/ah-plugins-store" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }
 ah-plugins-tools = { path = "crates/ah-plugins-tools" }
 ah-plugins-sysop = { path = "crates/ah-plugins-sysop" }

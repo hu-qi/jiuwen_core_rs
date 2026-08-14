@@ -28,6 +28,7 @@ pub mod security;
 pub mod service;
 pub mod session;
 pub mod shell;
+pub mod store;
 pub mod subagent;
 pub mod teams;
 pub mod telemetry;
@@ -68,6 +69,9 @@ pub mod prelude {
     pub use crate::service::ServiceKey;
     pub use crate::session::{SessionError, SessionEvent, SessionEventKind, SessionLog};
     pub use crate::shell::{ShellError, ShellOutput, ShellProvider};
+    pub use crate::store::{
+        BaseKVStore, BaseMessageStore, KvEntry, StoreError, StoreProvider, StoredMessage,
+    };
     pub use crate::subagent::{SubagentError, SubagentResult, SubagentRuntime, SubagentSpec};
     pub use crate::teams::{
         TeamError, TeamMemberSpec, TeamMessage, TeamRunResult, TeamRuntime, TeamSpec, TeamTask,

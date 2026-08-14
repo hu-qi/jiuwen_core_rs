@@ -59,3 +59,9 @@ pub const RSI: ServiceKey = ServiceKey::new("rsi");
 
 /// `context` seam 服务键(上下文组装与压缩)。
 pub const CONTEXT: ServiceKey = ServiceKey::new("context");
+
+/// `store/kv` seam 服务键(通用键值存储)。
+pub const KV_STORE: ServiceKey = ServiceKey::new("store-kv");
+
+/// `store/messages` seam 服务键(append-only 消息存储)。
+pub const MESSAGE_STORE: ServiceKey = ServiceKey::new("store-messages");

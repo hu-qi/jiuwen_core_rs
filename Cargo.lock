@@ -21,6 +21,7 @@ dependencies = [
  "ah-plugins-rsi",
  "ah-plugins-security",
  "ah-plugins-session-log",
+ "ah-plugins-store",
  "ah-plugins-subagent",
  "ah-plugins-sysop",
  "ah-plugins-teams",
@@ -216,6 +217,17 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-store"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "async-trait",
  "serde_json",
  "tokio",
 ]

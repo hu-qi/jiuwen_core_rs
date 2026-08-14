@@ -24,6 +24,7 @@ use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rsi::RsiPlugin;
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
+use ah_plugins_store::StorePlugin;
 use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_teams::TeamsPlugin;
@@ -74,6 +75,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-context",
             Arc::new(ContextPlugin::new(workspace_root.join("context"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-store",
+            Arc::new(StorePlugin::new(workspace_root.join("store"))) as DynPlugin,
         ),
         (
             "ah-plugins-session-log",
