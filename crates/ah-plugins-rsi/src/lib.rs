@@ -18,6 +18,13 @@ use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::subagent::{SubagentRuntime, SubagentSpec};
 use ah_hub::context::Context;
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 
@@ -275,6 +282,39 @@ impl RsiRuntime for RsiRuntimeImpl {
             Ok(task_prompt.to_string())
         }
     }
+
+    async fn run_rounds(
+        &self,
+        seed_tasks: Vec<String>,
+        rounds: u32,
+        task_prompt: &str,
+    ) -> Result<Vec<RsiReport>, RsiError> {
+        if rounds == 0 {
+            return Ok(vec![]);
+        }
+        let cases = self.generate_dataset(seed_tasks, 3)?;
+        let mut prompt = task_prompt.to_string();
+        let mut reports: Vec<RsiReport> = Vec::new();
+        for round in 1..=rounds {
+            // 检查点续跑:该轮已由 checkpoint 覆盖则跳过(只补跑新轮)。
+            if let Some(cp) = self.load_checkpoint()?
+                && cp.round >= round
+            {
+                prompt = cp.task_prompt;
+                continue;
+            }
+            let report = self.evaluate_round(round, &cases, &prompt).await?;
+            prompt = self.refine_task(&report, &prompt).await?;
+            self.save_checkpoint(&RsiCheckpoint {
+                round,
+                cases: cases.clone(),
+                task_prompt: prompt.clone(),
+                updated_at_ms: now_ms(),
+            })?;
+            reports.push(report);
+        }
+        Ok(reports)
+    }
 }
 
 /// rsi 插件:注入 subagent 与 evolving,提供 rsi seam。
@@ -496,6 +536,65 @@ mod tests {
         // 真实优化建议被应用到提示。
         assert!(refined.contains("RSI round 1 refinement"));
         assert!(refined.starts_with("Do the task"));
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn run_rounds_produces_reports_and_checkpoints() {
+        let root = std::env::temp_dir().join(format!("ah-rsi-rounds-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let rsi = ctx.service::<dyn RsiRuntime>(&RSI).expect("rsi");
+
+        let reports = rsi
+            .run_rounds(
+                vec!["list files".to_string()],
+                2,
+                "You are a helpful agent.",
+            )
+            .await
+            .expect("rounds");
+        assert_eq!(reports.len(), 2, "two fresh rounds");
+        assert!(reports.iter().all(|r| r.summary.contains("round")));
+        assert!(reports.iter().all(|r| r.total >= 1));
+
+        // checkpoint 落盘:轮次推进被记录。
+        let cp = rsi.load_checkpoint().expect("load").expect("some");
+        assert_eq!(cp.round, 2);
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn run_rounds_resumes_from_checkpoint() {
+        let root = std::env::temp_dir().join(format!("ah-rsi-resume-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let rsi = ctx.service::<dyn RsiRuntime>(&RSI).expect("rsi");
+
+        // 第一轮跑 2 轮 → checkpoint round=2。
+        let first = rsi
+            .run_rounds(
+                vec!["list files".to_string()],
+                2,
+                "You are a helpful agent.",
+            )
+            .await
+            .expect("first run");
+        assert_eq!(first.len(), 2);
+
+        // 续跑 3 轮:前 2 轮被 checkpoint 覆盖跳过,只补跑第 3 轮。
+        let resumed = rsi
+            .run_rounds(
+                vec!["list files".to_string()],
+                3,
+                "You are a helpful agent.",
+            )
+            .await
+            .expect("resumed");
+        assert_eq!(resumed.len(), 1, "only new round reported");
+        assert_eq!(resumed[0].round, 3);
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);

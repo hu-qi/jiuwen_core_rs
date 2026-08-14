@@ -185,6 +185,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 // ---- rsi ----
+                ["rsi", "run", n, ..] => {
+                    let rsi = ctx
+                        .service::<dyn ah_contracts::rsi::RsiRuntime>(&RSI)
+                        .ok_or("rsi seam missing")?;
+                    let seed = rest(&parts, 3);
+                    let reports = rsi
+                        .run_rounds(
+                            vec![seed],
+                            n.parse().unwrap_or(2),
+                            "You are a helpful agent.",
+                        )
+                        .await
+                        .map_err(|e| e.0)?;
+                    for report in reports {
+                        println!(
+                            "rsi round {}: {}/{} passed, avg {:.2}",
+                            report.round, report.passed, report.total, report.avg_score
+                        );
+                    }
+                }
                 ["rsi", "round", n, ..] => {
                     let rsi = ctx
                         .service::<dyn ah_contracts::rsi::RsiRuntime>(&RSI)

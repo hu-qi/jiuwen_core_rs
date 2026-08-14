@@ -156,6 +156,7 @@ let final_decision = ctx.waterfall(Decision::new(), Decision::Allow).await;
   /teams msg <team> <from> <content...>
   /teams msgs <team>        团队消息(经 queue seam)
   /rsi round <n> <seed>     跑一轮 RSI 评测(数据集生成 + 真实执行 + 评估)
+  /rsi run <n> <seed>      多轮优化编排(评测→精化→checkpoint 续跑)
   /workspace goals / goal add <id> <title...> / goal done <id>
   /web fetch <url>          真实 HTTP GET
   /queue publish <channel> <json> | /queue consume <channel>

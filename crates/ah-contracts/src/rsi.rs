@@ -97,4 +97,13 @@ pub trait RsiRuntime: Seam {
 
     /// 依据报告精化任务提示:对最差用例的轨迹做 evolving 评估与优化,返回新提示。
     async fn refine_task(&self, report: &RsiReport, task_prompt: &str) -> Result<String, RsiError>;
+
+    /// 多轮优化编排:每轮 数据集→评测→提示精化→checkpoint 落盘;
+    /// 已由 checkpoint 覆盖的轮次跳过(续跑),仅返回本轮新执行的报告。
+    async fn run_rounds(
+        &self,
+        seed_tasks: Vec<String>,
+        rounds: u32,
+        task_prompt: &str,
+    ) -> Result<Vec<RsiReport>, RsiError>;
 }
