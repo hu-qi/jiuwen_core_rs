@@ -8,5 +8,10 @@ description = "Real HTTP client (ureq): GET with timeout, status/headers/body; T
 [dependencies]
 ah-contracts = { workspace = true }
 ah-hub = { workspace = true }
+async-trait = "0.1"
 ureq = { version = "2.12", default-features = false }
 serde_json = "1"
+
+[dev-dependencies]
+ah-plugins-tools = { workspace = true }
+tokio = { version = "1", features = ["rt", "macros"] }

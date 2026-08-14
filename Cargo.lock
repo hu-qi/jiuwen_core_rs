@@ -83,6 +83,7 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "ah-plugins-tools",
  "async-trait",
  "serde_json",
  "tokio",
@@ -368,7 +369,10 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "ah-plugins-tools",
+ "async-trait",
  "serde_json",
+ "tokio",
  "ureq",
 ]
 

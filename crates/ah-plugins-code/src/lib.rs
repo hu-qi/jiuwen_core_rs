@@ -10,13 +10,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ah_contracts::code::{CodeError, CodeExecRequest, CodeExecResult, CodeProvider};
-use ah_contracts::keys::CODE;
+use ah_contracts::keys::{CODE, TOOLS};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
+use ah_contracts::tools::{Tool, ToolError, ToolRegistry};
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
+use serde_json::{Value, json};
 use tokio::process::Command;
 
 fn now_ms() -> u64 {
@@ -129,6 +131,67 @@ impl CodeProvider for InterpreterCodeProvider {
     }
 }
 
+/// run_code 工具:agent 经工具管线真实执行代码。
+pub struct RunCodeTool {
+    code: Arc<dyn CodeProvider>,
+}
+
+impl RunCodeTool {
+    pub fn new(code: Arc<dyn CodeProvider>) -> Self {
+        Self { code }
+    }
+}
+
+#[async_trait]
+impl Tool for RunCodeTool {
+    fn name(&self) -> &'static str {
+        "run_code"
+    }
+
+    fn description(&self) -> &'static str {
+        "execute code with the interpreter; arguments: {language, code, timeout_ms?}"
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "language": { "type": "string" },
+                "code": { "type": "string" },
+                "timeout_ms": { "type": "integer" },
+            },
+            "required": ["language", "code"],
+        })
+    }
+
+    async fn invoke(&self, arguments: Value) -> Result<Value, ToolError> {
+        let language = arguments
+            .get("language")
+            .and_then(Value::as_str)
+            .ok_or_else(|| ToolError("missing string field language".to_string()))?;
+        let code = arguments
+            .get("code")
+            .and_then(Value::as_str)
+            .ok_or_else(|| ToolError("missing string field code".to_string()))?;
+        let timeout_ms = arguments.get("timeout_ms").and_then(Value::as_u64);
+        let result = self
+            .code
+            .execute(CodeExecRequest {
+                language: language.to_string(),
+                code: code.to_string(),
+                timeout_ms,
+            })
+            .await
+            .map_err(|e| ToolError(format!("execute failed: {e}")))?;
+        Ok(json!({
+            "exit_code": result.exit_code,
+            "timed_out": result.timed_out,
+            "stdout": result.stdout.chars().take(1000).collect::<String>(),
+            "stderr": result.stderr.chars().take(500).collect::<String>(),
+        }))
+    }
+}
+
 /// code 插件:提供真实解释器执行。
 pub struct CodePlugin {
     dir: PathBuf,
@@ -151,7 +214,7 @@ impl Plugin for CodePlugin {
     }
 
     fn inject(&self) -> Vec<ServiceKey> {
-        vec![]
+        vec![TOOLS]
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
@@ -161,7 +224,15 @@ impl Plugin for CodePlugin {
                 message: e.0,
             })?;
         let provider: Arc<dyn CodeProvider> = Arc::new(provider);
-        Ok(vec![ctx.register(CODE, provider)])
+        let mut effects = vec![ctx.register(CODE, provider.clone())];
+        let registry =
+            ctx.service::<dyn ToolRegistry>(&TOOLS)
+                .ok_or_else(|| PluginError::Apply {
+                    plugin: self.name(),
+                    message: "tools seam not registered".to_string(),
+                })?;
+        effects.push(registry.register(std::sync::Arc::new(RunCodeTool::new(provider))));
+        Ok(effects)
     }
 }
 
@@ -174,7 +245,10 @@ mod tests {
 
     fn build_ctx(root: &std::path::Path) -> (Context, Vec<Effect>) {
         let ctx = Context::new();
-        let plugins: Vec<DynPlugin> = vec![StdArc::new(CodePlugin::new(root.join("scratch")))];
+        let plugins: Vec<DynPlugin> = vec![
+            StdArc::new(ah_plugins_tools::ToolsPlugin),
+            StdArc::new(CodePlugin::new(root.join("scratch"))),
+        ];
         let effects = ctx.mount_all(plugins).expect("mount");
         (ctx, effects)
     }
@@ -258,6 +332,36 @@ mod tests {
             .await
             .expect_err("ruby unsupported");
         assert!(err.0.contains("unsupported language"));
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn run_code_tool_invokes_real_interpreter() {
+        use ah_contracts::keys::TOOLS;
+        use ah_contracts::tools::ToolRegistry;
+        use ah_hub::plugin::DynPlugin;
+        use std::sync::Arc as StdArc;
+
+        let root = std::env::temp_dir().join(format!("ah-code-tool-{}", std::process::id()));
+        let ctx = Context::new();
+        let plugins: Vec<DynPlugin> = vec![
+            StdArc::new(ah_plugins_tools::ToolsPlugin),
+            StdArc::new(CodePlugin::new(root.join("scratch"))),
+        ];
+        let effects = ctx.mount_all(plugins).expect("mount");
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+
+        let result = registry
+            .invoke(
+                "run_code",
+                json!({ "language": "python3", "code": "print(40+2)" }),
+            )
+            .await
+            .expect("run_code");
+        assert_eq!(result["exit_code"], 0);
+        assert!(result["stdout"].as_str().unwrap_or_default().contains("42"));
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
