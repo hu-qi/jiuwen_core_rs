@@ -28,6 +28,9 @@ use serde_json::{Value, json};
 pub mod sqlite;
 pub use sqlite::{SqliteTeamRuntime, SqliteTeamsPlugin};
 
+pub mod swarm;
+pub use swarm::{SwarmflowEngine, SwarmflowPlugin};
+
 struct Team {
     spec: TeamSpec,
     members: Vec<TeamMemberSpec>,

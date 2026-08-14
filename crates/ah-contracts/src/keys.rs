@@ -86,3 +86,6 @@ pub const WEB: ServiceKey = ServiceKey::new("web");
 
 /// `transport` seam 服务键(agent 传输)。
 pub const TRANSPORT: ServiceKey = ServiceKey::new("transport");
+
+/// `teams-swarm` seam 服务键(swarmflow 编排)。
+pub const SWARM: ServiceKey = ServiceKey::new("teams-swarm");

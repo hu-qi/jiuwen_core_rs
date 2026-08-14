@@ -34,6 +34,7 @@ pub mod session;
 pub mod shell;
 pub mod store;
 pub mod subagent;
+pub mod swarm;
 pub mod teams;
 pub mod telemetry;
 pub mod tools;
@@ -86,6 +87,11 @@ pub mod prelude {
         BaseKVStore, BaseMessageStore, KvEntry, StoreError, StoreProvider, StoredMessage,
     };
     pub use crate::subagent::{SubagentError, SubagentResult, SubagentRuntime, SubagentSpec};
+    pub use crate::swarm::{
+        SwarmAgentActivity, SwarmAgentRecord, SwarmAgentStatus, SwarmError, SwarmEvent,
+        SwarmEventKind, SwarmFlowScript, SwarmPhase, SwarmPhaseRecord, SwarmRun, SwarmRunStatus,
+        SwarmflowRunner,
+    };
     pub use crate::teams::{
         TeamError, TeamMemberSpec, TeamMessage, TeamRunResult, TeamRuntime, TeamSpec, TeamTask,
         TeamTaskEvent, TeamTaskStatus,
