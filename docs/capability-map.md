@@ -36,7 +36,7 @@
 | security | `security` | `SecurityProvider`(已实现:规则 guardrails + pre-execute rail) | done(契约)/ partial(无 LLM 后端/API) |
 | agent-loop | `agent-loop` | `AgentLoop`(已实现,真实 ReAct,日志驱动,工具错误回喂模型) | done
 | workflow | `workflow` | `WorkflowEngine`(已实现:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边 + 轨迹入日志) | done(契约)/ partial(无流式) |
-| subagent | `subagents` | `SubagentRuntime`(规划) | missing
+| subagent | `subagent` | `SubagentRuntime`(已实现:隔离会话委派 + 预算 + 上下文注入 + delegate_task 工具) | done(契约)/ partial(无进程外/跨产品子代理) |
 | teams | `teams` | `TeamRuntime`(规划) | missing
 | evolving | `evolving` | 演进管线(规划) | missing
 | rsi | `rsi` | RSI 管线(规划) | missing

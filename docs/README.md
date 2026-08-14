@@ -54,6 +54,7 @@
   ah-plugins-memory(真实持久化记忆 + remember/recall/forget 工具);
   ah-plugins-retrieval(真实知识库检索:BM25 分块 + ingest_knowledge/search_knowledge 工具);
   ah-plugins-security(真实安全检测:提示注入/敏感数据 guardrails + tools/pre-execute rail);
+  ah-plugins-subagent(真实子代理:隔离会话委派 + 预算 + 上下文注入 + delegate_task 工具);
   工具执行管线(pre-execute/post-execute)已落地;
   ah-app(demo 端到端 + **ah-cli 交互入口**:任务输入、会话新建/切换/分叉)。
 - 仅剩一个 boot 桩:ah-plugins-mock(llm,真实 provider 需凭据时仍保留占位)。

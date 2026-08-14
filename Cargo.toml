@@ -14,6 +14,7 @@ members = [
     "crates/ah-plugins-memory",
     "crates/ah-plugins-retrieval",
     "crates/ah-plugins-security",
+    "crates/ah-plugins-subagent",
     "crates/ah-app",
 ]
 
@@ -36,4 +37,5 @@ ah-plugins-workflow = { path = "crates/ah-plugins-workflow" }
 ah-plugins-memory = { path = "crates/ah-plugins-memory" }
 ah-plugins-retrieval = { path = "crates/ah-plugins-retrieval" }
 ah-plugins-security = { path = "crates/ah-plugins-security" }
+ah-plugins-subagent = { path = "crates/ah-plugins-subagent" }
 ah-app = { path = "crates/ah-app" }

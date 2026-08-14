@@ -7,6 +7,7 @@
 # - ah-plugins-workflow: 真实工作流引擎
 # - ah-plugins-memory: 真实持久化记忆
 # - ah-plugins-retrieval: 真实知识库检索
+# - ah-plugins-subagent: 真实子代理(隔离会话委派)
 # - ah-plugins-openai: 真实 LLM provider(需 OPENAI_API_KEY;缺失时挂载失败并显式报错)
 # - ah-plugins-agent-loop: 真实 ReAct 循环(日志驱动)
 # 无 mock 插件;mock 门禁校验通过。
@@ -14,4 +15,4 @@ name = "prod"
 
 [[bundles]]
 id = "real"
-plugins = ["ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-openai", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-openai", "ah-plugins-agent-loop"]

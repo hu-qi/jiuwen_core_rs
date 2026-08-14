@@ -165,6 +165,11 @@ impl SessionLog for JsonlSessionLog {
                         .unwrap_or_default();
                     Some(ChatMessage::tool(id, output))
                 }
+                SessionEventKind::System => event
+                    .payload
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .map(|c| ChatMessage::new(ChatRole::System, c)),
                 _ => None,
             })
             .collect()

@@ -36,3 +36,6 @@ pub const RETRIEVAL: ServiceKey = ServiceKey::new("retrieval");
 
 /// `security` seam 服务键(安全检测)。
 pub const SECURITY: ServiceKey = ServiceKey::new("security");
+
+/// `subagent` seam 服务键(子任务委派)。
+pub const SUBAGENT: ServiceKey = ServiceKey::new("subagent");
