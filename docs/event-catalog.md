@@ -20,7 +20,7 @@
 | tools/post-execute | serial | LocalToolRegistry.invoke | 遥测、审计 | **done(已实现)**
 | fs/* | waterfall | fs seam | 沙箱、策略 | 规划
 | telemetry/* | emit | 各插件 | 导出器 | 规划(telemetry seam 已落地:span 记录 + JSONL 导出,由 agent/step 与 tools/post-execute 驱动;OTLP 留待后续)
-| teams/task | serial | teams seam | 任务板、审计 | 规划(teams)
+| teams/task | serial | InMemoryTeamRuntime(状态迁移时 emit) | 任务板、审计 | **done(已实现)**
 
 ## 事件登记规则
 

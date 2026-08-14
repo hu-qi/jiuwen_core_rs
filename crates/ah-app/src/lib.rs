@@ -23,6 +23,7 @@ use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_sysop::SysopPlugin;
+use ah_plugins_teams::TeamsPlugin;
 use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_tools::ToolsPlugin;
 use ah_plugins_workflow::WorkflowPlugin;
@@ -61,6 +62,7 @@ pub fn plugin_catalog(
             Arc::new(SecurityRailPlugin) as DynPlugin,
         ),
         ("ah-plugins-subagent", Arc::new(SubagentPlugin) as DynPlugin),
+        ("ah-plugins-teams", Arc::new(TeamsPlugin) as DynPlugin),
         (
             "ah-plugins-session-log",
             Arc::new(SessionLogPlugin::new(session_path, session_dir)) as DynPlugin,

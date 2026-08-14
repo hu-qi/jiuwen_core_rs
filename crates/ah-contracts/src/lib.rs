@@ -26,6 +26,7 @@ pub mod service;
 pub mod session;
 pub mod shell;
 pub mod subagent;
+pub mod teams;
 pub mod telemetry;
 pub mod tools;
 pub mod workflow;
@@ -57,6 +58,10 @@ pub mod prelude {
     pub use crate::session::{SessionError, SessionEvent, SessionEventKind, SessionLog};
     pub use crate::shell::{ShellError, ShellOutput, ShellProvider};
     pub use crate::subagent::{SubagentError, SubagentResult, SubagentRuntime, SubagentSpec};
+    pub use crate::teams::{
+        TeamError, TeamMemberSpec, TeamMessage, TeamRunResult, TeamRuntime, TeamSpec, TeamTask,
+        TeamTaskEvent, TeamTaskStatus,
+    };
     pub use crate::telemetry::{Span, TelemetryError, TelemetryProvider};
     pub use crate::tools::{Tool, ToolError, ToolRegistry};
     pub use crate::workflow::{

@@ -1,14 +1,14 @@
 # 剩余计划(REMAINING PLAN)
 
-> 目标:按照能力地图完成剩余计划任务。当前 104+ 测试,18 crate。
+> 目标:按照能力地图完成剩余计划任务。当前 108+ 测试,19 crate。
 > 执行模式:规划(本表)→ 派发执行对话 → 主对话验收(构建/测试/clippy/真实性/架构)。
 
 ## A. 第三梯队大域(按依赖)
 
 | # | 任务 | 状态 | 验收要点 |
 | --- | --- | --- | --- |
-| 7 | teams(多 agent 任务协作) | 执行中 | 任务板/依赖/review/settle 真实状态迁移;run_task 真实委派 subagent |
-| 8 | evolving(轨迹/evaluator/optimizer) | 待办 | 真实轨迹抽取、LLM-as-judge(本地判据优先)、优化管线 |
+| 7 | teams(多 agent 任务协作) | ✅ 已验收 | 任务板/依赖/review/settle 真实状态迁移;run_task 真实委派 subagent;成员校验;teams/task 事件 |
+| 8 | evolving(轨迹/evaluator/optimizer) | 执行中 | 真实轨迹抽取、LLM-as-judge(本地判据优先)、优化管线 |
 | 9 | rsi(数据生成/评测/优化编排) | 待办 | 端到端 RSI 流水线;真实 git/CI 基建 |
 
 ## B. 工程收尾

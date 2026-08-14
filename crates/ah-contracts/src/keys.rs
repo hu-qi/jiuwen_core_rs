@@ -48,3 +48,5 @@ pub const TELEMETRY: ServiceKey = ServiceKey::new("telemetry");
 
 /// `credentials` seam 服务键(凭据引用)。
 pub const CREDENTIALS: ServiceKey = ServiceKey::new("credentials");
+/// `teams` seam 服务键(多 agent 任务协作)。
+pub const TEAMS: ServiceKey = ServiceKey::new("teams");

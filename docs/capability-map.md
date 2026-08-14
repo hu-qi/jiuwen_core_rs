@@ -37,7 +37,7 @@
 | agent-loop | `agent-loop` | `AgentLoop`(已实现,真实 ReAct,日志驱动,工具错误回喂模型) | done
 | workflow | `workflow` | `WorkflowEngine`(已实现:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边 + 轨迹入日志) | done(契约)/ partial(无流式) |
 | subagent | `subagent` | `SubagentRuntime`(已实现:隔离会话委派 + 预算 + 上下文注入 + delegate_task 工具) | done(契约)/ partial(无进程外/跨产品子代理) |
-| teams | `teams` | `TeamRuntime`(规划) | missing
+| teams | `teams` | `TeamRuntime`(已实现:内存任务板 + 依赖门控 + 成员校验 + review 票 + settle 多数决 + run_task 真实 subagent 委派 + teams/task 事件) | done(契约)/ partial(无持久化) |
 | evolving | `evolving` | 演进管线(规划) | missing
 | rsi | `rsi` | RSI 管线(规划) | missing
 | telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约)/ partial(JSONL 导出真实;OTLP 导出留待后续)
@@ -88,7 +88,7 @@
 | --- | --- | --- | --- |
 | schema(81) | ah-plugins-teams | TeamAgentSpec/DeepAgentSpec/事件体系 | 字段对等
 | agent/coordination/scheduling(57) | `teams` seam | 协调内核、调度、生命周期 | 现为 local-distributed-mock
-| runtime(27) | `teams` seam | 池、7 路 dispatch、持久化 | 持久化现为 Self::new()
+| runtime(27) | `teams` seam | 任务板/依赖/review/settle 真实状态迁移,run_task 真实委派 | 已落地(ah-plugins-teams);持久化/池/7 路 dispatch 留待后续 |
 | messager(16) | `queue` seam + ah-plugins-zmq | ROUTER/DEALER/XPUB/XSUB | 现为空实现
 | external(95) | `subagents` seam + 进程插件 | 外部 CLI agent、SSH | 全 crate 现无 std::process
 | workflow(148) | ah-plugins-teams-workflow | swarmflow 引擎 | 现为 MockWorkflowStep

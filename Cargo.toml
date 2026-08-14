@@ -17,6 +17,7 @@ members = [
     "crates/ah-plugins-retrieval",
     "crates/ah-plugins-security",
     "crates/ah-plugins-subagent",
+    "crates/ah-plugins-teams",
     "crates/ah-plugins-telemetry",
     "crates/ah-app",
 ]
@@ -43,5 +44,6 @@ ah-plugins-credentials = { path = "crates/ah-plugins-credentials" }
 ah-plugins-retrieval = { path = "crates/ah-plugins-retrieval" }
 ah-plugins-security = { path = "crates/ah-plugins-security" }
 ah-plugins-subagent = { path = "crates/ah-plugins-subagent" }
+ah-plugins-teams = { path = "crates/ah-plugins-teams" }
 ah-plugins-telemetry = { path = "crates/ah-plugins-telemetry" }
 ah-app = { path = "crates/ah-app" }
