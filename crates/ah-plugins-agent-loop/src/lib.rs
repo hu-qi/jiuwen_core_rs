@@ -141,19 +141,19 @@ impl AgentLoop {
                 .append(SessionEventKind::Assistant, json!({ "tool_calls": calls }))
                 .map_err(|e| AgentLoopError(format!("session append failed: {e}")))?;
 
-            // 5) 真实执行工具,结果入日志。
+            // 5) 真实执行工具。工具失败/被拒**不中断循环**,错误作为工具结果回喂模型
+            //    (模型据此换方案),符合真实 agent 语义。
             for call in &response.tool_calls {
-                let output = self
-                    .tools
-                    .invoke(&call.name, call.arguments.clone())
-                    .await
-                    .map_err(|e| AgentLoopError(format!("tool {} failed: {e}", call.name)))?;
+                let output = match self.tools.invoke(&call.name, call.arguments.clone()).await {
+                    Ok(value) => value.to_string(),
+                    Err(error) => format!("tool error: {error}"),
+                };
                 self.sessions
                     .append(
                         SessionEventKind::ToolResult,
                         json!({
                             "tool_call_id": call.id,
-                            "output": output.to_string(),
+                            "output": output,
                         }),
                     )
                     .map_err(|e| AgentLoopError(format!("session append failed: {e}")))?;
@@ -297,6 +297,72 @@ mod tests {
         let messages = sessions.derive_messages();
         assert_eq!(messages.len(), 4);
         assert_eq!(messages[2].role, ChatRole::Tool);
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_file(&session_path);
+    }
+
+    #[tokio::test]
+    async fn tool_error_is_fed_back_to_model_and_loop_completes() {
+        use ah_contracts::tools::{Tool, ToolError};
+        use serde_json::Value;
+
+        struct FailingListDir;
+
+        #[async_trait::async_trait]
+        impl Tool for FailingListDir {
+            fn name(&self) -> &'static str {
+                "list_dir"
+            }
+
+            fn description(&self) -> &'static str {
+                "always fails"
+            }
+
+            async fn invoke(&self, _arguments: Value) -> Result<Value, ToolError> {
+                Err(ToolError("boom: directory unreadable".to_string()))
+            }
+        }
+
+        let root = std::env::temp_dir().join(format!("ah-loop-fail-{}", std::process::id()));
+        let session_path =
+            std::env::temp_dir().join(format!("ah-loop-fail-session-{}", std::process::id()));
+        let _ = std::fs::remove_file(&session_path);
+        let (ctx, effects) = build_ctx(&root, &session_path);
+
+        // 用失败工具覆盖 list_dir:mock 模型会调它,应得到错误回喂而非循环崩溃。
+        let registry = ctx
+            .service::<dyn ah_contracts::tools::ToolRegistry>(&ah_contracts::keys::TOOLS)
+            .expect("tools");
+        let _override = registry.register(StdArc::new(FailingListDir));
+
+        let agent = ctx
+            .service::<AgentLoop>(&AGENT_LOOP)
+            .expect("agent-loop service");
+        let answer = agent
+            .run("go")
+            .await
+            .expect("loop must not crash on tool error");
+
+        // 错误被回喂:最终回答引用了工具错误文本。
+        assert!(answer.contains("mock final answer"));
+        assert!(answer.contains("boom: directory unreadable"));
+
+        // 日志中 ToolResult 记录的是错误文本(而非崩溃)。
+        let sessions = ctx.service::<dyn SessionLog>(&SESSIONS).expect("sessions");
+        let events = sessions.events();
+        let tool_results: Vec<_> = events
+            .iter()
+            .filter(|e| e.kind == ah_contracts::session::SessionEventKind::ToolResult)
+            .collect();
+        assert_eq!(tool_results.len(), 1);
+        assert!(
+            tool_results[0].payload["output"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("boom")
+        );
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);

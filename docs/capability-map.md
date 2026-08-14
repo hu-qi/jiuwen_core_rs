@@ -34,7 +34,7 @@
 | code | `code` | `CodeProvider`(规划) | missing
 | sandbox | `sandbox` | `SandboxProvider`(规划) | missing
 | security | `security` | `Guardrail`(规划) | missing
-| agent-loop | `agent-loop` | `AgentLoop`(已实现,真实 ReAct) | done
+| agent-loop | `agent-loop` | `AgentLoop`(已实现,真实 ReAct,日志驱动,工具错误回喂模型) | done
 | subagent | `subagents` | `SubagentRuntime`(规划) | missing
 | teams | `teams` | `TeamRuntime`(规划) | missing
 | evolving | `evolving` | 演进管线(规划) | missing
