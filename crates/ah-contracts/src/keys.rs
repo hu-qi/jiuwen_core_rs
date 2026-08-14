@@ -18,3 +18,6 @@ pub const SHELL: ServiceKey = ServiceKey::new("shell");
 
 /// `agent-loop` 服务键(agent 循环)。
 pub const AGENT_LOOP: ServiceKey = ServiceKey::new("agent-loop");
+
+/// `sessions` seam 服务键(会话事件日志)。
+pub const SESSIONS: ServiceKey = ServiceKey::new("sessions");

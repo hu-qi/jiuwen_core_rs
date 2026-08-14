@@ -1,0 +1,12 @@
+[package]
+name = "ah-plugins-session-log"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real append-only session event log with JSONL persistence"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros"] }

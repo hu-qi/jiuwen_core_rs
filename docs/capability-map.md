@@ -25,7 +25,7 @@
 | tools | `tools` | `Tool` + `ToolRegistry`(已实现) | done(契约)/ partial(已有真实工具,注册表通用) |
 | prompt | `prompt` | `PromptBuilder`(规划) | missing
 | store | `store` | `BaseKVStore/BaseDBStore/BaseVectorStore/BaseMessageStore`(规划) | missing
-| session | `sessions` | `Session` + append-only 事件日志(规划) | missing
+| session | `sessions` | `SessionLog` append-only 事件日志 + JSONL 持久化 + 投影(已实现) | done(契约)/ partial(单会话,无 fork/resume 多会话) |
 | context | `context` | `ContextEngine`(规划) | missing
 | memory | `memory` | `MemoryProvider`(规划) | missing
 | retrieval | `retrieval` | `Retriever`(规划) | missing

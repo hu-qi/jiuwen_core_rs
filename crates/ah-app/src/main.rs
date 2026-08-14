@@ -1,10 +1,12 @@
 //! agent-harness 启动入口:读取 profile → 组装插件 → 解析 seam → 真实执行。
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use ah_contracts::fs::FsProvider;
-use ah_contracts::keys::{AGENT_LOOP, FS, LLM, SHELL, TOOLS};
+use ah_contracts::keys::{AGENT_LOOP, FS, LLM, SESSIONS, SHELL, TOOLS};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
+use ah_contracts::session::SessionLog;
 use ah_contracts::shell::ShellProvider;
 use ah_contracts::tools::ToolRegistry;
 use ah_hub::context::Context;
@@ -14,6 +16,7 @@ use ah_plugins_agent_loop::{AgentLoop, AgentLoopPlugin, AgentStep};
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_rails::ShellGuardRailPlugin;
+use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_tools::ToolsPlugin;
 use serde_json::json;
@@ -22,7 +25,10 @@ use serde_json::json;
 ///
 /// - ah-plugins-openai 仅在存在 OPENAI_API_KEY 时可用(真实 provider);
 /// - 生产 profile 引用 openai 但无 key 时,解析会显式失败(不静默降级)。
-fn plugin_catalog(workspace_root: &std::path::Path) -> Vec<(&'static str, DynPlugin)> {
+fn plugin_catalog(
+    workspace_root: &std::path::Path,
+    session_path: &PathBuf,
+) -> Vec<(&'static str, DynPlugin)> {
     let mut catalog: Vec<(&'static str, DynPlugin)> = vec![
         ("ah-plugins-mock", Arc::new(MockPlugin) as DynPlugin),
         ("ah-plugins-tools", Arc::new(ToolsPlugin) as DynPlugin),
@@ -33,6 +39,10 @@ fn plugin_catalog(workspace_root: &std::path::Path) -> Vec<(&'static str, DynPlu
         (
             "ah-plugins-rails",
             Arc::new(ShellGuardRailPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-session-log",
+            Arc::new(SessionLogPlugin::new(session_path)) as DynPlugin,
         ),
         (
             "ah-plugins-agent-loop",
@@ -58,11 +68,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         profile.plugin_names().join(", ")
     );
 
-    // 真实临时 workspace:所有 fs/shell 副作用发生在这里。
+    // 真实临时 workspace 与会话日志文件。
     let workspace_root = std::env::temp_dir().join(format!("ah-app-{}", std::process::id()));
+    let session_path =
+        std::env::temp_dir().join(format!("ah-app-session-{}.jsonl", std::process::id()));
     println!("[boot] workspace: {}", workspace_root.display());
+    println!("[boot] session log: {}", session_path.display());
 
-    let catalog = plugin_catalog(&workspace_root);
+    let catalog = plugin_catalog(&workspace_root, &session_path);
     let plugins: Vec<DynPlugin> = profile
         .plugin_names()
         .iter()
@@ -101,10 +114,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("fs seam not registered")?;
     fs.write("notes/plan.md", b"real file written by ah-app")?;
     println!("[fs] wrote notes/plan.md; entries: {:?}", fs.list("notes")?);
-    println!(
-        "[fs] read back: {}",
-        String::from_utf8_lossy(&fs.read("notes/plan.md")?)
-    );
 
     // shell seam:真实执行命令。
     let shell = ctx
@@ -127,9 +136,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let registry = ctx
         .service::<dyn ToolRegistry>(&TOOLS)
         .ok_or("tools seam not registered")?;
-    let mut names = registry.names();
-    names.sort();
-    println!("[tools] available: {}", names.join(", "));
     let _ = registry
         .invoke(
             "write_file",
@@ -143,8 +149,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "[tools] write_file -> read_file roundtrip: {}",
         read["content"]
     );
-
-    // rails:真实 ShellGuard 拒绝危险命令(工具执行管线 pre-execute waterfall)。
     let safe = registry
         .invoke(
             "run_shell",
@@ -163,7 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(error) => println!("[tools] run_shell rm -rf / -> blocked: {error}"),
     }
 
-    // agent-loop:真实 ReAct 循环(工具执行真实;模型 dev=桩 / prod=真实)。
+    // agent-loop:真实 ReAct 循环,会话日志驱动。
     let _step_listener = ctx.on::<AgentStep>(|step| {
         println!(
             "[agent] step {}: tool_calls={} done={}",
@@ -175,6 +179,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("agent-loop service not registered")?;
     let answer = agent.run("explore the workspace").await?;
     println!("[agent] answer: {answer}");
+
+    // 会话日志:展示日志即真相(事件序列 + 投影消息)。
+    let sessions = ctx
+        .service::<dyn SessionLog>(&SESSIONS)
+        .ok_or("sessions seam not registered")?;
+    println!("[session] events:");
+    for event in sessions.events() {
+        println!(
+            "  seq={} kind={:?} payload={}",
+            event.seq,
+            event.kind,
+            serde_json::to_string(&event.payload)?
+        );
+    }
+    let messages = sessions.derive_messages();
+    println!("[session] projected messages: {}", messages.len());
 
     Ok(())
 }
