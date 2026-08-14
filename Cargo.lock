@@ -9,6 +9,7 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "ah-plugins-agent-loop",
+ "ah-plugins-credentials",
  "ah-plugins-mcp",
  "ah-plugins-memory",
  "ah-plugins-mock",
@@ -63,6 +64,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-credentials"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+]
+
+[[package]]
 name = "ah-plugins-mcp"
 version = "0.1.0"
 dependencies = [
@@ -103,6 +112,7 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "ah-plugins-credentials",
  "async-trait",
  "reqwest",
  "serde",

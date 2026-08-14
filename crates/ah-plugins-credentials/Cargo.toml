@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-credentials"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real credentials seam: environment-backed credential provider (get/list; set/remove return explicit read-only errors)"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

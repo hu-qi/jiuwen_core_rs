@@ -13,6 +13,7 @@ members = [
     "crates/ah-plugins-workflow",
     "crates/ah-plugins-memory",
     "crates/ah-plugins-mcp",
+    "crates/ah-plugins-credentials",
     "crates/ah-plugins-retrieval",
     "crates/ah-plugins-security",
     "crates/ah-plugins-subagent",
@@ -38,6 +39,7 @@ ah-plugins-session-log = { path = "crates/ah-plugins-session-log" }
 ah-plugins-workflow = { path = "crates/ah-plugins-workflow" }
 ah-plugins-memory = { path = "crates/ah-plugins-memory" }
 ah-plugins-mcp = { path = "crates/ah-plugins-mcp" }
+ah-plugins-credentials = { path = "crates/ah-plugins-credentials" }
 ah-plugins-retrieval = { path = "crates/ah-plugins-retrieval" }
 ah-plugins-security = { path = "crates/ah-plugins-security" }
 ah-plugins-subagent = { path = "crates/ah-plugins-subagent" }

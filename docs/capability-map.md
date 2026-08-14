@@ -21,7 +21,7 @@
 
 | Seam | ServiceKey | Service Definition | 状态
 | --- | --- | --- | --- |
-| llm | `llm` | `ModelProvider`(已实现) | done(契约)/ partial(真实 provider 已实现,需凭据 e2e) |
+| llm | `llm` | `ModelProvider`(已实现;`OpenAiConfig` 支持从 credentials seam 解析 key/base_url,credentials 优先、环境变量兜底) | done(契约)/ partial(真实 provider + credentials 集成 e2e 已落地,其余 provider 未实现) |
 | tools | `tools` | `Tool` + `ToolRegistry`(已实现) | done(契约)/ partial(已有真实工具,注册表通用) |
 | prompt | `prompt` | `PromptBuilder`(规划) | missing
 | store | `store` | `BaseKVStore/BaseDBStore/BaseVectorStore/BaseMessageStore`(规划) | missing
@@ -44,7 +44,7 @@
 | queue | `queue` | `MessageQueue`(规划) | missing
 | mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约)/ partial(stdio 真实,http 未实现) |
 | transport | `transport` | A2A 传输(规划) | missing
-| credentials | `credentials` | 凭据引用(规划) | missing
+| credentials | `credentials` | `CredentialProvider`(已实现:真实环境变量 provider,映射可配置,如 `openai.api_key` → `OPENAI_API_KEY`;`get`/`list` 真实读 `std::env`,`set`/`remove` 显式报错 env 只读) | done(契约)/ partial(env 只读,无密钥管理后端;ah-plugins-credentials:tests 覆盖 get/list/set/remove 真实 env 路径,openai 集成测试经 credentials 解析 key 后真实 HTTP 往返) |
 
 ## 2. 域 → seam/插件映射(目标态)
 

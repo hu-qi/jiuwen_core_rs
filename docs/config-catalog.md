@@ -27,7 +27,8 @@
 
 | 插件 | 配置字段 | 说明 |
 | --- | --- | --- |
-| ah-plugins-openai(已实现) | base_url / api_key / model / timeout,来源 OPENAI_BASE_URL / OPENAI_API_KEY / OPENAI_MODEL | 真实 LLM provider;key 缺失时不挂载,生产 profile 引用则显式失败 |
+| ah-plugins-openai(已实现) | base_url / api_key / model / timeout,来源:credentials seam(openai.base_url / openai.api_key / openai.model,优先)+ OPENAI_BASE_URL / OPENAI_API_KEY / OPENAI_MODEL(兜底) | 真实 LLM provider;两者都无 key 时挂载显式失败(不静默降级) |
+| ah-plugins-credentials(已实现) | 凭据名 → 环境变量名映射,默认 openai.api_key → OPENAI_API_KEY / openai.base_url → OPENAI_BASE_URL / openai.model → OPENAI_MODEL;可用 CredentialsPlugin::new / EnvCredentialProvider::new 注入 | 真实环境变量 provider;env 只读,set/remove 显式报错;凭据名是稳定契约(如 openai.api_key),profile 不直接写凭据值 |
 | ah-plugins-redis | url / ttl / namespace | 检查点与 KV |
 | ah-plugins-pulsar | url / topic / subscription | 消息队列 |
 | ah-plugins-elasticsearch | url / index / auth | 向量库 |

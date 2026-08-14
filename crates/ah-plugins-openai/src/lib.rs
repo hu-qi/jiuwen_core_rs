@@ -7,7 +7,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use ah_contracts::keys::LLM;
+use ah_contracts::credentials::CredentialProvider;
+use ah_contracts::keys::{CREDENTIALS, LLM};
 use ah_contracts::llm::{
     ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse, ToolCall,
 };
@@ -42,6 +43,36 @@ impl OpenAiConfig {
                 .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
             api_key: Some(api_key),
             model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string()),
+            timeout: Duration::from_secs(60),
+        })
+    }
+
+    /// 从 credentials seam + 环境变量解析(credentials 优先,环境变量兜底)。
+    ///
+    /// - openai.api_key:credentials 优先,fallback 环境变量 OPENAI_API_KEY
+    ///   (两者都缺失时返回 None);
+    /// - openai.base_url:credentials 优先,fallback OPENAI_BASE_URL,再 fallback 默认地址;
+    /// - openai.model:credentials 优先,fallback OPENAI_MODEL,再 fallback 默认模型。
+    ///
+    /// 环境变量读取逻辑与 [Self::from_env] 完全一致(向后兼容);
+    /// credentials seam 是更优先的来源。
+    pub fn from_env_with_credentials(credentials: Option<&dyn CredentialProvider>) -> Option<Self> {
+        let api_key = credentials
+            .and_then(|c| c.get("openai.api_key"))
+            .map(|c| c.value)
+            .or_else(|| std::env::var("OPENAI_API_KEY").ok())?;
+        Some(Self {
+            base_url: credentials
+                .and_then(|c| c.get("openai.base_url"))
+                .map(|c| c.value)
+                .or_else(|| std::env::var("OPENAI_BASE_URL").ok())
+                .unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
+            api_key: Some(api_key),
+            model: credentials
+                .and_then(|c| c.get("openai.model"))
+                .map(|c| c.value)
+                .or_else(|| std::env::var("OPENAI_MODEL").ok())
+                .unwrap_or_else(|| "gpt-4o-mini".to_string()),
             timeout: Duration::from_secs(60),
         })
     }
@@ -257,19 +288,48 @@ impl ModelProvider for OpenAiModelProvider {
 }
 
 /// 真实 LLM provider 插件:注册到 llm seam。
+///
+/// 配置来源:
+/// - [OpenAiPlugin::new][]:显式固定配置(调用方自行解析);
+/// - [OpenAiPlugin::from_env][]:仅环境变量(OPENAI_API_KEY 等,向后兼容);
+/// - [OpenAiPlugin::from_env_with_credentials][]:构造时从 credentials seam
+///   + 环境变量解析(credentials 优先);
+/// - [OpenAiPlugin::lazy][]:apply 时先查 credentials seam,再 fallback 环境变量;
+///   两者都无 key 时 apply 显式失败(不静默降级)。
 pub struct OpenAiPlugin {
-    config: OpenAiConfig,
+    /// None = apply 时从 credentials seam + 环境变量解析。
+    config: Option<OpenAiConfig>,
 }
 
 impl OpenAiPlugin {
     /// 以显式配置构建。
     pub fn new(config: OpenAiConfig) -> Self {
-        Self { config }
+        Self {
+            config: Some(config),
+        }
     }
 
-    /// 从环境变量构建;无 OPENAI_API_KEY 时返回 None。
+    /// 从环境变量构建;无 OPENAI_API_KEY 时返回 None(向后兼容)。
     pub fn from_env() -> Option<Self> {
-        OpenAiConfig::from_env().map(Self::new)
+        OpenAiConfig::from_env().map(|config| Self {
+            config: Some(config),
+        })
+    }
+
+    /// 从 credentials seam + 环境变量解析(credentials 优先);
+    /// 需要 caller 提供已挂载 credentials 的 Context。
+    /// 两者都无 key 时返回 None。
+    pub fn from_env_with_credentials(ctx: &Context) -> Option<Self> {
+        let credentials = ctx.service::<dyn CredentialProvider>(&CREDENTIALS);
+        OpenAiConfig::from_env_with_credentials(credentials.as_deref()).map(|config| Self {
+            config: Some(config),
+        })
+    }
+
+    /// 惰性解析:apply 时先查 credentials seam,再 fallback 到环境变量。
+    /// 无可用 key 时 apply 显式失败(不静默降级)。
+    pub fn lazy() -> Self {
+        Self { config: None }
     }
 }
 
@@ -283,11 +343,24 @@ impl Plugin for OpenAiPlugin {
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
-        let provider =
-            OpenAiModelProvider::new(self.config.clone()).map_err(|e| PluginError::Apply {
-                plugin: self.name(),
-                message: e.0,
-            })?;
+        let config = match &self.config {
+            Some(config) => config.clone(),
+            None => {
+                // 惰性解析:credentials seam 优先,环境变量兜底;都无 key 则显式失败。
+                let credentials = ctx.service::<dyn CredentialProvider>(&CREDENTIALS);
+                OpenAiConfig::from_env_with_credentials(credentials.as_deref()).ok_or_else(|| {
+                    PluginError::Apply {
+                        plugin: self.name(),
+                        message: "no API key: credentials seam (openai.api_key) and OPENAI_API_KEY env both unavailable"
+                            .to_string(),
+                    }
+                })?
+            }
+        };
+        let provider = OpenAiModelProvider::new(config).map_err(|e| PluginError::Apply {
+            plugin: self.name(),
+            message: e.0,
+        })?;
         Ok(vec![ctx.register(
             LLM,
             Arc::new(provider) as Arc<dyn ModelProvider>,
@@ -384,5 +457,219 @@ mod tests {
 
         drop(effects);
         assert!(!ctx.has_service(&LLM));
+    }
+
+    // ------------------------------------------------------------------
+    // credentials 集成:真实环境变量 → credentials seam → OpenAiConfig
+    // ------------------------------------------------------------------
+
+    use ah_plugins_credentials::EnvCredentialProvider;
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    /// 串行化环境变量修改(edition 2024 下 set_var 为 unsafe;
+    /// 全部 env 测试经本锁串行,避免并行测试互相污染)。
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// 环境变量设置的 RAII guard:构造时设置,drop 时恢复原值。
+    /// vars 中 value 为 None 表示删除该环境变量。
+    struct EnvGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        saved: Vec<(String, Option<String>)>,
+    }
+
+    fn env_guard(vars: &[(&str, Option<&str>)]) -> EnvGuard {
+        let _lock = ENV_LOCK.lock().expect("env lock poisoned");
+        let saved: Vec<(String, Option<String>)> = vars
+            .iter()
+            .map(|(name, _)| ((*name).to_string(), std::env::var(name).ok()))
+            .collect();
+        for (name, value) in vars {
+            match value {
+                Some(value) => {
+                    // SAFETY:ENV_LOCK 保证同进程内唯一修改者;guard drop 时恢复。
+                    unsafe { std::env::set_var(name, value) };
+                }
+                None => {
+                    // SAFETY:同上。
+                    unsafe { std::env::remove_var(name) };
+                }
+            }
+        }
+        EnvGuard { _lock, saved }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (name, previous) in &self.saved {
+                match previous {
+                    Some(value) => {
+                        // SAFETY:guard 仍持有 ENV_LOCK,是唯一修改者。
+                        unsafe { std::env::set_var(name, value) };
+                    }
+                    None => {
+                        // SAFETY:同上。
+                        unsafe { std::env::remove_var(name) };
+                    }
+                }
+            }
+        }
+    }
+
+    /// openai.api_key → 给定 env 名的单条目映射 provider。
+    fn key_mapping_provider(env_var: &str) -> EnvCredentialProvider {
+        let mut mapping = HashMap::new();
+        mapping.insert("openai.api_key".to_string(), env_var.to_string());
+        EnvCredentialProvider::new(mapping)
+    }
+
+    #[test]
+    fn config_from_env_with_credentials_falls_back_to_env() {
+        // 无 credentials 时与 from_env 完全一致(向后兼容)。
+        let _guard = env_guard(&[
+            ("OPENAI_API_KEY", Some("env-key")),
+            ("OPENAI_BASE_URL", Some("http://env.test/v1")),
+            ("OPENAI_MODEL", Some("env-model")),
+        ]);
+        let config = OpenAiConfig::from_env_with_credentials(None).expect("env key present");
+        assert_eq!(config.api_key.as_deref(), Some("env-key"));
+        assert_eq!(config.base_url, "http://env.test/v1");
+        assert_eq!(config.model, "env-model");
+    }
+
+    #[test]
+    fn config_from_env_without_any_key_returns_none() {
+        let _guard = env_guard(&[("OPENAI_API_KEY", None)]);
+        assert!(OpenAiConfig::from_env_with_credentials(None).is_none());
+    }
+
+    #[test]
+    fn config_from_env_with_credentials_prefers_credentials_over_env() {
+        let _guard = env_guard(&[
+            ("OPENAI_API_KEY", Some("env-key")),
+            ("AH_OPENAI_CRED_KEY", Some("cred-key")),
+            ("AH_OPENAI_CRED_BASE", Some("http://cred.test/v1")),
+            ("AH_OPENAI_CRED_MODEL", Some("cred-model")),
+        ]);
+        let mut mapping = HashMap::new();
+        mapping.insert(
+            "openai.api_key".to_string(),
+            "AH_OPENAI_CRED_KEY".to_string(),
+        );
+        mapping.insert(
+            "openai.base_url".to_string(),
+            "AH_OPENAI_CRED_BASE".to_string(),
+        );
+        mapping.insert(
+            "openai.model".to_string(),
+            "AH_OPENAI_CRED_MODEL".to_string(),
+        );
+        let provider = EnvCredentialProvider::new(mapping);
+        let config =
+            OpenAiConfig::from_env_with_credentials(Some(&provider)).expect("credentials present");
+        // credentials seam 是更优先的来源,即使 OPENAI_API_KEY 环境变量也存在。
+        assert_eq!(config.api_key.as_deref(), Some("cred-key"));
+        assert_eq!(config.base_url, "http://cred.test/v1");
+        assert_eq!(config.model, "cred-model");
+    }
+
+    #[test]
+    fn plugin_from_env_with_credentials_resolves_via_ctx() {
+        let _guard = env_guard(&[("AH_OPENAI_CTX_KEY", Some("ctx-key"))]);
+        let ctx = Context::new();
+        let credentials: DynPlugin = Arc::new(ah_plugins_credentials::CredentialsPlugin::new(
+            key_mapping_provider("AH_OPENAI_CTX_KEY").mapping().clone(),
+        ));
+        let effects = ctx.mount(&credentials).expect("mount credentials");
+
+        let plugin = OpenAiPlugin::from_env_with_credentials(&ctx).expect("resolved via ctx");
+        assert_eq!(
+            plugin.config.as_ref().unwrap().api_key.as_deref(),
+            Some("ctx-key"),
+            "构造时经 credentials seam 解析出 key"
+        );
+
+        drop(effects);
+        // 先释放外层 env guard(避免同线程二次加锁),再验证无凭据时解析失败 → None。
+        drop(_guard);
+        let _clean = env_guard(&[("OPENAI_API_KEY", None)]);
+        assert!(OpenAiPlugin::from_env_with_credentials(&ctx).is_none());
+    }
+
+    /// 启动一个真实本地 HTTP 服务器,记录请求的 Authorization 头并应答成功。
+    fn start_capturing_server() -> (String, Arc<Mutex<Option<String>>>) {
+        let server = tiny_http::Server::http("127.0.0.1:0").expect("bind test server");
+        let addr = server.server_addr().to_string();
+        let base_url = format!("http://{addr}");
+        let captured_auth: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let auth_capture = captured_auth.clone();
+        let _handle = std::thread::spawn(move || {
+            for request in server.incoming_requests() {
+                let auth = request
+                    .headers()
+                    .iter()
+                    .find(|header| header.field.equiv("Authorization"))
+                    .map(|header| header.value.as_str().to_string());
+                *auth_capture.lock().unwrap() = auth;
+                let response = tiny_http::Response::from_string(
+                    r#"{"id":"chatcmpl-test","object":"chat.completion","created":0,"model":"test-model","choices":[{"index":0,"message":{"role":"assistant","content":"hello from test server"},"finish_reason":"stop"}],"usage":null}"#,
+                );
+                let _ = request.respond(response);
+            }
+        });
+        (base_url, captured_auth)
+    }
+
+    #[tokio::test]
+    async fn lazy_plugin_apply_uses_credentials_key_on_real_http_roundtrip() {
+        // 真实 e2e:env(OPENAI_API_KEY=env-key)与 credentials(cred-key)都提供 key,
+        // credentials seam 必须优先;真实 HTTP 请求携带 Bearer cred-key。
+        let (base_url, captured_auth) = start_capturing_server();
+        let _guard = env_guard(&[
+            ("OPENAI_API_KEY", Some("env-key")),
+            ("OPENAI_BASE_URL", Some(&base_url)),
+            ("AH_OPENAI_E2E_KEY", Some("cred-key")),
+        ]);
+        let ctx = Context::new();
+        let plugins: Vec<DynPlugin> = vec![
+            Arc::new(ah_plugins_credentials::CredentialsPlugin::new(
+                key_mapping_provider("AH_OPENAI_E2E_KEY").mapping().clone(),
+            )),
+            Arc::new(OpenAiPlugin::lazy()),
+        ];
+        let effects = ctx.mount_all(plugins).expect("mount credentials + openai");
+
+        let provider: Arc<dyn ModelProvider> =
+            ctx.service(&LLM).expect("llm seam should be registered");
+        assert_eq!(provider.name(), "openai-compatible");
+        let response = provider
+            .chat(ModelRequest {
+                messages: vec![ChatMessage::new(ChatRole::User, "hi")],
+                ..Default::default()
+            })
+            .await
+            .expect("chat");
+        assert_eq!(response.content, "hello from test server");
+        let auth = captured_auth.lock().unwrap().clone();
+        assert_eq!(
+            auth.as_deref(),
+            Some("Bearer cred-key"),
+            "apply 时经 credentials seam 解析的 key 必须用于真实 HTTP 请求"
+        );
+        drop(effects);
+    }
+
+    #[tokio::test]
+    async fn lazy_plugin_apply_fails_explicitly_without_any_key() {
+        // 无 credentials、无 OPENAI_API_KEY:apply 必须显式失败,不静默降级。
+        let _guard = env_guard(&[("OPENAI_API_KEY", None), ("AH_OPENAI_NO_KEY", None)]);
+        let ctx = Context::new();
+        let plugin: DynPlugin = Arc::new(OpenAiPlugin::lazy());
+        let error = ctx.mount(&plugin).expect_err("apply must fail without key");
+        let message = error.to_string();
+        assert!(
+            message.contains("no API key") && message.contains("credentials"),
+            "explicit failure message, got: {message}"
+        );
     }
 }

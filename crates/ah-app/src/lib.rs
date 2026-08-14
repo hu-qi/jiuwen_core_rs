@@ -12,6 +12,7 @@ use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
 use ah_plugins_agent_loop::AgentLoopPlugin;
+use ah_plugins_credentials::CredentialsPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
@@ -28,8 +29,9 @@ use ah_plugins_workflow::WorkflowPlugin;
 
 /// 插件目录:名称 → 插件对象。
 ///
-/// - ah-plugins-openai 仅在存在 OPENAI_API_KEY 时可用(真实 provider);
-/// - 生产 profile 引用 openai 但无 key 时,解析会显式失败(不静默降级)。
+/// - ah-plugins-openai 惰性解析配置:apply 时先查 credentials seam
+///   (openai.api_key),再 fallback 到 OPENAI_API_KEY 环境变量;
+///   两者都无 key 时挂载显式失败(不静默降级)。
 pub fn plugin_catalog(
     workspace_root: &Path,
     session_path: &PathBuf,
@@ -40,6 +42,11 @@ pub fn plugin_catalog(
 ) -> Vec<(&'static str, DynPlugin)> {
     let mut catalog: Vec<(&'static str, DynPlugin)> = vec![
         ("ah-plugins-mock", Arc::new(MockPlugin) as DynPlugin),
+        (
+            // 真实 credentials seam:环境变量 provider,无目录参数。
+            "ah-plugins-credentials",
+            Arc::new(CredentialsPlugin::default()) as DynPlugin,
+        ),
         ("ah-plugins-tools", Arc::new(ToolsPlugin) as DynPlugin),
         (
             "ah-plugins-sysop",
@@ -87,9 +94,12 @@ pub fn plugin_catalog(
             Arc::new(AgentLoopPlugin::default()) as DynPlugin,
         ),
     ];
-    if let Some(plugin) = OpenAiPlugin::from_env() {
-        catalog.push(("ah-plugins-openai", Arc::new(plugin) as DynPlugin));
-    }
+    // 惰性解析:apply 时先查 credentials seam(openai.api_key),再 fallback 到
+    // OPENAI_API_KEY 环境变量;两者都无 key 时挂载显式失败(不静默降级)。
+    catalog.push((
+        "ah-plugins-openai",
+        Arc::new(OpenAiPlugin::lazy()) as DynPlugin,
+    ));
     catalog
 }
 

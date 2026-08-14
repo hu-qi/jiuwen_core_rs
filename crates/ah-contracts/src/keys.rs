@@ -45,3 +45,6 @@ pub const MCP: ServiceKey = ServiceKey::new("mcp");
 
 /// `telemetry` seam 服务键(span 记录与导出)。
 pub const TELEMETRY: ServiceKey = ServiceKey::new("telemetry");
+
+/// `credentials` seam 服务键(凭据引用)。
+pub const CREDENTIALS: ServiceKey = ServiceKey::new("credentials");

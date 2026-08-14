@@ -24,6 +24,10 @@ ah-app ──> ah-hub ──> ah-contracts
                                             (ah-plugins-mcp 另注入 mcp_call_tool 到 tools seam)
    ├─> ah-plugins-telemetry (真实 span 记录 + JSONL 导出) ──> ah-hub, ah-contracts
                                             └─dev-dep─> ah-plugins-tools(测试)
+   ├─> ah-plugins-credentials (真实凭据引用:env provider) ──> ah-hub, ah-contracts
+   ├─> ah-plugins-openai (真实 LLM HTTP)    ──> ah-hub, ah-contracts
+                                            └─dev-dep─> ah-plugins-credentials(集成测试)
+                                            (OpenAiPlugin::lazy 在 apply 时查 credentials seam)
 ```
 
 依赖方向(单向、禁止环):
@@ -55,9 +59,10 @@ ah-plugins-evolving         agent_evolving 域
 ah-plugins-rsi              RSI + auto_harness
 ah-plugins-store-*          redis/pulsar/gaussdb/elasticsearch/milvus/chroma
 ah-plugins-mcp              真实 MCP stdio transport(已实现:子进程 + newline-delimited JSON-RPC 2.0)
+ah-plugins-credentials     真实凭据引用(已实现:env provider,openai.api_key → OPENAI_API_KEY 等映射可配置;set/remove 显式报错)
 ah-plugins-transport-*      a2a(规划)
 ah-plugins-telemetry       telemetry(已实现:span 记录 + JSONL 导出;OTLP 导出留待后续,规划为 ah-plugins-otel)
-ah-plugins-openai           第一个真实 LLM provider(迁移 OpenAiCompatibleClient)
+ah-plugins-openai           第一个真实 LLM provider(迁移 OpenAiCompatibleClient;配置可从 credentials seam 解析,credentials 优先)
 ah-plugins-devtools         dev_tools 域
 ah-plugins-symphony         symphony
 ah-app                      boot 入口 + demo + ah-cli(交互 CLI,消费会话管理)

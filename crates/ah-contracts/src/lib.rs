@@ -11,6 +11,7 @@
 //! - 机制类型([`Effect`]、[`ServiceKey`])也定义在此层,供 seam 接口使用。
 
 pub mod agent;
+pub mod credentials;
 pub mod effect;
 pub mod event;
 pub mod fs;
@@ -33,12 +34,13 @@ pub use effect::Effect;
 
 pub mod prelude {
     pub use crate::agent::AgentStep;
+    pub use crate::credentials::{Credential, CredentialError, CredentialProvider};
     pub use crate::effect::Effect;
     pub use crate::event::Event;
     pub use crate::fs::{FsError, FsProvider};
     pub use crate::keys::{
-        AGENT_LOOP, FS, LLM, MCP, MEMORY, RETRIEVAL, SESSION_MANAGER, SESSIONS, SHELL, TELEMETRY,
-        TOOLS, WORKFLOW,
+        AGENT_LOOP, CREDENTIALS, FS, LLM, MCP, MEMORY, RETRIEVAL, SESSION_MANAGER, SESSIONS, SHELL,
+        TELEMETRY, TOOLS, WORKFLOW,
     };
     pub use crate::llm::{
         ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse, ToolCall,
