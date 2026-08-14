@@ -17,6 +17,7 @@ dependencies = [
  "ah-plugins-mock",
  "ah-plugins-openai",
  "ah-plugins-prompt",
+ "ah-plugins-queue",
  "ah-plugins-rails",
  "ah-plugins-retrieval",
  "ah-plugins-rsi",
@@ -161,6 +162,15 @@ dependencies = [
 
 [[package]]
 name = "ah-plugins-prompt"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-queue"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",

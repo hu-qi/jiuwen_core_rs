@@ -25,6 +25,7 @@ ah-app ──> ah-hub ──> ah-contracts
    ├─> ah-plugins-context (上下文压缩/offload) ──> ah-hub, ah-contracts
    ├─> ah-plugins-store (文件后端 KV/message) ──> ah-hub, ah-contracts
    ├─> ah-plugins-prompt (版本化模板注册表) ──> ah-hub, ah-contracts
+   ├─> ah-plugins-queue (文件后端消息队列)   ──> ah-hub, ah-contracts
                                             └─dev-dep─> ah-plugins-mock/tools/sysop/session-log(测试)
                                             └─dev-dep─> ah-plugins-mock/tools/sysop/session-log/subagent/evolving(测试)
                                             └─dev-dep─> ah-plugins-mock/tools/sysop/session-log(测试)

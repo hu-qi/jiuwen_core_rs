@@ -41,7 +41,7 @@
 | evolving | `evolving` | `EvolvingRuntime`(已实现:轨迹从会话日志真实抽取;本地判据评估 + LLM judge 附加;优化建议规则推导 + LLM 附加) | done(契约)/ partial(无持久化/RL) |
 | rsi | `rsi` | `RsiRuntime`(已实现:数据集生成 + 用例真实执行 + evolving 评估 + 报告 + 提示精化 + checkpoint 落盘) | done(契约)/ partial(无 LLM 数据生成/RL) |
 | telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约)/ partial(JSONL 导出真实;OTLP 导出留待后续)
-| queue | `queue` | `MessageQueue`(规划) | missing
+| queue | `queue` | `MessageQueue`(已实现:文件后端,每 channel append-only JSONL + 消费游标 offset 语义,重启恢复) | done(契约,本地)/ partial(外部 Pulsar/ZMQ) |
 | mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约)/ partial(stdio 真实,http 未实现) |
 | transport | `transport` | A2A 传输(规划) | missing
 | credentials | `credentials` | `CredentialProvider`(已实现:真实环境变量 provider,映射可配置,如 `openai.api_key` → `OPENAI_API_KEY`;`get`/`list` 真实读 `std::env`,`set`/`remove` 显式报错 env 只读) | done(契约)/ partial(env 只读,无密钥管理后端;ah-plugins-credentials:tests 覆盖 get/list/set/remove 真实 env 路径,openai 集成测试经 credentials 解析 key 后真实 HTTP 往返) |
@@ -89,7 +89,7 @@
 | schema(81) | ah-plugins-teams | TeamAgentSpec/DeepAgentSpec/事件体系 | 字段对等
 | agent/coordination/scheduling(57) | `teams` seam | 协调内核、调度、生命周期 | 现为 local-distributed-mock
 | runtime(27) | `teams` seam | 任务板/依赖/review/settle 真实状态迁移,run_task 真实委派 | 已落地(ah-plugins-teams);持久化/池/7 路 dispatch 留待后续 |
-| messager(16) | `queue` seam + ah-plugins-zmq | ROUTER/DEALER/XPUB/XSUB | 现为空实现
+| messager(16) | `queue` seam + ah-plugins-queue(本地日志+游标);ZMQ ROUTER/DEALER 留待后续 | 本地队列已落地(本回合) |
 | external(95) | `subagents` seam + 进程插件 | 外部 CLI agent、SSH | 全 crate 现无 std::process
 | workflow(148) | ah-plugins-teams-workflow | swarmflow 引擎 | 现为 MockWorkflowStep
 | residual.rs 资产 | ah-plugins-teams | NativeTaskBoard/Journal/BudgetLedger/检测器 | 接入运行路径(现仅测试引用)

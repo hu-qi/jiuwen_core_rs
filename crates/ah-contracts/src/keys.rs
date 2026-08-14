@@ -68,3 +68,6 @@ pub const MESSAGE_STORE: ServiceKey = ServiceKey::new("store-messages");
 
 /// `prompt` seam 服务键(模板渲染与版本化注册表)。
 pub const PROMPT: ServiceKey = ServiceKey::new("prompt");
+
+/// `queue` seam 服务键(消息队列)。
+pub const QUEUE: ServiceKey = ServiceKey::new("queue");
