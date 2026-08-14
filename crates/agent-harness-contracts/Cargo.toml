@@ -1,0 +1,8 @@
+[package]
+name = "agent-harness-contracts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Seam contracts: pure types and traits for the agent-harness plugin architecture"
+
+[dependencies]
