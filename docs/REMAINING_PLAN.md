@@ -68,7 +68,7 @@
 | CI mock 门禁 | ✅ 0f55d52 | prod profile 无 mock 插件,测试+CI 强制 |
 | 契约 fixtures(G-02) | ✅ 已落地 | fixtures/ 9 seam golden(fs/session/tools/memory/retrieval/security/evolving/teams/rsi),成功/非法/序列化/恢复类目;超时/取消多为 N/A(本地无超时语义),后续 seam 补充 |
 | 覆盖率门禁(≥80%) | ✅ 已落地 | llvm-cov 实测 87.94%;CI coverage job --fail-under-lines 80 |
-| 差分契约(与 agent-core 对等) | 待办(大工程) | 语言中立 fixtures |
+| 差分契约(与 agent-core 对等) | 机制 + Rust 基线已落地(本回合 references/ 5 seam);Python 参考数据待外部生成 | references/ 完整输出快照 + differential.rs 断言门禁 |
 | 跨平台验证 | 待办 | Linux/Windows 目前未跑 |
 
 ## C. 域深化(capability-map 缺口)

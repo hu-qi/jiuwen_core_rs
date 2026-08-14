@@ -1,0 +1,12 @@
+{
+  "derived": [
+    {
+      "content": "list the workspace",
+      "role": "user"
+    },
+    {
+      "content": "here is the listing",
+      "role": "assistant"
+    }
+  ]
+}

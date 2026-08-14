@@ -1,0 +1,16 @@
+{
+  "messages": [
+    {
+      "content": "hello team",
+      "from": "m1",
+      "to": "m2"
+    }
+  ],
+  "tasks": [
+    {
+      "assignee": "m1",
+      "id": "a",
+      "status": "done"
+    }
+  ]
+}

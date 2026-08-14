@@ -1,0 +1,16 @@
+{
+  "bm25": [
+    {
+      "chunk": "The quick brown fox jumps over the lazy dog while the cat sleeps.",
+      "doc_id": "doc1",
+      "score": 0.6931
+    }
+  ],
+  "vector": [
+    {
+      "chunk": "The quick brown fox jumps over the lazy dog while the cat sleeps.",
+      "doc_id": "doc1",
+      "score": 0.1365
+    }
+  ]
+}

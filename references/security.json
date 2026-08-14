@@ -1,0 +1,40 @@
+{
+  "cases": [
+    {
+      "allow": true,
+      "decisions": [
+        {
+          "allow": true,
+          "guardrail": "prompt-injection",
+          "reason": "no rule matched",
+          "severity": "low"
+        },
+        {
+          "allow": true,
+          "guardrail": "secrets",
+          "reason": "no rule matched",
+          "severity": "low"
+        }
+      ],
+      "name": "clean_input_allowed"
+    },
+    {
+      "allow": false,
+      "decisions": [
+        {
+          "allow": false,
+          "guardrail": "prompt-injection",
+          "reason": "prompt injection: instruction override",
+          "severity": "high"
+        },
+        {
+          "allow": true,
+          "guardrail": "secrets",
+          "reason": "no rule matched",
+          "severity": "low"
+        }
+      ],
+      "name": "prompt_injection_blocked"
+    }
+  ]
+}

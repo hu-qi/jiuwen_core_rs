@@ -1,0 +1,13 @@
+{
+  "issues": [
+    "llm judge returned no JSON",
+    "relies on a single tool"
+  ],
+  "score": 0.8,
+  "strengths": [
+    "budget efficient",
+    "clean run",
+    "task finished"
+  ],
+  "verdict": "pass"
+}
