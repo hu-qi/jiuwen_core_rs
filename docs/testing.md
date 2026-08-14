@@ -41,6 +41,9 @@ fixtures 使用语言中立格式(JSON/YAML),不 import Python 代码。
 - CI 用 cargo llvm-cov(或等价工具)统一测量,不以本地手动数字为准;
 - 未覆盖路径必须解释(unsupported 分支、平台差异、外部协议不可测部分)。
 
+**现状**:cargo llvm-cov --workspace 实测行覆盖率 **87.94%**(2025-07,commit 后随改动变化);
+CI coverage job 以 `cargo llvm-cov --workspace --fail-under-lines 80` 强制门禁。
+
 ## 5. 凭据与外部依赖策略
 
 - 真实 provider e2e 需要凭据(如 OPENAI_API_KEY);未设置时自动跳过并标记;

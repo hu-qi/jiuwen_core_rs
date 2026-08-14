@@ -4,6 +4,7 @@
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
+> **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 > 执行模式:规划(本表)→ 派发执行对话 → 主对话验收(构建/测试/clippy/真实性/架构)。
 
 ## A. 第三梯队大域(按依赖)
@@ -20,7 +21,7 @@
 | --- | --- | --- |
 | CI mock 门禁 | ✅ 0f55d52 | prod profile 无 mock 插件,测试+CI 强制 |
 | 契约 fixtures(G-02) | ✅ 已落地 | fixtures/ 9 seam golden(fs/session/tools/memory/retrieval/security/evolving/teams/rsi),成功/非法/序列化/恢复类目;超时/取消多为 N/A(本地无超时语义),后续 seam 补充 |
-| 覆盖率门禁(≥80%) | 待办 | llvm-cov 接入 CI |
+| 覆盖率门禁(≥80%) | ✅ 已落地 | llvm-cov 实测 87.94%;CI coverage job --fail-under-lines 80 |
 | 差分契约(与 agent-core 对等) | 待办(大工程) | 语言中立 fixtures |
 | 跨平台验证 | 待办 | Linux/Windows 目前未跑 |
 

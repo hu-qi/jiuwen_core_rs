@@ -22,3 +22,15 @@ jobs:
         run: cargo test -p ah-app --test mock_gate
       - name: Test
         run: cargo test --workspace
+
+  coverage:
+    name: coverage-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Coverage gate (workspace line coverage >= 80%)
+        run: cargo llvm-cov --workspace --fail-under-lines 80
