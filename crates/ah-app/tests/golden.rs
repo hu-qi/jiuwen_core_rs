@@ -6,9 +6,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use ah_contracts::keys::{EVOLVING, FS, MEMORY, RETRIEVAL, RSI, SECURITY, SESSION_MANAGER, TEAMS, TOOLS};
 use ah_contracts::evolving::{EvolvingRuntime, Verdict};
 use ah_contracts::fs::FsProvider;
+use ah_contracts::keys::{
+    EVOLVING, FS, MEMORY, RETRIEVAL, RSI, SECURITY, SESSION_MANAGER, TEAMS, TOOLS,
+};
 use ah_contracts::memory::MemoryProvider;
 use ah_contracts::retrieval::RetrievalProvider;
 use ah_contracts::rsi::RsiRuntime;
@@ -77,8 +79,11 @@ fn fs_golden() {
         let expect = &case["expect"];
         match case["name"].as_str().unwrap() {
             "write_read_roundtrip" => {
-                fs.write(input["rel"].as_str().unwrap(), input["content"].as_str().unwrap().as_bytes())
-                    .expect("write");
+                fs.write(
+                    input["rel"].as_str().unwrap(),
+                    input["content"].as_str().unwrap().as_bytes(),
+                )
+                .expect("write");
                 let content = fs.read(input["rel"].as_str().unwrap()).expect("read");
                 assert_eq!(
                     String::from_utf8(content).unwrap(),
@@ -93,7 +98,10 @@ fn fs_golden() {
                 assert!(!fs.exists(input["rel"].as_str().unwrap()));
             }
             "escape_denied" => {
-                assert!(fs.read(input["rel"].as_str().unwrap()).is_err(), "escape must be denied");
+                assert!(
+                    fs.read(input["rel"].as_str().unwrap()).is_err(),
+                    "escape must be denied"
+                );
             }
             other => panic!("unknown fs case: {other}"),
         }
@@ -109,7 +117,9 @@ fn session_golden() {
     let root = root_for("session");
     let ctx = Context::new();
     let effects = mount(&ctx, base_plugins(&root));
-    let manager = ctx.service::<dyn SessionManager>(&SESSION_MANAGER).expect("manager");
+    let manager = ctx
+        .service::<dyn SessionManager>(&SESSION_MANAGER)
+        .expect("manager");
     let fixture = load_fixture("session");
 
     for case in fixture["cases"].as_array().unwrap() {
@@ -129,11 +139,14 @@ fn session_golden() {
                     log.append(kind, payload).expect("append");
                 }
                 let messages = log.derive_messages();
-                let roles: Vec<&str> = messages.iter().map(|m| match m.role {
-                    ah_contracts::llm::ChatRole::User => "user",
-                    ah_contracts::llm::ChatRole::Assistant => "assistant",
-                    _ => "other",
-                }).collect();
+                let roles: Vec<&str> = messages
+                    .iter()
+                    .map(|m| match m.role {
+                        ah_contracts::llm::ChatRole::User => "user",
+                        ah_contracts::llm::ChatRole::Assistant => "assistant",
+                        _ => "other",
+                    })
+                    .collect();
                 assert_eq!(roles, expect_roles(case), "derived roles");
             }
             "jsonl_roundtrip_resume" => {
@@ -147,10 +160,13 @@ fn session_golden() {
                 }
                 // 真实磁盘续跑:同一文件重新打开,事件从 JSONL 恢复。
                 let path = root.join("sessions").join("g2.jsonl");
-                let resumed =
-                    ah_plugins_session_log::JsonlSessionLog::open(&path, ctx.clone()).expect("reopen");
+                let resumed = ah_plugins_session_log::JsonlSessionLog::open(&path, ctx.clone())
+                    .expect("reopen");
                 let count = resumed.events().len();
-                assert_eq!(count, case["expect"]["resumed_event_count"].as_u64().unwrap() as usize);
+                assert_eq!(
+                    count,
+                    case["expect"]["resumed_event_count"].as_u64().unwrap() as usize
+                );
             }
             other => panic!("unknown session case: {other}"),
         }
@@ -188,20 +204,31 @@ async fn tools_golden() {
         let expect = &case["expect"];
         match case["name"].as_str().unwrap() {
             "invoke_real_read_file" => {
-                fs.write(input["file"].as_str().unwrap(), input["content"].as_str().unwrap().as_bytes())
-                    .expect("write probe");
+                fs.write(
+                    input["file"].as_str().unwrap(),
+                    input["content"].as_str().unwrap().as_bytes(),
+                )
+                .expect("write probe");
                 let output = registry
-                    .invoke(input["tool"].as_str().unwrap(), json!({ "path": input["file"].as_str().unwrap() }))
+                    .invoke(
+                        input["tool"].as_str().unwrap(),
+                        json!({ "path": input["file"].as_str().unwrap() }),
+                    )
                     .await
                     .expect("invoke");
                 assert!(
-                    output.to_string().contains(expect["output_contains"].as_str().unwrap()),
+                    output
+                        .to_string()
+                        .contains(expect["output_contains"].as_str().unwrap()),
                     "tool output must contain expected content"
                 );
             }
             "unknown_tool_rejected" => {
                 assert!(
-                    registry.invoke(input["tool"].as_str().unwrap(), json!({})).await.is_err(),
+                    registry
+                        .invoke(input["tool"].as_str().unwrap(), json!({}))
+                        .await
+                        .is_err(),
                     "unknown tool must error"
                 );
             }
@@ -233,16 +260,26 @@ fn memory_golden() {
             vec!["project".to_string()],
         )
         .expect("store");
-    let record = memory.retrieve(input["key"].as_str().unwrap()).expect("retrieve");
-    assert_eq!(record.content, fixture["cases"][0]["expect"]["retrieved"].as_str().unwrap());
+    let record = memory
+        .retrieve(input["key"].as_str().unwrap())
+        .expect("retrieve");
+    assert_eq!(
+        record.content,
+        fixture["cases"][0]["expect"]["retrieved"].as_str().unwrap()
+    );
     assert!(
-        memory.search("project").iter().any(|r| r.key == input["key"].as_str().unwrap()),
+        memory
+            .search("project")
+            .iter()
+            .any(|r| r.key == input["key"].as_str().unwrap()),
         "search must find by tag"
     );
 
     // 序列化/恢复:同一目录重开 provider,记忆从磁盘恢复。
     let reopened = ah_plugins_memory::JsonFileMemoryProvider::open(&dir).expect("reopen");
-    let restored = reopened.retrieve(input["key"].as_str().unwrap()).expect("restored");
+    let restored = reopened
+        .retrieve(input["key"].as_str().unwrap())
+        .expect("restored");
     assert_eq!(
         restored.content,
         fixture["cases"][1]["expect"]["restored"].as_str().unwrap()
@@ -262,7 +299,9 @@ fn retrieval_golden() {
     let mut plugins = base_plugins(&root);
     plugins.push(Arc::new(ah_plugins_retrieval::RetrievalPlugin::new(&dir)));
     let effects = mount(&ctx, plugins);
-    let kb = ctx.service::<dyn RetrievalProvider>(&RETRIEVAL).expect("retrieval");
+    let kb = ctx
+        .service::<dyn RetrievalProvider>(&RETRIEVAL)
+        .expect("retrieval");
     let fixture = load_fixture("retrieval");
     let case = &fixture["cases"][0];
     let input = &case["input"];
@@ -273,10 +312,17 @@ fn retrieval_golden() {
         json!({}),
     )
     .expect("ingest");
-    let hits = kb.retrieve(input["query"].as_str().unwrap(), case["expect"]["k"].as_u64().unwrap() as usize);
+    let hits = kb.retrieve(
+        input["query"].as_str().unwrap(),
+        case["expect"]["k"].as_u64().unwrap() as usize,
+    );
     assert!(!hits.is_empty(), "must have hits");
     assert_eq!(hits[0].doc_id, case["expect"]["hit_doc"].as_str().unwrap());
-    assert!(hits[0].chunk.contains(case["expect"]["hit_contains"].as_str().unwrap()));
+    assert!(
+        hits[0]
+            .chunk
+            .contains(case["expect"]["hit_contains"].as_str().unwrap())
+    );
 
     drop(effects);
     let _ = std::fs::remove_dir_all(&root);
@@ -288,8 +334,13 @@ fn retrieval_golden() {
 fn security_golden() {
     let root = root_for("security");
     let ctx = Context::new();
-    let effects = mount(&ctx, vec![Arc::new(ah_plugins_security::SecurityRailPlugin)]);
-    let security = ctx.service::<dyn SecurityProvider>(&SECURITY).expect("security");
+    let effects = mount(
+        &ctx,
+        vec![Arc::new(ah_plugins_security::SecurityRailPlugin)],
+    );
+    let security = ctx
+        .service::<dyn SecurityProvider>(&SECURITY)
+        .expect("security");
     let fixture = load_fixture("security");
 
     for case in fixture["cases"].as_array().unwrap() {
@@ -323,14 +374,21 @@ async fn evolving_golden() {
     let mut plugins = base_plugins(&root);
     plugins.push(Arc::new(ah_plugins_evolving::EvolvingPlugin));
     let effects = mount(&ctx, plugins);
-    let evolving = ctx.service::<dyn EvolvingRuntime>(&EVOLVING).expect("evolving");
+    let evolving = ctx
+        .service::<dyn EvolvingRuntime>(&EVOLVING)
+        .expect("evolving");
     let fixture = load_fixture("evolving");
 
     for case in fixture["cases"].as_array().unwrap() {
         let input = &case["input"];
         let expect = &case["expect"];
         let mut events: Vec<SessionEvent> = Vec::new();
-        for (i, ev_def) in input["events"].as_array().unwrap_or(&vec![]).iter().enumerate() {
+        for (i, ev_def) in input["events"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .enumerate()
+        {
             let kind = match ev_def["kind"].as_str().unwrap() {
                 "user" => SessionEventKind::User,
                 "assistant" => SessionEventKind::Assistant,
@@ -362,11 +420,23 @@ async fn evolving_golden() {
         let eval = evolving.evaluate(&traj).await.expect("evaluate");
         match expect["verdict"].as_str().unwrap() {
             "pass" => {
-                assert_eq!(eval.verdict, Verdict::Pass, "case {}: {:?}", case["name"], eval);
+                assert_eq!(
+                    eval.verdict,
+                    Verdict::Pass,
+                    "case {}: {:?}",
+                    case["name"],
+                    eval
+                );
                 assert!(eval.score >= expect["score_min"].as_f64().unwrap());
             }
             "fail" => {
-                assert_eq!(eval.verdict, Verdict::Fail, "case {}: {:?}", case["name"], eval);
+                assert_eq!(
+                    eval.verdict,
+                    Verdict::Fail,
+                    "case {}: {:?}",
+                    case["name"],
+                    eval
+                );
                 assert!(eval.score <= expect["score_max"].as_f64().unwrap());
             }
             other => panic!("unknown expected verdict {other}"),
@@ -422,7 +492,14 @@ async fn teams_golden() {
         teams.create_team(spec, members).expect("create team");
         let t = &input["task"];
         teams
-            .add_task(&team_id, team_task(t["id"].as_str().unwrap(), t["title"].as_str().unwrap(), vec![]))
+            .add_task(
+                &team_id,
+                team_task(
+                    t["id"].as_str().unwrap(),
+                    t["title"].as_str().unwrap(),
+                    vec![],
+                ),
+            )
             .expect("add task");
         match case["name"].as_str().unwrap() {
             "lifecycle_to_done" => {
@@ -435,7 +512,9 @@ async fn teams_golden() {
             }
             "non_member_claim_rejected" => {
                 assert!(
-                    teams.claim_task(&team_id, input["claimant"].as_str().unwrap()).is_err(),
+                    teams
+                        .claim_task(&team_id, input["claimant"].as_str().unwrap())
+                        .is_err(),
                     "non-member claim must be rejected"
                 );
             }
@@ -470,15 +549,26 @@ async fn rsi_golden() {
             .collect();
         match case["name"].as_str().unwrap() {
             "dataset_expansion_count" => {
-                let cases = rsi.generate_dataset(seeds, input["count"].as_u64().unwrap() as usize).expect("gen");
-                assert_eq!(cases.len(), case["expect"]["count"].as_u64().unwrap() as usize);
+                let cases = rsi
+                    .generate_dataset(seeds, input["count"].as_u64().unwrap() as usize)
+                    .expect("gen");
+                assert_eq!(
+                    cases.len(),
+                    case["expect"]["count"].as_u64().unwrap() as usize
+                );
                 let mut ids: Vec<String> = cases.iter().map(|c| c.id.clone()).collect();
                 ids.sort();
                 ids.dedup();
-                assert_eq!(ids.len(), case["expect"]["unique_ids"].as_u64().unwrap() as usize);
+                assert_eq!(
+                    ids.len(),
+                    case["expect"]["unique_ids"].as_u64().unwrap() as usize
+                );
             }
             "empty_seeds_rejected" => {
-                assert!(rsi.generate_dataset(seeds, 1).is_err(), "empty seeds must error");
+                assert!(
+                    rsi.generate_dataset(seeds, 1).is_err(),
+                    "empty seeds must error"
+                );
             }
             other => panic!("unknown rsi case: {other}"),
         }
