@@ -18,5 +18,7 @@ jobs:
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Mock gate (prod profile must not contain ah-plugins-mock)
+        run: cargo test -p ah-app --test mock_gate
       - name: Test
         run: cargo test --workspace
