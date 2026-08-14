@@ -20,7 +20,7 @@ use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_prompt::PromptPlugin;
-use ah_plugins_rails::ShellGuardRailPlugin;
+use ah_plugins_rails::{PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin};
 use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rsi::RsiPlugin;
 use ah_plugins_security::SecurityRailPlugin;
@@ -61,6 +61,14 @@ pub fn plugin_catalog(
         (
             "ah-plugins-rails",
             Arc::new(ShellGuardRailPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-rails-path",
+            Arc::new(PathGuardRailPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-rails-budget",
+            Arc::new(ToolBudgetRailPlugin::new(100)) as DynPlugin,
         ),
         (
             "ah-plugins-security",

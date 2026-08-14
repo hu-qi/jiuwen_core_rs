@@ -48,7 +48,7 @@
 - 已实现:ah-hub 内核;ah-contracts(llm/tools/fs/shell 四个 seam + agent-loop 服务);
   ah-plugins-tools(真实工具注册表);ah-plugins-sysop(真实受限文件系统与 shell 执行);
   ah-plugins-openai(真实 LLM HTTP provider);ah-plugins-agent-loop(真实 ReAct 循环);
-  ah-plugins-rails(真实 ShellGuard,挂在 tools/pre-execute waterfall 上);
+  ah-plugins-rails(真实 rails 挂在 tools/pre-execute waterfall 上:ShellGuard 危险命令 / PathGuard 路径逃逸 / ToolBudget 调用上限);
   ah-plugins-session-log(真实会话事件日志:JSONL 落盘 + 投影 + 多会话管理 create/fork/resume);
   ah-plugins-workflow(真实工作流引擎:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边);
   ah-plugins-memory(真实持久化记忆 + remember/recall/forget 工具);
