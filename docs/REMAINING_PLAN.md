@@ -1,12 +1,20 @@
 # 剩余计划(REMAINING PLAN)
 
-> 目标:按照能力地图完成剩余计划任务。当前 126+ 测试,21 crate。
+> 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
+> (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
+> 当前 182+ 测试,31 crate。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 13 回合,173 tests / clippy 0 / fmt clean):
+> **账目更新**(第 14 回合,182 tests / clippy 0 / fmt clean;目标修正为不依赖 Python):
+> - swarmflow 真实引擎 14644a5(agent_teams workflow 缺口,替换 MockWorkflowStep)
+>
+> 下一优先级:auto_harness 真实 git/CI → evaluation_result_analyzer → 外部 provider(docker)→
+> evolving 持久化/agent_rl → core workflow/Pregel/controller → harness subagents/cli → dev_tools。
+>
+> **账目更新**(第 13 回合,173 tests):
 > - rsi 多轮编排 5c25592(run_rounds:评测→精化→checkpoint 续跑)
 > - web_fetch / run_code 真实工具 f636780(agent 可调用,seam 消费方闭环)
 >
