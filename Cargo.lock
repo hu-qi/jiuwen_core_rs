@@ -21,6 +21,7 @@ dependencies = [
  "ah-plugins-rails",
  "ah-plugins-retrieval",
  "ah-plugins-rsi",
+ "ah-plugins-sandbox",
  "ah-plugins-security",
  "ah-plugins-session-log",
  "ah-plugins-store",
@@ -218,6 +219,18 @@ dependencies = [
  "ah-plugins-sysop",
  "ah-plugins-tools",
  "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-sandbox"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-sysop",
+ "ah-plugins-tools",
  "serde_json",
  "tokio",
 ]

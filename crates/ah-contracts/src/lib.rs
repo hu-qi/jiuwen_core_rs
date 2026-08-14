@@ -25,6 +25,7 @@ pub mod prompt;
 pub mod queue;
 pub mod retrieval;
 pub mod rsi;
+pub mod sandbox;
 pub mod seam;
 pub mod security;
 pub mod service;
@@ -67,6 +68,9 @@ pub mod prelude {
     pub use crate::queue::{MessageQueue, QueueError, QueueMessage};
     pub use crate::retrieval::{RetrievalError, RetrievalHit, RetrievalProvider};
     pub use crate::rsi::{RsiCase, RsiCheckpoint, RsiError, RsiReport, RsiRunOutcome, RsiRuntime};
+    pub use crate::sandbox::{
+        CommandDecision, FsDecision, SandboxError, SandboxPolicy, SandboxProvider,
+    };
     pub use crate::seam::Seam;
     pub use crate::security::{
         Guardrail, GuardrailDecision, SecurityError, SecurityProvider, SecurityVerdict, Severity,

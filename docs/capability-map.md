@@ -32,7 +32,7 @@
 | fs | `fs` | `FsProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | shell | `shell` | `ShellProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | code | `code` | `CodeProvider`(规划) | missing
-| sandbox | `sandbox` | `SandboxProvider`(规划) | missing
+| sandbox | `sandbox` | `SandboxProvider`(已实现:策略化,sandbox.json 允许前缀/拒绝命令模式/绝对路径开关 + pre-execute rail 消费) | done(契约+消费,本地)/ partial(远程沙箱容器/VM) |
 | security | `security` | `SecurityProvider`(已实现:规则 guardrails + pre-execute rail) | done(契约)/ partial(无 LLM 后端/API) |
 | agent-loop | `agent-loop` | `AgentLoop`(已实现,真实 ReAct,日志驱动,工具错误回喂模型) | done
 | workflow | `workflow` | `WorkflowEngine`(已实现:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边 + 轨迹入日志) | done(契约)/ partial(无流式) |

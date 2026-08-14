@@ -74,3 +74,6 @@ pub const QUEUE: ServiceKey = ServiceKey::new("queue");
 
 /// `workspace` seam 服务键(工作区清单与目标)。
 pub const WORKSPACE: ServiceKey = ServiceKey::new("workspace");
+
+/// `sandbox` seam 服务键(策略化沙箱)。
+pub const SANDBOX: ServiceKey = ServiceKey::new("sandbox");
