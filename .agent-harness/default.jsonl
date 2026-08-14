@@ -1,4 +1,0 @@
-{"seq":0,"timestamp_ms":1786706263097,"kind":"user","payload":{"content":"write a note"}}
-{"seq":1,"timestamp_ms":1786706263097,"kind":"assistant","payload":{"tool_calls":[{"arguments":{"path":"."},"id":"mock-call-1","name":"list_dir"}]}}
-{"seq":2,"timestamp_ms":1786706263097,"kind":"tool_result","payload":{"output":"{\"entries\":[],\"path\":\".\"}","tool_call_id":"mock-call-1"}}
-{"seq":3,"timestamp_ms":1786706263098,"kind":"assistant","payload":{"content":"mock final answer; last tool result: {\"entries\":[],\"path\":\".\"}"}}
