@@ -8,10 +8,10 @@ Rust 原生 agent harness,以高解耦插件架构为目标,设计思路参考 D
 ```text
 agent-harness/
   crates/
-    agent-harness-contracts/   契约层: Seam trait + 纯类型,零实现
-    agent-harness-hub/         插件内核: ServiceRegistry + EventBus + Profile
-    (规划) agent-harness-plugins-*/  各域插件(provider / 引擎 / 工具)
-    (规划) agent-harness-app/        CLI + Web 入口
+    ah-contracts/             契约层: Seam trait + 纯类型,零实现
+    ah-hub/                   插件内核: ServiceRegistry + EventBus + Profile
+    (规划) ah-plugins-*/      各域插件(provider / 引擎 / 工具)
+    (规划) ah-app/            CLI + Web 入口
   profiles/                     组合配置: dev(mock) / prod(真实)
 ```
 

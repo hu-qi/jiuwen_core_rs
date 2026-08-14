@@ -1,5 +1,5 @@
 [package]
-name = "agent-harness-contracts"
+name = "ah-contracts"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

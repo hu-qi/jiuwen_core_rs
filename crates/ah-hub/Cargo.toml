@@ -1,9 +1,9 @@
 [package]
-name = "agent-harness-hub"
+name = "ah-hub"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Plugin kernel: ServiceRegistry + EventBus + Profile composition for agent-harness"
 
 [dependencies]
-agent-harness-contracts = { workspace = true }
+ah-contracts = { workspace = true }

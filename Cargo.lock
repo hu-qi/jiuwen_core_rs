@@ -3,12 +3,12 @@
 version = 4
 
 [[package]]
-name = "agent-harness-contracts"
+name = "ah-contracts"
 version = "0.1.0"
 
 [[package]]
-name = "agent-harness-hub"
+name = "ah-hub"
 version = "0.1.0"
 dependencies = [
- "agent-harness-contracts",
+ "ah-contracts",
 ]

@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/agent-harness-contracts",
-    "crates/agent-harness-hub",
+    "crates/ah-contracts",
+    "crates/ah-hub",
 ]
 
 [workspace.package]
@@ -11,5 +11,5 @@ edition = "2024"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-agent-harness-contracts = { path = "crates/agent-harness-contracts" }
-agent-harness-hub = { path = "crates/agent-harness-hub" }
+ah-contracts = { path = "crates/ah-contracts" }
+ah-hub = { path = "crates/ah-hub" }
