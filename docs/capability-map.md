@@ -28,7 +28,7 @@
 | session | `sessions` + `session-manager` | `SessionLog` append-only 日志 + JSONL 持久化 + 投影;`SessionManager` 多会话 create/open/fork/list(已实现) | done(契约)/ partial(无分布式/跨进程会话) |
 | context | `context` | `ContextEngine`(规划) | missing
 | memory | `memory` | `MemoryProvider`(已实现:JSON 文件持久化 + remember/recall/forget 工具) | done(契约)/ partial(无图记忆/外部 provider) |
-| retrieval | `retrieval` | `Retriever`(规划) | missing
+| retrieval | `retrieval` | `RetrievalProvider`(已实现:本地 BM25 分块检索 + JSON 持久化 + ingest/search 工具) | done(契约)/ partial(无向量库/embedding/reranker) |
 | fs | `fs` | `FsProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | shell | `shell` | `ShellProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | code | `code` | `CodeProvider`(规划) | missing

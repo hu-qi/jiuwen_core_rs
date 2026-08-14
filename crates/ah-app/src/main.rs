@@ -21,6 +21,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::temp_dir().join(format!("ah-app-session-{}.jsonl", std::process::id()));
     let session_dir = std::env::temp_dir().join(format!("ah-app-sessions-{}", std::process::id()));
     let memory_dir = std::env::temp_dir().join(format!("ah-app-memory-{}", std::process::id()));
+    let retrieval_dir =
+        std::env::temp_dir().join(format!("ah-app-retrieval-{}", std::process::id()));
 
     let (ctx, _effects) = ah_app::boot(
         &profile_path,
@@ -28,6 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &session_path,
         &session_dir,
         &memory_dir,
+        &retrieval_dir,
     )?;
     println!("[boot] mounted services: {:?}", ctx.service_keys());
 
@@ -103,6 +106,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .invoke("recall", json!({ "query": "demo ran" }))
         .await?;
     println!("[memory] recall count: {}", recalled["count"]);
+
+    // retrieval seam + 工具:ingest_knowledge -> search_knowledge(真实检索)。
+    let _ = registry
+        .invoke(
+            "ingest_knowledge",
+            json!({ "doc_id": "openjiuwen", "text": "OpenJiuwen is an agent framework with plugins." }),
+        )
+        .await?;
+    let hits = registry
+        .invoke("search_knowledge", json!({ "query": "agent framework" }))
+        .await?;
+    println!("[retrieval] hits: {}", hits["count"]);
 
     // agent-loop(会话驱动)
     let _step_listener = ctx.on::<AgentStep>(|step| {

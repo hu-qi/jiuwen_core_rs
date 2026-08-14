@@ -30,3 +30,6 @@ pub const WORKFLOW: ServiceKey = ServiceKey::new("workflow");
 
 /// `memory` seam 服务键(持久化记忆)。
 pub const MEMORY: ServiceKey = ServiceKey::new("memory");
+
+/// `retrieval` seam 服务键(知识库检索)。
+pub const RETRIEVAL: ServiceKey = ServiceKey::new("retrieval");

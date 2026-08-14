@@ -13,6 +13,7 @@ dependencies = [
  "ah-plugins-mock",
  "ah-plugins-openai",
  "ah-plugins-rails",
+ "ah-plugins-retrieval",
  "ah-plugins-session-log",
  "ah-plugins-sysop",
  "ah-plugins-tools",
@@ -103,6 +104,19 @@ dependencies = [
  "ah-plugins-sysop",
  "ah-plugins-tools",
  "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-retrieval"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-tools",
+ "async-trait",
+ "serde",
  "serde_json",
  "tokio",
 ]

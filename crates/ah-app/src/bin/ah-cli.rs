@@ -30,6 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session_path = root.join("default.jsonl");
     let session_dir = root.join("sessions");
     let memory_dir = root.join("memory");
+    let retrieval_dir = root.join("retrieval");
 
     let profile_path = std::env::args()
         .nth(1)
@@ -41,6 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &session_path,
         &session_dir,
         &memory_dir,
+        &retrieval_dir,
     )?;
     let (agent, manager) = ah_app::agent_and_manager(&ctx)?;
     let default_session = ctx

@@ -16,6 +16,7 @@ use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_rails::ShellGuardRailPlugin;
+use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_tools::ToolsPlugin;
@@ -30,6 +31,7 @@ pub fn plugin_catalog(
     session_path: &PathBuf,
     session_dir: &PathBuf,
     memory_dir: &PathBuf,
+    retrieval_dir: &PathBuf,
 ) -> Vec<(&'static str, DynPlugin)> {
     let mut catalog: Vec<(&'static str, DynPlugin)> = vec![
         ("ah-plugins-mock", Arc::new(MockPlugin) as DynPlugin),
@@ -50,6 +52,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-memory",
             Arc::new(MemoryPlugin::new(memory_dir)) as DynPlugin,
+        ),
+        (
+            "ah-plugins-retrieval",
+            Arc::new(RetrievalPlugin::new(retrieval_dir)) as DynPlugin,
         ),
         (
             "ah-plugins-agent-loop",
@@ -74,9 +80,16 @@ pub fn boot(
     session_path: &PathBuf,
     session_dir: &PathBuf,
     memory_dir: &PathBuf,
+    retrieval_dir: &PathBuf,
 ) -> Result<BootResult, Box<dyn std::error::Error>> {
     let profile = Profile::load(profile_path)?;
-    let catalog = plugin_catalog(workspace_root, session_path, session_dir, memory_dir);
+    let catalog = plugin_catalog(
+        workspace_root,
+        session_path,
+        session_dir,
+        memory_dir,
+        retrieval_dir,
+    );
     let plugins: Vec<DynPlugin> = profile
         .plugin_names()
         .iter()

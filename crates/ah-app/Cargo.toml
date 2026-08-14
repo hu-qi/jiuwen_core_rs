@@ -25,5 +25,6 @@ ah-plugins-rails = { workspace = true }
 ah-plugins-session-log = { workspace = true }
 ah-plugins-workflow = { workspace = true }
 ah-plugins-memory = { workspace = true }
+ah-plugins-retrieval = { workspace = true }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
