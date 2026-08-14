@@ -141,3 +141,25 @@ let final_decision = ctx.waterfall(Decision::new(), Decision::Allow).await;
 - **事件没触发**:监听器 Effect 被立即 drop 会反注册——用具名绑定持有 guard;
 - **生产不能用 mock**:profile 门禁会拒绝 ah-plugins-mock 进入生产。
 
+## 交互 CLI(ah-cli)
+
+`cargo run -q --bin ah-cli -- <profile>`(默认 profiles/dev.toml)启动交互式 CLI;
+会话/团队/队列/工作区真实持久化在当前目录 .agent-harness/ 下。
+
+```text
+  <task>                    在当前会话运行一个任务(真实 ReAct 循环)
+  /new <id> | /use <id>     新建/切换会话
+  /fork <from> <to>         分叉会话
+  /teams create <id> <name> 创建团队(SQLite 持久化)
+  /teams run <team> <task>  建任务并真实委派 subagent 执行
+  /teams tasks <team>       列出团队任务
+  /teams msg <team> <from> <content...>
+  /teams msgs <team>        团队消息(经 queue seam)
+  /rsi round <n> <seed>     跑一轮 RSI 评测(数据集生成 + 真实执行 + 评估)
+  /workspace goals / goal add <id> <title...> / goal done <id>
+  /web fetch <url>          真实 HTTP GET
+  /queue publish <channel> <json> | /queue consume <channel>
+  /code run <code>          真实 python3 执行
+```
+
+e2e 冒烟测试:crates/ah-app/tests/cli_smoke.rs 用真实构建的二进制验证上述子命令。
