@@ -35,6 +35,16 @@ fixtures 使用语言中立格式(JSON/YAML),不 import Python 代码。
 - Python 参考运行**不在本仓库内**:本仓库零 Python 源码,fixtures 由外部生成并固化;
 - 差分契约通过 = 行为对等的证据;单靠本地/mock 测试通过 ≠ 完成。
 
+**现状与实施路径**(mechanism 已就绪,参考数据待外部生成):
+
+1. **契约载体**:fixtures/ 下的语言中立 JSON 已是差分契约的输入面(9 个 seam 已覆盖);
+2. **参考运行**:在外部环境运行 openjiuwen agent-core(Python),用同一组 fixtures 驱动,把输出固化为
+   `references/{seam}.{case}.json`(golden reference outputs),**零 Python 源码进入本仓库**;
+3. **比对**:新增 `cargo test` 差分测试,读取 fixtures 输入 + references 输出,驱动 Rust 实现,断言
+   行为与参考一致(成功/非法/序列化/恢复类目);
+4. **门禁**:差分测试与 golden 测试同属 workspace 测试门禁;references 缺失时对应用例显式 skip 并标记。
+
+
 ## 4. 覆盖率门禁
 
 - workspace 行覆盖率 ≥ 80%,新改动域不得低于 80%;
