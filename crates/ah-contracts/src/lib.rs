@@ -11,6 +11,7 @@
 //! - 机制类型([`Effect`]、[`ServiceKey`])也定义在此层,供 seam 接口使用。
 
 pub mod agent;
+pub mod analyzer;
 pub mod ci;
 pub mod code;
 pub mod context;
@@ -49,6 +50,10 @@ pub use effect::Effect;
 
 pub mod prelude {
     pub use crate::agent::AgentStep;
+    pub use crate::analyzer::{
+        AnalysisArtifact, AnalysisSignal, AnalyzerCase, AnalyzerError, EvaluationAnalyzer,
+        EvidenceRef, SignalKind, TeamIssue,
+    };
     pub use crate::ci::{CiError, CiGateRequest, CiGateResult, CiGateRunner};
     pub use crate::code::{CodeError, CodeExecRequest, CodeExecResult, CodeProvider};
     pub use crate::context::{

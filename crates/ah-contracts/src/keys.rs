@@ -95,3 +95,6 @@ pub const GIT: ServiceKey = ServiceKey::new("git");
 
 /// `ci` seam 服务键(CI gate 运行器)。
 pub const CI: ServiceKey = ServiceKey::new("ci");
+
+/// `rsi-analyzer` seam 服务键(评测结果分析)。
+pub const RSI_ANALYZER: ServiceKey = ServiceKey::new("rsi-analyzer");

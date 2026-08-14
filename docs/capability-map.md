@@ -114,7 +114,7 @@
 | orchestrator(100) | ah-plugins-rsi | 多轮优化编排、checkpoint/resume | 已落地:run_rounds 多轮循环(评测→精化→checkpoint 续跑,本回合);git/CI 基建留待后续 |
 | dataset_generator(72) / dataset_curator(13) / data_loader(5) | ah-plugins-rsi | LLM 生成、curate、分批 | 已落地确定性扩展(改写/组合/边界);LLM 生成留待后续 |
 | evaluator(judger 91/case_runner 56/…) | `evolving` seam + ah-plugins-rsi | LLM judge、执行后端 | 现为字符串相等
-| evaluation_result_analyzer(73) | ah-plugins-rsi | LLM 诊断、证据冲突修复 | 现 0%
+| evaluation_result_analyzer(73) | ah-plugins-rsi | 信号提取、根因归因、证据引用、artifact 落盘 | 已落地(本回合:确定性信号 + 规则归因 + analysis.json);LLM 深度诊断留待后续 |
 | member_optimizer(16 文件) | ah-plugins-rsi | attribution→plan→execute→verify→publish | 现为启发式 plan
 | team_skill_generator/optimizer(26/8) | ah-plugins-rsi | 技能生成与演化 | 现 0%/启发式
 | single_harness(72+12) | ah-plugins-rsi | 迭代编排、候选门禁 | 现 0%

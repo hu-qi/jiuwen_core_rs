@@ -27,6 +27,7 @@ use ah_plugins_queue::QueuePlugin;
 use ah_plugins_rails::{PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin};
 use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rsi::RsiPlugin;
+use ah_plugins_rsi::analyzer::AnalyzerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
@@ -96,6 +97,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-rsi",
             Arc::new(RsiPlugin::new(workspace_root.join("rsi"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-rsi-analyzer",
+            Arc::new(AnalyzerPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-context",
