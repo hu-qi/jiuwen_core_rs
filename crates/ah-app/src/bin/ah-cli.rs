@@ -29,13 +29,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = root.join("workspace");
     let session_path = root.join("default.jsonl");
     let session_dir = root.join("sessions");
+    let memory_dir = root.join("memory");
 
     let profile_path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "profiles/dev.toml".to_string());
 
-    let (ctx, _effects) =
-        ah_app::boot(&profile_path, &workspace_root, &session_path, &session_dir)?;
+    let (ctx, _effects) = ah_app::boot(
+        &profile_path,
+        &workspace_root,
+        &session_path,
+        &session_dir,
+        &memory_dir,
+    )?;
     let (agent, manager) = ah_app::agent_and_manager(&ctx)?;
     let default_session = ctx
         .service::<dyn SessionLog>(&SESSIONS)

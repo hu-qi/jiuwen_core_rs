@@ -12,6 +12,7 @@ use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
 use ah_plugins_agent_loop::AgentLoopPlugin;
+use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_rails::ShellGuardRailPlugin;
@@ -28,6 +29,7 @@ pub fn plugin_catalog(
     workspace_root: &Path,
     session_path: &PathBuf,
     session_dir: &PathBuf,
+    memory_dir: &PathBuf,
 ) -> Vec<(&'static str, DynPlugin)> {
     let mut catalog: Vec<(&'static str, DynPlugin)> = vec![
         ("ah-plugins-mock", Arc::new(MockPlugin) as DynPlugin),
@@ -45,6 +47,10 @@ pub fn plugin_catalog(
             Arc::new(SessionLogPlugin::new(session_path, session_dir)) as DynPlugin,
         ),
         ("ah-plugins-workflow", Arc::new(WorkflowPlugin) as DynPlugin),
+        (
+            "ah-plugins-memory",
+            Arc::new(MemoryPlugin::new(memory_dir)) as DynPlugin,
+        ),
         (
             "ah-plugins-agent-loop",
             Arc::new(AgentLoopPlugin::default()) as DynPlugin,
@@ -67,9 +73,10 @@ pub fn boot(
     workspace_root: &Path,
     session_path: &PathBuf,
     session_dir: &PathBuf,
+    memory_dir: &PathBuf,
 ) -> Result<BootResult, Box<dyn std::error::Error>> {
     let profile = Profile::load(profile_path)?;
-    let catalog = plugin_catalog(workspace_root, session_path, session_dir);
+    let catalog = plugin_catalog(workspace_root, session_path, session_dir, memory_dir);
     let plugins: Vec<DynPlugin> = profile
         .plugin_names()
         .iter()

@@ -15,6 +15,7 @@ pub mod event;
 pub mod fs;
 pub mod keys;
 pub mod llm;
+pub mod memory;
 pub mod seam;
 pub mod service;
 pub mod session;
@@ -28,11 +29,14 @@ pub mod prelude {
     pub use crate::effect::Effect;
     pub use crate::event::Event;
     pub use crate::fs::{FsError, FsProvider};
-    pub use crate::keys::{AGENT_LOOP, FS, LLM, SESSION_MANAGER, SESSIONS, SHELL, TOOLS, WORKFLOW};
+    pub use crate::keys::{
+        AGENT_LOOP, FS, LLM, MEMORY, SESSION_MANAGER, SESSIONS, SHELL, TOOLS, WORKFLOW,
+    };
     pub use crate::llm::{
         ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse, ToolCall,
         ToolSchema,
     };
+    pub use crate::memory::{MemoryError, MemoryProvider, MemoryRecord};
     pub use crate::seam::Seam;
     pub use crate::service::ServiceKey;
     pub use crate::session::{SessionError, SessionEvent, SessionEventKind, SessionLog};

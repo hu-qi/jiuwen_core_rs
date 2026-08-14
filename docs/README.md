@@ -50,7 +50,8 @@
   ah-plugins-openai(真实 LLM HTTP provider);ah-plugins-agent-loop(真实 ReAct 循环);
   ah-plugins-rails(真实 ShellGuard,挂在 tools/pre-execute waterfall 上);
   ah-plugins-session-log(真实会话事件日志:JSONL 落盘 + 投影 + 多会话管理 create/fork/resume);
-  ah-plugins-workflow(真实工作流引擎:Start/End/LLM/Tool/Loop + 条件边);
+  ah-plugins-workflow(真实工作流引擎:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边);
+  ah-plugins-memory(真实持久化记忆 + remember/recall/forget 工具);
   工具执行管线(pre-execute/post-execute)已落地;
   ah-app(demo 端到端 + **ah-cli 交互入口**:任务输入、会话新建/切换/分叉)。
 - 仅剩一个 boot 桩:ah-plugins-mock(llm,真实 provider 需凭据时仍保留占位)。

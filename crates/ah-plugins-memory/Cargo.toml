@@ -1,0 +1,16 @@
+[package]
+name = "ah-plugins-memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real persistent memory provider (JSON files) with remember/recall/forget tools"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+async-trait = "0.1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[dev-dependencies]
+ah-plugins-tools = { workspace = true }

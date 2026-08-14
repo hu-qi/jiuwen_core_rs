@@ -11,6 +11,7 @@ members = [
     "crates/ah-plugins-rails",
     "crates/ah-plugins-session-log",
     "crates/ah-plugins-workflow",
+    "crates/ah-plugins-memory",
     "crates/ah-app",
 ]
 
@@ -30,4 +31,5 @@ ah-plugins-agent-loop = { path = "crates/ah-plugins-agent-loop" }
 ah-plugins-rails = { path = "crates/ah-plugins-rails" }
 ah-plugins-session-log = { path = "crates/ah-plugins-session-log" }
 ah-plugins-workflow = { path = "crates/ah-plugins-workflow" }
+ah-plugins-memory = { path = "crates/ah-plugins-memory" }
 ah-app = { path = "crates/ah-app" }

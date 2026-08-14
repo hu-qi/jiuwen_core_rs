@@ -14,7 +14,8 @@ ah-app ──> ah-hub ──> ah-contracts
    ├─> ah-plugins-agent-loop (真实 ReAct)  ──> ah-hub, ah-contracts
    ├─> ah-plugins-rails (ShellGuard rail)    ──> ah-hub, ah-contracts
    ├─> ah-plugins-session-log (JSONL 日志)   ──> ah-hub, ah-contracts
-   └─> ah-plugins-workflow (工作流引擎)     ──> ah-hub, ah-contracts
+   ├─> ah-plugins-workflow (工作流引擎)     ──> ah-hub, ah-contracts
+   └─> ah-plugins-memory (真实记忆)       ──> ah-hub, ah-contracts
                                             └─dev-dep─> ah-plugins-tools(测试)
 ```
 

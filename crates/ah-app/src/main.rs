@@ -20,9 +20,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session_path =
         std::env::temp_dir().join(format!("ah-app-session-{}.jsonl", std::process::id()));
     let session_dir = std::env::temp_dir().join(format!("ah-app-sessions-{}", std::process::id()));
+    let memory_dir = std::env::temp_dir().join(format!("ah-app-memory-{}", std::process::id()));
 
-    let (ctx, _effects) =
-        ah_app::boot(&profile_path, &workspace_root, &session_path, &session_dir)?;
+    let (ctx, _effects) = ah_app::boot(
+        &profile_path,
+        &workspace_root,
+        &session_path,
+        &session_dir,
+        &memory_dir,
+    )?;
     println!("[boot] mounted services: {:?}", ctx.service_keys());
 
     // llm seam
@@ -85,6 +91,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(_) => println!("[tools] WARNING: dangerous command was NOT blocked!"),
         Err(error) => println!("[tools] run_shell rm -rf / -> blocked: {error}"),
     }
+
+    // memory seam + 工具:remember -> recall(真实持久化)。
+    let _ = registry
+        .invoke(
+            "remember",
+            json!({ "key": "app-note", "content": "agent-harness demo ran", "tags": ["demo"] }),
+        )
+        .await?;
+    let recalled = registry
+        .invoke("recall", json!({ "query": "demo ran" }))
+        .await?;
+    println!("[memory] recall count: {}", recalled["count"]);
 
     // agent-loop(会话驱动)
     let _step_listener = ctx.on::<AgentStep>(|step| {
