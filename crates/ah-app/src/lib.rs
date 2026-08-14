@@ -12,6 +12,7 @@ use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
 use ah_plugins_agent_loop::AgentLoopPlugin;
+use ah_plugins_code::CodePlugin;
 use ah_plugins_context::ContextPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
@@ -111,6 +112,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-sandbox",
             Arc::new(SandboxPlugin::new(workspace_root.join("sandbox"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-code",
+            Arc::new(CodePlugin::new(workspace_root.join("scratch"))) as DynPlugin,
         ),
         (
             "ah-plugins-sandbox-rail",

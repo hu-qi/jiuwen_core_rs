@@ -77,3 +77,6 @@ pub const WORKSPACE: ServiceKey = ServiceKey::new("workspace");
 
 /// `sandbox` seam 服务键(策略化沙箱)。
 pub const SANDBOX: ServiceKey = ServiceKey::new("sandbox");
+
+/// `code` seam 服务键(代码执行)。
+pub const CODE: ServiceKey = ServiceKey::new("code");

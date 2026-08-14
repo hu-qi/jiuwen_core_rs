@@ -64,6 +64,7 @@
   ah-plugins-queue(真实文件后端消息队列:每 channel append-only JSONL + 消费游标,重启恢复);
   ah-plugins-workspace(真实工作区清单:workspace.json + 目标状态机,变更即落盘);
   ah-plugins-sandbox(真实策略化沙箱:sandbox.json 允许前缀/拒绝命令模式 + pre-execute rail 消费);
+  ah-plugins-code(真实代码执行:隔离 scratch 目录 + python3 子进程 + 超时强杀 + 输出/退出码);
   ah-plugins-mcp(真实 MCP stdio transport:子进程 + JSON-RPC 2.0 + mcp_call_tool 工具);
   ah-plugins-credentials(真实凭据引用:环境变量 provider,openai.api_key → OPENAI_API_KEY 等映射可配置;get/list 真实读 env,set/remove 显式报错);
   ah-plugins-telemetry(真实 telemetry:内存 span 记录 + JSONL 导出,agent/step 与 tools/post-execute 监听生成真实 span;OTLP 导出留待后续);

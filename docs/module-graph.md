@@ -28,6 +28,8 @@ ah-app ──> ah-hub ──> ah-contracts
    ├─> ah-plugins-queue (文件后端消息队列)   ──> ah-hub, ah-contracts
    ├─> ah-plugins-workspace (清单/目标状态机) ──> ah-hub, ah-contracts
    ├─> ah-plugins-sandbox (策略沙箱 + rail)   ──> ah-hub, ah-contracts
+   ├─> ah-plugins-code (python3 子进程执行)  ──> ah-hub, ah-contracts
+                                            └─dev-dep─> tokio process/time(测试)
                                             └─dev-dep─> ah-plugins-tools/sysop(测试)
                                             └─dev-dep─> ah-plugins-mock/tools/sysop/session-log(测试)
                                             └─dev-dep─> ah-plugins-mock/tools/sysop/session-log/subagent/evolving(测试)
