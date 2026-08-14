@@ -1,12 +1,13 @@
 [package]
-name = "ah-plugins-mock"
+name = "ah-plugins-tools"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Mock LLM stub for dev boot only (no credentials). Not a deliverable: the real LLM provider is pending."
+description = "Real tool registry for the tools seam (infrastructure)"
 
 [dependencies]
 ah-contracts = { workspace = true }
 ah-hub = { workspace = true }
 async-trait = "0.1"
+serde_json = "1"
 tokio = { version = "1", features = ["rt", "macros"] }

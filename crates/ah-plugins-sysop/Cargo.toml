@@ -1,0 +1,16 @@
+[package]
+name = "ah-plugins-sysop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real local system operations: confined filesystem and shell execution"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+async-trait = "0.1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros", "process", "time", "io-util"] }
+
+[dev-dependencies]
+ah-plugins-tools = { workspace = true }

@@ -29,8 +29,8 @@
 | context | `context` | `ContextEngine`(规划) | missing
 | memory | `memory` | `MemoryProvider`(规划) | missing
 | retrieval | `retrieval` | `Retriever`(规划) | missing
-| fs | `fs` | `FsProvider`(规划) | missing
-| shell | `shell` | `ShellProvider`(规划) | missing
+| fs | `fs` | `FsProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
+| shell | `shell` | `ShellProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | code | `code` | `CodeProvider`(规划) | missing
 | sandbox | `sandbox` | `SandboxProvider`(规划) | missing
 | security | `security` | `Guardrail`(规划) | missing

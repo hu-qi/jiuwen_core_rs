@@ -4,6 +4,8 @@ members = [
     "crates/ah-contracts",
     "crates/ah-hub",
     "crates/ah-plugins-mock",
+    "crates/ah-plugins-tools",
+    "crates/ah-plugins-sysop",
     "crates/ah-app",
 ]
 
@@ -16,4 +18,6 @@ license = "Apache-2.0"
 ah-contracts = { path = "crates/ah-contracts" }
 ah-hub = { path = "crates/ah-hub" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }
+ah-plugins-tools = { path = "crates/ah-plugins-tools" }
+ah-plugins-sysop = { path = "crates/ah-plugins-sysop" }
 ah-app = { path = "crates/ah-app" }

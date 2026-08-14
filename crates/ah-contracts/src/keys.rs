@@ -9,3 +9,9 @@ pub const LLM: ServiceKey = ServiceKey::new("llm");
 
 /// `tools` seam 服务键。
 pub const TOOLS: ServiceKey = ServiceKey::new("tools");
+
+/// `fs` seam 服务键。
+pub const FS: ServiceKey = ServiceKey::new("fs");
+
+/// `shell` seam 服务键。
+pub const SHELL: ServiceKey = ServiceKey::new("shell");

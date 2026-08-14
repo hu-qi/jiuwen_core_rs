@@ -12,10 +12,12 @@
 
 pub mod effect;
 pub mod event;
+pub mod fs;
 pub mod keys;
 pub mod llm;
 pub mod seam;
 pub mod service;
+pub mod shell;
 pub mod tools;
 
 pub use effect::Effect;
@@ -23,11 +25,13 @@ pub use effect::Effect;
 pub mod prelude {
     pub use crate::effect::Effect;
     pub use crate::event::Event;
-    pub use crate::keys::{LLM, TOOLS};
+    pub use crate::fs::{FsError, FsProvider};
+    pub use crate::keys::{FS, LLM, SHELL, TOOLS};
     pub use crate::llm::{
         ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse,
     };
     pub use crate::seam::Seam;
     pub use crate::service::ServiceKey;
+    pub use crate::shell::{ShellError, ShellOutput, ShellProvider};
     pub use crate::tools::{Tool, ToolError, ToolRegistry};
 }
