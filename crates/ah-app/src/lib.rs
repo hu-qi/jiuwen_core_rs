@@ -20,6 +20,7 @@ use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_rails::ShellGuardRailPlugin;
 use ah_plugins_retrieval::RetrievalPlugin;
+use ah_plugins_rsi::RsiPlugin;
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_subagent::SubagentPlugin;
@@ -65,6 +66,10 @@ pub fn plugin_catalog(
         ("ah-plugins-subagent", Arc::new(SubagentPlugin) as DynPlugin),
         ("ah-plugins-teams", Arc::new(TeamsPlugin) as DynPlugin),
         ("ah-plugins-evolving", Arc::new(EvolvingPlugin) as DynPlugin),
+        (
+            "ah-plugins-rsi",
+            Arc::new(RsiPlugin::new(workspace_root.join("rsi"))) as DynPlugin,
+        ),
         (
             "ah-plugins-session-log",
             Arc::new(SessionLogPlugin::new(session_path, session_dir)) as DynPlugin,

@@ -21,6 +21,8 @@ ah-app ──> ah-hub ──> ah-contracts
    ├─> ah-plugins-subagent (子代理委派)    ──> ah-hub, ah-contracts
    ├─> ah-plugins-teams (多 agent 团队运行时) ──> ah-hub, ah-contracts
    ├─> ah-plugins-evolving (轨迹/评估/优化)   ──> ah-hub, ah-contracts
+   ├─> ah-plugins-rsi (递归自改进管线)     ──> ah-hub, ah-contracts
+                                            └─dev-dep─> ah-plugins-mock/tools/sysop/session-log/subagent/evolving(测试)
                                             └─dev-dep─> ah-plugins-mock/tools/sysop/session-log(测试)
                                             └─dev-dep─> ah-plugins-mock/tools/sysop/session-log/subagent(测试)
    ├─> ah-plugins-mcp (真实 MCP stdio 传输) ──> ah-hub, ah-contracts

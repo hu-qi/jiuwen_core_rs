@@ -1,0 +1,21 @@
+[package]
+name = "ah-plugins-rsi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real RSI runtime: dataset generation, case execution via subagent, evolving evaluation, prompt refinement, JSONL checkpoints"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+async-trait = "0.1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[dev-dependencies]
+ah-plugins-mock = { workspace = true }
+ah-plugins-tools = { workspace = true }
+ah-plugins-sysop = { workspace = true }
+ah-plugins-session-log = { workspace = true }
+ah-plugins-subagent = { workspace = true }
+ah-plugins-evolving = { workspace = true }

@@ -21,6 +21,7 @@ pub mod llm;
 pub mod mcp;
 pub mod memory;
 pub mod retrieval;
+pub mod rsi;
 pub mod seam;
 pub mod security;
 pub mod service;
@@ -55,6 +56,7 @@ pub mod prelude {
     pub use crate::mcp::{McpClient, McpContent, McpError, McpInfo, McpTool, McpToolResult};
     pub use crate::memory::{MemoryError, MemoryProvider, MemoryRecord};
     pub use crate::retrieval::{RetrievalError, RetrievalHit, RetrievalProvider};
+    pub use crate::rsi::{RsiCase, RsiCheckpoint, RsiError, RsiReport, RsiRunOutcome, RsiRuntime};
     pub use crate::seam::Seam;
     pub use crate::security::{
         Guardrail, GuardrailDecision, SecurityError, SecurityProvider, SecurityVerdict, Severity,

@@ -53,3 +53,6 @@ pub const TEAMS: ServiceKey = ServiceKey::new("teams");
 
 /// `evolving` seam 服务键(轨迹/评估/优化)。
 pub const EVOLVING: ServiceKey = ServiceKey::new("evolving");
+
+/// `rsi` seam 服务键(递归自改进管线)。
+pub const RSI: ServiceKey = ServiceKey::new("rsi");

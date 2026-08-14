@@ -39,7 +39,7 @@
 | subagent | `subagent` | `SubagentRuntime`(已实现:隔离会话委派 + 预算 + 上下文注入 + delegate_task 工具) | done(契约)/ partial(无进程外/跨产品子代理) |
 | teams | `teams` | `TeamRuntime`(已实现:内存任务板 + 依赖门控 + 成员校验 + review 票 + settle 多数决 + run_task 真实 subagent 委派 + teams/task 事件) | done(契约)/ partial(无持久化) |
 | evolving | `evolving` | `EvolvingRuntime`(已实现:轨迹从会话日志真实抽取;本地判据评估 + LLM judge 附加;优化建议规则推导 + LLM 附加) | done(契约)/ partial(无持久化/RL) |
-| rsi | `rsi` | RSI 管线(规划) | missing
+| rsi | `rsi` | `RsiRuntime`(已实现:数据集生成 + 用例真实执行 + evolving 评估 + 报告 + 提示精化 + checkpoint 落盘) | done(契约)/ partial(无 LLM 数据生成/RL) |
 | telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约)/ partial(JSONL 导出真实;OTLP 导出留待后续)
 | queue | `queue` | `MessageQueue`(规划) | missing
 | mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约)/ partial(stdio 真实,http 未实现) |
@@ -111,8 +111,8 @@
 
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
-| orchestrator(100) | ah-plugins-rsi | 多轮优化编排、checkpoint/resume | 现 0%
-| dataset_generator(72) / dataset_curator(13) / data_loader(5) | ah-plugins-rsi | LLM 生成、curate、分批 | 现为前缀映射/前 N 条
+| orchestrator(100) | ah-plugins-rsi | 多轮优化编排、checkpoint/resume | 已落地(ah-plugins-rsi:round 评测 + JSONL checkpoint + 续跑);git/CI 基建留待后续 |
+| dataset_generator(72) / dataset_curator(13) / data_loader(5) | ah-plugins-rsi | LLM 生成、curate、分批 | 已落地确定性扩展(改写/组合/边界);LLM 生成留待后续 |
 | evaluator(judger 91/case_runner 56/…) | `evolving` seam + ah-plugins-rsi | LLM judge、执行后端 | 现为字符串相等
 | evaluation_result_analyzer(73) | ah-plugins-rsi | LLM 诊断、证据冲突修复 | 现 0%
 | member_optimizer(16 文件) | ah-plugins-rsi | attribution→plan→execute→verify→publish | 现为启发式 plan

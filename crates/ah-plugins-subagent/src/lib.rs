@@ -85,6 +85,13 @@ impl SubagentRuntime for LocalSubagentRuntime {
                         json!({ "content": response.content }),
                     )
                     .map_err(|e| SubagentError(format!("append failed: {e}")))?;
+                // 日志即真相:记录本轮步进(完成)。
+                session
+                    .append(
+                        SessionEventKind::AgentStep,
+                        json!({ "iteration": iterations_used, "tool_calls": 0, "done": true }),
+                    )
+                    .map_err(|e| SubagentError(format!("append step failed: {e}")))?;
                 return Ok(SubagentResult {
                     answer: response.content,
                     iterations_used,
@@ -121,6 +128,17 @@ impl SubagentRuntime for LocalSubagentRuntime {
                     )
                     .map_err(|e| SubagentError(format!("append failed: {e}")))?;
             }
+            // 日志即真相:记录本轮步进(继续循环)。
+            session
+                .append(
+                    SessionEventKind::AgentStep,
+                    json!({
+                        "iteration": iterations_used,
+                        "tool_calls": response.tool_calls.len(),
+                        "done": false,
+                    }),
+                )
+                .map_err(|e| SubagentError(format!("append step failed: {e}")))?;
         }
         Err(SubagentError(format!(
             "subagent budget exceeded: {max_iterations}"
