@@ -118,7 +118,7 @@
 | member_optimizer(16 文件) | ah-plugins-rsi | attribution→plan→execute→verify→publish | 现为启发式 plan
 | team_skill_generator/optimizer(26/8) | ah-plugins-rsi | 技能生成与演化 | 现 0%/启发式
 | single_harness(72+12) | ah-plugins-rsi | 迭代编排、候选门禁 | 现 0%
-| auto_harness(65 文件) | ah-plugins-auto-harness | assess/plan/implement/verify/commit/publish + 真实 git/CI | git seam ✅ + ci gate runner ✅(本回合);编排(assess→publish)留待后续 |
+| auto_harness(65 文件) | ah-plugins-autoharness | assess/plan/implement/verify/commit/publish + 真实 git/CI | 编排已落地(本回合:六阶段真实执行,git 提交+分支);远端 PR/GitCode 留待后续 |
 | storage/resource/config/schema | ah-plugins-rsi | 持久化、资源记账、配置、类型 | 现 in-memory
 
 ### 2.6 extensions(340 符号) + providers

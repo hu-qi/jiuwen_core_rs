@@ -98,3 +98,6 @@ pub const CI: ServiceKey = ServiceKey::new("ci");
 
 /// `rsi-analyzer` seam 服务键(评测结果分析)。
 pub const RSI_ANALYZER: ServiceKey = ServiceKey::new("rsi-analyzer");
+
+/// `auto-harness` seam 服务键(自动化改进周期)。
+pub const AUTO_HARNESS: ServiceKey = ServiceKey::new("auto-harness");

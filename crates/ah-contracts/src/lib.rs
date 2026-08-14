@@ -12,6 +12,7 @@
 
 pub mod agent;
 pub mod analyzer;
+pub mod autoharness;
 pub mod ci;
 pub mod code;
 pub mod context;
@@ -53,6 +54,9 @@ pub mod prelude {
     pub use crate::analyzer::{
         AnalysisArtifact, AnalysisSignal, AnalyzerCase, AnalyzerError, EvaluationAnalyzer,
         EvidenceRef, SignalKind, TeamIssue,
+    };
+    pub use crate::autoharness::{
+        AutoHarness, AutoHarnessConfig, AutoHarnessError, CycleResult, StageKind, StageResult,
     };
     pub use crate::ci::{CiError, CiGateRequest, CiGateResult, CiGateRunner};
     pub use crate::code::{CodeError, CodeExecRequest, CodeExecResult, CodeProvider};

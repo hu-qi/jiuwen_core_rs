@@ -1,0 +1,24 @@
+[package]
+name = "ah-plugins-autoharness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real auto-harness orchestrator: assess/plan/implement/verify/commit/publish cycle over real git/ci/rsi/subagent seams"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+async-trait = "0.1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[dev-dependencies]
+ah-plugins-mock = { workspace = true }
+ah-plugins-tools = { workspace = true }
+ah-plugins-sysop = { workspace = true }
+ah-plugins-session-log = { workspace = true }
+ah-plugins-subagent = { workspace = true }
+ah-plugins-evolving = { workspace = true }
+ah-plugins-rsi = { workspace = true }
+ah-plugins-git = { workspace = true }
+ah-plugins-ci = { workspace = true }
