@@ -46,8 +46,9 @@
 ## 当前实现状态(截至框架提交)
 
 - 已实现:ah-hub(ServiceRegistry / EventBus 四分发 / Plugin+拓扑挂载 / Profile)、
-  ah-contracts(ServiceKey / Event / Seam / ModelProvider 示例)、ah-plugins-mock、
-  ah-app(profile 启动端到端)。
+  ah-contracts(ServiceKey / Event / Seam / Effect / llm+tools 两个 seam)、
+  ah-plugins-mock(MockModelProvider + MockToolRegistry + Echo/Add 工具)、
+  ah-app(profile 启动端到端,同时消费 llm 与 tools seam)。
 - 规划:其余 seam 与插件(见 capability-map.md)。
 - 本仓库禁止用文档声称完成度;完成度只以代码证据(测试 + 真实路径)为准。
 

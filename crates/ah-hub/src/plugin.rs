@@ -5,7 +5,7 @@ use std::sync::Arc;
 use ah_contracts::service::ServiceKey;
 
 use crate::context::Context;
-use crate::effect::Effect;
+use ah_contracts::Effect;
 
 /// 插件:挂载到 Context 上,注册服务与事件。
 ///

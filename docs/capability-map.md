@@ -22,7 +22,7 @@
 | Seam | ServiceKey | Service Definition | 状态
 | --- | --- | --- | --- |
 | llm | `llm` | `ModelProvider`(已实现) | done(契约)/ partial(provider) |
-| tools | `tools` | `Tool`(规划) | missing
+| tools | `tools` | `Tool` + `ToolRegistry`(已实现) | done(契约)/ partial(provider 为 mock) |
 | prompt | `prompt` | `PromptBuilder`(规划) | missing
 | store | `store` | `BaseKVStore/BaseDBStore/BaseVectorStore/BaseMessageStore`(规划) | missing
 | session | `sessions` | `Session` + append-only 事件日志(规划) | missing

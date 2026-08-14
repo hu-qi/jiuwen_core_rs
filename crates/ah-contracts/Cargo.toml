@@ -7,3 +7,4 @@ description = "Seam contracts: pure types and traits for the agent-harness plugi
 
 [dependencies]
 async-trait = "0.1"
+serde_json = "1"

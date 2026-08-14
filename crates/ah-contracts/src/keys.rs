@@ -1,0 +1,11 @@
+//! 稳定服务键:seam 的公开契约。
+//!
+//! 插件与消费方共享这些键;新增 seam 时在此登记。
+
+use crate::service::ServiceKey;
+
+/// `llm` seam 服务键。
+pub const LLM: ServiceKey = ServiceKey::new("llm");
+
+/// `tools` seam 服务键。
+pub const TOOLS: ServiceKey = ServiceKey::new("tools");

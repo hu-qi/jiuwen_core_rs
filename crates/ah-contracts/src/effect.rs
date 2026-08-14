@@ -1,9 +1,9 @@
-//! 可逆注册。
+//! 可逆注册(RAII guard)。
+//!
+//! 定义在契约层:seam 接口(如 `ToolRegistry::register`)需要返回它。
+//! 注册动作返回本 guard,guard 被 drop(插件卸载 / 作用域结束)时自动回滚。
 
 /// 可逆注册的 RAII guard。
-///
-/// 等价于 Cordis 的 `ctx.effect()`:注册动作返回本 guard,
-/// 当 guard 被 drop(插件卸载 / 作用域结束)时自动执行回滚闭包。
 pub struct Effect {
     undo: Option<Box<dyn FnOnce() + Send>>,
 }

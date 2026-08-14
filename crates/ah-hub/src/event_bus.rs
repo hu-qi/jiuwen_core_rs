@@ -10,7 +10,7 @@ use std::sync::{Arc, RwLock};
 
 use ah_contracts::event::Event;
 
-use crate::effect::Effect;
+use ah_contracts::Effect;
 
 type EmitListener = Arc<dyn Fn(&dyn Any) + Send + Sync>;
 type AsyncListener =

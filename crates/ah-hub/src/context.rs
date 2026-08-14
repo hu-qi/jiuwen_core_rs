@@ -8,10 +8,10 @@ use ah_contracts::event::Event;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 
-use crate::effect::Effect;
 use crate::event_bus::{EventBus, Next};
 use crate::plugin::{DynPlugin, PluginError};
 use crate::registry::ServiceRegistry;
+use ah_contracts::Effect;
 
 /// 插件上下文:服务注册表 + 事件总线。
 ///

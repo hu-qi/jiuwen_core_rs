@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 
-use crate::effect::Effect;
+use ah_contracts::Effect;
 
 /// 服务注册表:按类型化键存储服务。
 ///
