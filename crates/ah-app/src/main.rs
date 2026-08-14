@@ -1,12 +1,13 @@
 //! agent-harness demo:boot 后展示全部真实能力(端到端)。
 
+use ah_contracts::agent::AgentStep;
 use ah_contracts::fs::FsProvider;
-use ah_contracts::keys::{FS, LLM, SHELL, TOOLS, WORKFLOW};
+use ah_contracts::keys::{FS, LLM, SHELL, TELEMETRY, TOOLS, WORKFLOW};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::shell::ShellProvider;
+use ah_contracts::telemetry::TelemetryProvider;
 use ah_contracts::tools::ToolRegistry;
 use ah_contracts::workflow::{EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowSpec};
-use ah_plugins_agent_loop::AgentStep;
 use serde_json::json;
 
 #[tokio::main]
@@ -23,6 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let memory_dir = std::env::temp_dir().join(format!("ah-app-memory-{}", std::process::id()));
     let retrieval_dir =
         std::env::temp_dir().join(format!("ah-app-retrieval-{}", std::process::id()));
+    let telemetry_dir =
+        std::env::temp_dir().join(format!("ah-app-telemetry-{}", std::process::id()));
 
     let (ctx, _effects) = ah_app::boot(
         &profile_path,
@@ -31,6 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &session_dir,
         &memory_dir,
         &retrieval_dir,
+        &telemetry_dir,
     )?;
     println!("[boot] mounted services: {:?}", ctx.service_keys());
 
@@ -195,6 +199,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(|f| f.exists("computed.txt"))
             .unwrap_or(false)
     );
+
+    // telemetry seam:真实导出(agent 步进 + 工具执行已生成 span)。
+    let telemetry = ctx
+        .service::<dyn TelemetryProvider>(&TELEMETRY)
+        .ok_or("telemetry seam missing")?;
+    let exported = telemetry.export().await?;
+    println!(
+        "[telemetry] exported {exported} spans -> {}/telemetry.jsonl",
+        telemetry_dir.display()
+    );
+    println!("[telemetry] in-memory spans: {}", telemetry.spans().len());
 
     Ok(())
 }

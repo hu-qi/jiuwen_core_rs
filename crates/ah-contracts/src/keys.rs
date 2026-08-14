@@ -42,3 +42,6 @@ pub const SUBAGENT: ServiceKey = ServiceKey::new("subagent");
 
 /// `mcp` seam 服务键(Model Context Protocol 客户端)。
 pub const MCP: ServiceKey = ServiceKey::new("mcp");
+
+/// `telemetry` seam 服务键(span 记录与导出)。
+pub const TELEMETRY: ServiceKey = ServiceKey::new("telemetry");

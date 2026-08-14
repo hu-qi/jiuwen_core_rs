@@ -22,6 +22,8 @@ ah-app ──> ah-hub ──> ah-contracts
    ├─> ah-plugins-mcp (真实 MCP stdio 传输) ──> ah-hub, ah-contracts
                                             └─dev-dep─> ah-plugins-tools(测试)
                                             (ah-plugins-mcp 另注入 mcp_call_tool 到 tools seam)
+   ├─> ah-plugins-telemetry (真实 span 记录 + JSONL 导出) ──> ah-hub, ah-contracts
+                                            └─dev-dep─> ah-plugins-tools(测试)
 ```
 
 依赖方向(单向、禁止环):
@@ -54,7 +56,7 @@ ah-plugins-rsi              RSI + auto_harness
 ah-plugins-store-*          redis/pulsar/gaussdb/elasticsearch/milvus/chroma
 ah-plugins-mcp              真实 MCP stdio transport(已实现:子进程 + newline-delimited JSON-RPC 2.0)
 ah-plugins-transport-*      a2a(规划)
-ah-plugins-otel             telemetry
+ah-plugins-telemetry       telemetry(已实现:span 记录 + JSONL 导出;OTLP 导出留待后续,规划为 ah-plugins-otel)
 ah-plugins-openai           第一个真实 LLM provider(迁移 OpenAiCompatibleClient)
 ah-plugins-devtools         dev_tools 域
 ah-plugins-symphony         symphony

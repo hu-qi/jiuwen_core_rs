@@ -9,6 +9,7 @@
 # - ah-plugins-retrieval: 真实知识库检索
 # - ah-plugins-subagent: 真实子代理(隔离会话委派)
 # - ah-plugins-mcp: 真实 MCP stdio 客户端(懒 spawn,首次调用时拉起子进程)
+# - ah-plugins-telemetry: 真实 telemetry(span 记录 + JSONL 导出,OTLP 留待后续)
 # - ah-plugins-openai: 真实 LLM provider(需 OPENAI_API_KEY;缺失时挂载失败并显式报错)
 # - ah-plugins-agent-loop: 真实 ReAct 循环(日志驱动)
 # 无 mock 插件;mock 门禁校验通过。
@@ -16,4 +17,4 @@ name = "prod"
 
 [[bundles]]
 id = "real"
-plugins = ["ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-mcp", "ah-plugins-openai", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-agent-loop"]

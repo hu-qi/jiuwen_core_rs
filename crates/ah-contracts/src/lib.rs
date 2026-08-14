@@ -10,6 +10,7 @@
 //! - 插件之间不允许直接依赖彼此的具体类型,只允许依赖本 crate 的契约;
 //! - 机制类型([`Effect`]、[`ServiceKey`])也定义在此层,供 seam 接口使用。
 
+pub mod agent;
 pub mod effect;
 pub mod event;
 pub mod fs;
@@ -24,18 +25,20 @@ pub mod service;
 pub mod session;
 pub mod shell;
 pub mod subagent;
+pub mod telemetry;
 pub mod tools;
 pub mod workflow;
 
 pub use effect::Effect;
 
 pub mod prelude {
+    pub use crate::agent::AgentStep;
     pub use crate::effect::Effect;
     pub use crate::event::Event;
     pub use crate::fs::{FsError, FsProvider};
     pub use crate::keys::{
-        AGENT_LOOP, FS, LLM, MCP, MEMORY, RETRIEVAL, SESSION_MANAGER, SESSIONS, SHELL, TOOLS,
-        WORKFLOW,
+        AGENT_LOOP, FS, LLM, MCP, MEMORY, RETRIEVAL, SESSION_MANAGER, SESSIONS, SHELL, TELEMETRY,
+        TOOLS, WORKFLOW,
     };
     pub use crate::llm::{
         ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse, ToolCall,
@@ -52,6 +55,7 @@ pub mod prelude {
     pub use crate::session::{SessionError, SessionEvent, SessionEventKind, SessionLog};
     pub use crate::shell::{ShellError, ShellOutput, ShellProvider};
     pub use crate::subagent::{SubagentError, SubagentResult, SubagentRuntime, SubagentSpec};
+    pub use crate::telemetry::{Span, TelemetryError, TelemetryProvider};
     pub use crate::tools::{Tool, ToolError, ToolRegistry};
     pub use crate::workflow::{
         EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError, WorkflowOutput, WorkflowSpec,

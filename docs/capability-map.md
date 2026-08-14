@@ -40,7 +40,7 @@
 | teams | `teams` | `TeamRuntime`(规划) | missing
 | evolving | `evolving` | 演进管线(规划) | missing
 | rsi | `rsi` | RSI 管线(规划) | missing
-| telemetry | `telemetry` | `Tracer`(规划) | missing
+| telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约)/ partial(JSONL 导出真实;OTLP 导出留待后续)
 | queue | `queue` | `MessageQueue`(规划) | missing
 | mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约)/ partial(stdio 真实,http 未实现) |
 | transport | `transport` | A2A 传输(规划) | missing
@@ -131,7 +131,7 @@
 | sys_operation(远程沙箱 9 provider) | `sandbox` seam + 进程插件 | AIO/jiuwenbox/yuanrong | 现 4 个白名单命令
 | external_provider(OpenAI OAuth) | `credentials` seam + ah-plugins-openai-auth | 设备码 OAuth、模型目录 | 现恒 unsupported
 | a2a | `transport` seam + ah-plugins-a2a | HTTP server/client、流式 | 现 local adapter
-| tracer_otel | `telemetry` seam + ah-plugins-otel | OTLP 导出、semconv | 现内存 exporter
+| tracer_otel | `telemetry` seam + ah-plugins-telemetry | span 记录 + JSONL 导出(已落地);OTLP 导出、semconv 留待后续 | JSONL 真实(ah-plugins-telemetry:tests 覆盖 record/export/事件监听);OTLP 规划 |
 | context_evolver(58 文件) | `memory` seam + ah-plugins-context-evolver | LLM 记忆流水线、Milvus | 现 0%
 | mcp(stdio/http) | `mcp` seam + ah-plugins-mcp | stdio 子进程、newline-delimited JSON-RPC 2.0、initialize 握手、list_tools/call_tool/shutdown | stdio 真实(ah-plugins-mcp:tests/mcp_stdio.rs 真实子进程验证);http 规划 |
 | vendor_specific | `llm` seam | 各厂商重排/嵌入 | 现词法 fallback

@@ -7,7 +7,6 @@
 
 use std::sync::Arc;
 
-use ah_contracts::event::Event;
 use ah_contracts::keys::{AGENT_LOOP, LLM, SESSIONS, TOOLS};
 use ah_contracts::llm::{ModelProvider, ModelRequest, ToolSchema};
 use ah_contracts::prelude::Effect;
@@ -31,20 +30,8 @@ impl core::fmt::Display for AgentLoopError {
 
 impl std::error::Error for AgentLoopError {}
 
-/// agent 每轮(step)事件:emit 模式,供遥测/日志监听。
-#[derive(Clone, Debug)]
-pub struct AgentStep {
-    /// 第几轮(0 起)。
-    pub iteration: usize,
-    /// 本轮模型请求的工具调用数。
-    pub tool_calls: usize,
-    /// 是否已得到最终回答(循环结束)。
-    pub done: bool,
-}
-
-impl Event for AgentStep {
-    const ID: &'static str = "agent/step";
-}
+/// agent/step 事件契约(跨插件共享):定义在 ah-contracts。
+pub use ah_contracts::agent::AgentStep;
 
 /// 真实 ReAct 循环(日志驱动)。
 pub struct AgentLoop {

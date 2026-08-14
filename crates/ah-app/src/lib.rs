@@ -22,6 +22,7 @@ use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_sysop::SysopPlugin;
+use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_tools::ToolsPlugin;
 use ah_plugins_workflow::WorkflowPlugin;
 
@@ -35,6 +36,7 @@ pub fn plugin_catalog(
     session_dir: &PathBuf,
     memory_dir: &PathBuf,
     retrieval_dir: &PathBuf,
+    telemetry_dir: &PathBuf,
 ) -> Vec<(&'static str, DynPlugin)> {
     let mut catalog: Vec<(&'static str, DynPlugin)> = vec![
         ("ah-plugins-mock", Arc::new(MockPlugin) as DynPlugin),
@@ -77,6 +79,10 @@ pub fn plugin_catalog(
             )) as DynPlugin,
         ),
         (
+            "ah-plugins-telemetry",
+            Arc::new(TelemetryPlugin::new(telemetry_dir)) as DynPlugin,
+        ),
+        (
             "ah-plugins-agent-loop",
             Arc::new(AgentLoopPlugin::default()) as DynPlugin,
         ),
@@ -100,6 +106,7 @@ pub fn boot(
     session_dir: &PathBuf,
     memory_dir: &PathBuf,
     retrieval_dir: &PathBuf,
+    telemetry_dir: &PathBuf,
 ) -> Result<BootResult, Box<dyn std::error::Error>> {
     let profile = Profile::load(profile_path)?;
     let catalog = plugin_catalog(
@@ -108,6 +115,7 @@ pub fn boot(
         session_dir,
         memory_dir,
         retrieval_dir,
+        telemetry_dir,
     );
     let plugins: Vec<DynPlugin> = profile
         .plugin_names()

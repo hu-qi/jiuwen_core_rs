@@ -1,0 +1,16 @@
+[package]
+name = "ah-plugins-telemetry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real telemetry: in-memory span recording with JSONL file export, plus agent-step and tool-executed event listeners"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+async-trait = "0.1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[dev-dependencies]
+ah-plugins-tools = { workspace = true }
