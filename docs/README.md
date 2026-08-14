@@ -56,6 +56,7 @@
   ah-plugins-security(真实安全检测:提示注入/敏感数据 guardrails + tools/pre-execute rail);
   ah-plugins-subagent(真实子代理:隔离会话委派 + 预算 + 上下文注入 + delegate_task 工具);
   ah-plugins-teams(真实多 agent 团队:任务板 + 依赖门控 + 成员校验 + review 票 + settle 多数决 + run_task 真实委派 subagent);
+  ah-plugins-evolving(真实演进:轨迹从会话日志抽取 + 本地判据评估 + LLM judge 附加 + 优化建议);
   ah-plugins-mcp(真实 MCP stdio transport:子进程 + JSON-RPC 2.0 + mcp_call_tool 工具);
   ah-plugins-credentials(真实凭据引用:环境变量 provider,openai.api_key → OPENAI_API_KEY 等映射可配置;get/list 真实读 env,set/remove 显式报错);
   ah-plugins-telemetry(真实 telemetry:内存 span 记录 + JSONL 导出,agent/step 与 tools/post-execute 监听生成真实 span;OTLP 导出留待后续);

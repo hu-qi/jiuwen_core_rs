@@ -50,3 +50,6 @@ pub const TELEMETRY: ServiceKey = ServiceKey::new("telemetry");
 pub const CREDENTIALS: ServiceKey = ServiceKey::new("credentials");
 /// `teams` seam 服务键(多 agent 任务协作)。
 pub const TEAMS: ServiceKey = ServiceKey::new("teams");
+
+/// `evolving` seam 服务键(轨迹/评估/优化)。
+pub const EVOLVING: ServiceKey = ServiceKey::new("evolving");

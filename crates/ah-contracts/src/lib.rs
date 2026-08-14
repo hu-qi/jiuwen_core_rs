@@ -14,6 +14,7 @@ pub mod agent;
 pub mod credentials;
 pub mod effect;
 pub mod event;
+pub mod evolving;
 pub mod fs;
 pub mod keys;
 pub mod llm;
@@ -38,6 +39,10 @@ pub mod prelude {
     pub use crate::credentials::{Credential, CredentialError, CredentialProvider};
     pub use crate::effect::Effect;
     pub use crate::event::Event;
+    pub use crate::evolving::{
+        Evaluation, EvolvingError, EvolvingRuntime, Refinement, RefinementTarget, StepOutcome,
+        Trajectory, TrajectoryStep, Verdict,
+    };
     pub use crate::fs::{FsError, FsProvider};
     pub use crate::keys::{
         AGENT_LOOP, CREDENTIALS, FS, LLM, MCP, MEMORY, RETRIEVAL, SESSION_MANAGER, SESSIONS, SHELL,

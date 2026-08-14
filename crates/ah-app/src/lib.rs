@@ -13,6 +13,7 @@ use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
 use ah_plugins_agent_loop::AgentLoopPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
+use ah_plugins_evolving::EvolvingPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
@@ -63,6 +64,7 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-subagent", Arc::new(SubagentPlugin) as DynPlugin),
         ("ah-plugins-teams", Arc::new(TeamsPlugin) as DynPlugin),
+        ("ah-plugins-evolving", Arc::new(EvolvingPlugin) as DynPlugin),
         (
             "ah-plugins-session-log",
             Arc::new(SessionLogPlugin::new(session_path, session_dir)) as DynPlugin,
