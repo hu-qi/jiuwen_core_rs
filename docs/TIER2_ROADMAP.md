@@ -31,3 +31,14 @@
 - 集成:让 `ah-plugins-openai` 的 OpenAiConfig 可从 credentials seam 读取 key(可选但优先);
 - 测试:env provider 读写、openai 插件经 credentials 解析 key;
 - 接线:workspace/profiles/ah-app catalog。
+---
+
+## 完成状态(2026-08-14)
+
+| 任务 | 提交 | 验收 |
+| --- | --- | --- |
+| 4. MCP stdio transport | `13b7594`(+验收补丁 `b8bd840`) | ✅ 79 测试,真实子进程 JSON-RPC |
+| 5. telemetry | `3ed4157` | ✅ 83 测试,JSONL span 导出真实 |
+| 6. credentials | `e016198` | ✅ 101 测试,env provider + openai 集成 |
+
+第二梯队全部完成:101 测试全过、clippy 0 警告。
