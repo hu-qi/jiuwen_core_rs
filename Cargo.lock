@@ -62,6 +62,7 @@ dependencies = [
  "ah-hub",
  "ah-plugins-context",
  "ah-plugins-mock",
+ "ah-plugins-prompt",
  "ah-plugins-session-log",
  "ah-plugins-sysop",
  "ah-plugins-tools",

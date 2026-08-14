@@ -7,10 +7,13 @@
 
 use std::sync::Arc;
 
+use std::collections::HashMap;
+
 use ah_contracts::context::ContextEngine;
-use ah_contracts::keys::{AGENT_LOOP, CONTEXT, LLM, SESSIONS, TOOLS};
-use ah_contracts::llm::{ModelProvider, ModelRequest, ToolSchema};
+use ah_contracts::keys::{AGENT_LOOP, CONTEXT, LLM, PROMPT, SESSIONS, TOOLS};
+use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest, ToolSchema};
 use ah_contracts::prelude::Effect;
+use ah_contracts::prompt::PromptRegistry;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::session::{SessionEventKind, SessionLog};
@@ -45,6 +48,10 @@ pub struct AgentLoop {
     context: Option<Arc<dyn ContextEngine>>,
     /// 模型可见上下文 token 预算(默认 8192;日志不受影响)。
     token_budget: usize,
+    /// 可选 prompt 注册表(prompt seam 消费方):渲染结果注入为请求首条 system 消息。
+    prompt: Option<Arc<dyn PromptRegistry>>,
+    /// 消费的模板名(默认 "agent")。
+    prompt_name: String,
 }
 
 impl AgentLoop {
@@ -64,6 +71,8 @@ impl AgentLoop {
             max_iterations,
             context: None,
             token_budget: 8192,
+            prompt: None,
+            prompt_name: "agent".to_string(),
         }
     }
 
@@ -71,6 +80,14 @@ impl AgentLoop {
     pub fn with_context(mut self, context: Arc<dyn ContextEngine>, token_budget: usize) -> Self {
         self.context = Some(context);
         self.token_budget = token_budget;
+        self
+    }
+
+    /// 挂载 prompt seam 消费(可选):注册名为 name 的模板存在时,
+    /// 渲染结果注入为每次请求首条 system 消息;未注册则无系统提示(文档策略)。
+    pub fn with_prompt(mut self, registry: Arc<dyn PromptRegistry>, name: &str) -> Self {
+        self.prompt = Some(registry);
+        self.prompt_name = name.to_string();
         self
     }
 
@@ -120,6 +137,14 @@ impl AgentLoop {
             } else {
                 session.derive_messages()
             };
+            // prompt seam 消费:注册的模板渲染为 system 消息(请求首条)。
+            let mut messages = messages;
+            if let Some(registry) = &self.prompt
+                && registry.get(&self.prompt_name).is_some()
+                && let Ok(rendered) = registry.render(&self.prompt_name, &HashMap::new())
+            {
+                messages.insert(0, ChatMessage::new(ChatRole::System, rendered.content));
+            }
             let response = self
                 .llm
                 .chat(ModelRequest {
@@ -247,9 +272,14 @@ impl Plugin for AgentLoopPlugin {
                 })?;
         // context seam 可选:挂载后循环按 token 预算压缩模型可见上下文。
         let context = ctx.service::<dyn ContextEngine>(&CONTEXT);
+        // prompt seam 可选:注册 "agent" 模板时注入系统提示。
+        let prompt = ctx.service::<dyn PromptRegistry>(&PROMPT);
         let mut agent = AgentLoop::new(llm, tools, sessions, ctx.clone(), self.max_iterations);
         if let Some(context) = context {
             agent = agent.with_context(context, 8192);
+        }
+        if let Some(prompt) = prompt {
+            agent = agent.with_prompt(prompt, "agent");
         }
         let agent = Arc::new(agent);
         Ok(vec![ctx.register(AGENT_LOOP, agent)])
@@ -263,6 +293,7 @@ mod tests {
     use ah_contracts::llm::ChatRole;
     use ah_contracts::session::SessionLog;
     use ah_hub::plugin::DynPlugin;
+    use async_trait::async_trait;
     use std::sync::Arc as StdArc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -515,6 +546,99 @@ mod tests {
         assert!(
             sessions2.events().len() >= 3,
             "history preserved in the log"
+        );
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 测试专用录制 provider:记录每次模型请求后委托给真实 mock(仅测试用桩)。
+    struct RecordingProvider {
+        inner: StdArc<dyn ModelProvider>,
+        requests: StdArc<std::sync::Mutex<Vec<ModelRequest>>>,
+    }
+
+    impl Seam for RecordingProvider {}
+
+    #[async_trait]
+    impl ModelProvider for RecordingProvider {
+        fn name(&self) -> &'static str {
+            "recording"
+        }
+
+        async fn chat(
+            &self,
+            request: ModelRequest,
+        ) -> Result<ah_contracts::llm::ModelResponse, ah_contracts::llm::ModelError> {
+            self.requests.lock().unwrap().push(request.clone());
+            self.inner.chat(request).await
+        }
+    }
+
+    #[tokio::test]
+    async fn prompt_consumer_injects_rendered_system_message() {
+        use ah_contracts::prompt::{PromptRegistry, PromptTemplate};
+
+        let root = std::env::temp_dir().join(format!("ah-loop-prompt-{}", std::process::id()));
+        let session_dir = root.join("sessions");
+        let default_path = session_dir.join("default.jsonl");
+        let ctx = Context::new();
+        let plugins: Vec<DynPlugin> = vec![
+            StdArc::new(ah_plugins_mock::MockPlugin),
+            StdArc::new(ah_plugins_tools::ToolsPlugin),
+            StdArc::new(ah_plugins_sysop::SysopPlugin::new(&root)),
+            StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                &default_path,
+                &session_dir,
+            )),
+            StdArc::new(ah_plugins_prompt::PromptPlugin::new(root.join("prompts"))),
+        ];
+        let effects = ctx.mount_all(plugins).expect("mount");
+
+        // 注册 agent 模板(prompt seam 提供方)。
+        let prompts = ctx
+            .service::<dyn PromptRegistry>(&ah_contracts::keys::PROMPT)
+            .expect("prompt");
+        prompts
+            .register(PromptTemplate {
+                name: "agent".to_string(),
+                version: 0,
+                template: "You are the workspace agent. Be concise.".to_string(),
+                description: "agent system prompt".to_string(),
+            })
+            .expect("register");
+
+        // 手工构造循环:录制 provider + prompt 消费方。
+        let sessions = ctx.service::<dyn SessionLog>(&SESSIONS).expect("sessions");
+        let mock = ctx.service::<dyn ModelProvider>(&LLM).expect("llm");
+        let tools = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let requests = StdArc::new(std::sync::Mutex::new(Vec::new()));
+        let recording = StdArc::new(RecordingProvider {
+            inner: mock,
+            requests: requests.clone(),
+        });
+        let agent = AgentLoop::new(
+            recording as StdArc<dyn ModelProvider>,
+            tools,
+            sessions,
+            ctx.clone(),
+            3,
+        )
+        .with_prompt(prompts, "agent");
+        let answer = agent.run("explore the workspace").await.expect("run");
+        assert!(answer.contains("mock final answer"));
+
+        // 首次请求的首条消息是渲染出的 system 提示。
+        let first = requests
+            .lock()
+            .unwrap()
+            .first()
+            .expect("at least one request")
+            .clone();
+        assert_eq!(first.messages[0].role, ChatRole::System);
+        assert_eq!(
+            first.messages[0].content,
+            "You are the workspace agent. Be concise."
         );
 
         drop(effects);
