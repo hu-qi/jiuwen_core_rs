@@ -21,6 +21,7 @@ pub mod keys;
 pub mod llm;
 pub mod mcp;
 pub mod memory;
+pub mod prompt;
 pub mod retrieval;
 pub mod rsi;
 pub mod seam;
@@ -60,6 +61,7 @@ pub mod prelude {
     };
     pub use crate::mcp::{McpClient, McpContent, McpError, McpInfo, McpTool, McpToolResult};
     pub use crate::memory::{MemoryError, MemoryProvider, MemoryRecord};
+    pub use crate::prompt::{PromptError, PromptRegistry, PromptTemplate, RenderedPrompt};
     pub use crate::retrieval::{RetrievalError, RetrievalHit, RetrievalProvider};
     pub use crate::rsi::{RsiCase, RsiCheckpoint, RsiError, RsiReport, RsiRunOutcome, RsiRuntime};
     pub use crate::seam::Seam;

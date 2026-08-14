@@ -14,6 +14,7 @@
 # - ah-plugins-rsi: 真实 RSI 管线(数据集/评测/精化/checkpoint)
 # - ah-plugins-context: 真实上下文引擎(预算组装/压缩/offload)
 # - ah-plugins-store: 真实文件后端 store(KV + message)
+# - ah-plugins-prompt: 真实版本化 prompt 注册表
 # - ah-plugins-mcp: 真实 MCP stdio 客户端(懒 spawn,首次调用时拉起子进程)
 # - ah-plugins-credentials: 真实凭据引用(环境变量 provider,只读)
 # - ah-plugins-telemetry: 真实 telemetry(span 记录 + JSONL 导出,OTLP 留待后续)
@@ -22,4 +23,4 @@ name = "dev"
 
 [[bundles]]
 id = "boot"
-plugins = ["ah-plugins-mock", "ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-context", "ah-plugins-store", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-mock", "ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-context", "ah-plugins-store", "ah-plugins-prompt", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-agent-loop"]

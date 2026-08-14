@@ -38,7 +38,7 @@
 
 | 域 | 任务 | 说明 |
 | --- | --- | --- |
-| core | context_engine ✅ / store 本地文件后端 ✅(本会话)/ prompt / retrieval 向量化 / single_agent 深化 | store seam(KV+message)已落地;外部后端(Redis 等)与 prompt 待后续 |
+| core | context_engine ✅ / store 本地文件后端 ✅ / prompt ✅(本会话)/ retrieval 向量化 / single_agent 深化 | 下一步:retrieval 向量化 / single_agent 深化 |
 | harness | 剩余 rails / browser/web/lsp 真实工具 / workspace-goal-manifest 细化 | rails 复用 pre-execute 挂载点 |
 | extensions | store(Redis/GaussDB/ES)/ queue(Pulsar)/ sandbox(远程)/ openai OAuth / a2a / mcp-http | 真实协议路径 |
 | teams 深化 | 外部 CLI 进程 / ZMQ / SQLite 持久化 | teams 基础落地后 |

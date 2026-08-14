@@ -19,6 +19,7 @@ use ah_plugins_mcp::McpPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
+use ah_plugins_prompt::PromptPlugin;
 use ah_plugins_rails::ShellGuardRailPlugin;
 use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rsi::RsiPlugin;
@@ -79,6 +80,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-store",
             Arc::new(StorePlugin::new(workspace_root.join("store"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-prompt",
+            Arc::new(PromptPlugin::new(workspace_root.join("prompts"))) as DynPlugin,
         ),
         (
             "ah-plugins-session-log",

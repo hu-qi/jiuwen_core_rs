@@ -16,6 +16,7 @@ dependencies = [
  "ah-plugins-memory",
  "ah-plugins-mock",
  "ah-plugins-openai",
+ "ah-plugins-prompt",
  "ah-plugins-rails",
  "ah-plugins-retrieval",
  "ah-plugins-rsi",
@@ -154,6 +155,15 @@ dependencies = [
  "serde_json",
  "tiny_http",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-prompt"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]

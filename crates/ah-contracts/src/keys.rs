@@ -65,3 +65,6 @@ pub const KV_STORE: ServiceKey = ServiceKey::new("store-kv");
 
 /// `store/messages` seam 服务键(append-only 消息存储)。
 pub const MESSAGE_STORE: ServiceKey = ServiceKey::new("store-messages");
+
+/// `prompt` seam 服务键(模板渲染与版本化注册表)。
+pub const PROMPT: ServiceKey = ServiceKey::new("prompt");
