@@ -51,7 +51,7 @@ ah-plugins-otel             telemetry
 ah-plugins-openai           第一个真实 LLM provider(迁移 OpenAiCompatibleClient)
 ah-plugins-devtools         dev_tools 域
 ah-plugins-symphony         symphony
-ah-app                      boot 入口
+ah-app                      boot 入口 + demo + ah-cli(交互 CLI,消费会话管理)
 ```
 
 ## 3. 新增 crate 清单

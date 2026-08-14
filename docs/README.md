@@ -52,7 +52,7 @@
   ah-plugins-session-log(真实会话事件日志:JSONL 落盘 + 投影 + 多会话管理 create/fork/resume);
   ah-plugins-workflow(真实工作流引擎:Start/End/LLM/Tool/Loop + 条件边);
   工具执行管线(pre-execute/post-execute)已落地;
-  ah-app(端到端:真实 fs/shell/tools/rails/agent 循环副作用演示)。
+  ah-app(demo 端到端 + **ah-cli 交互入口**:任务输入、会话新建/切换/分叉)。
 - 仅剩一个 boot 桩:ah-plugins-mock(llm,真实 provider 需凭据时仍保留占位)。
 - 规划:其余 seam 与插件(见 capability-map.md)。
 - 本仓库禁止用文档声称完成度;完成度只以代码证据(测试 + 真实路径)为准。

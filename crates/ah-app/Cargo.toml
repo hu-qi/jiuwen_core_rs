@@ -9,6 +9,10 @@ description = "agent-harness boot entry: compose a profile, mount plugins, run"
 name = "ah-app"
 path = "src/main.rs"
 
+[[bin]]
+name = "ah-cli"
+path = "src/bin/ah-cli.rs"
+
 [dependencies]
 ah-contracts = { workspace = true }
 ah-hub = { workspace = true }
