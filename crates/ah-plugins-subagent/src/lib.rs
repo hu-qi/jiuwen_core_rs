@@ -6,7 +6,8 @@
 
 use std::sync::Arc;
 
-use ah_contracts::keys::{LLM, SESSION_MANAGER, SESSIONS, SUBAGENT, TOOLS};
+use ah_contracts::context::ContextEngine;
+use ah_contracts::keys::{CONTEXT, LLM, SESSION_MANAGER, SESSIONS, SUBAGENT, TOOLS};
 use ah_contracts::llm::{ModelProvider, ModelRequest, ToolSchema};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
@@ -24,9 +25,19 @@ pub struct LocalSubagentRuntime {
     llm: Arc<dyn ModelProvider>,
     tools: Arc<dyn ToolRegistry>,
     manager: Arc<dyn SessionManager>,
+    /// 可选上下文引擎(context seam 消费方):组装请求时按预算压缩。
+    context: Option<Arc<dyn ContextEngine>>,
+    token_budget: usize,
 }
 
 impl LocalSubagentRuntime {
+    /// 挂载 context seam 消费(可选)。
+    pub fn with_context(mut self, context: Arc<dyn ContextEngine>, token_budget: usize) -> Self {
+        self.context = Some(context);
+        self.token_budget = token_budget;
+        self
+    }
+
     fn tool_schemas(&self) -> Vec<ToolSchema> {
         let mut names = self.tools.names();
         names.sort();
@@ -67,7 +78,16 @@ impl SubagentRuntime for LocalSubagentRuntime {
 
         for (index, _) in (0..max_iterations).enumerate() {
             let iterations_used = index + 1;
-            let messages = session.derive_messages();
+            // 模型可见消息:优先经 context seam 按预算组装;未挂载时日志投影直通。
+            let messages = if let Some(context) = &self.context {
+                context
+                    .assemble(session.as_ref(), self.token_budget)
+                    .await
+                    .map_err(|e| SubagentError(format!("context assemble failed: {e}")))?
+                    .messages
+            } else {
+                session.derive_messages()
+            };
             let response = self
                 .llm
                 .chat(ModelRequest {
@@ -246,11 +266,18 @@ impl Plugin for SubagentPlugin {
                 message: "session-manager seam not registered".to_string(),
             })?;
 
-        let runtime: Arc<dyn SubagentRuntime> = Arc::new(LocalSubagentRuntime {
+        let context = ctx.service::<dyn ContextEngine>(&CONTEXT);
+        let mut runtime = LocalSubagentRuntime {
             llm,
             tools,
             manager,
-        });
+            context: None,
+            token_budget: 8192,
+        };
+        if let Some(context) = context {
+            runtime = runtime.with_context(context, 8192);
+        }
+        let runtime: Arc<dyn SubagentRuntime> = Arc::new(runtime);
         let mut effects = vec![ctx.register(SUBAGENT, runtime.clone())];
 
         let registry =

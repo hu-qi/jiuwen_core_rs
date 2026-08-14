@@ -6,7 +6,12 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **本会话完成账目**(126 tests / clippy 0 / fmt clean):
+> **账目更新**(本回合,136 tests / clippy 0 / fmt clean):
+> - context 引擎 8c59fe4(token 预算组装/压缩/offload/reinject)
+> - store 本地文件后端 c039873(BaseKVStore + BaseMessageStore)
+> - prompt 版本化注册表 f93810e({{var}} 渲染 + 缺失显式报错 + 文件持久化)
+>
+> **历史账目**:
 > - teams 95abe79 · evolving a089fd9 · rsi df5584f(第三梯队 A 全部交付验收)
 > - G-02 契约 fixtures 7a7d7de(fixtures/ + ah-app/tests/golden.rs)
 > - 覆盖率门禁 51da82b(CI coverage job + 实测 87.94%)
