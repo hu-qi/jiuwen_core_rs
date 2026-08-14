@@ -107,4 +107,14 @@ pub trait TeamRuntime: Seam {
     fn list_teams(&self) -> Vec<String>;
     /// 认领任务并经 SubagentRuntime 真实执行,输出写入任务板。
     async fn run_task(&self, team: &str, task: &str) -> Result<TeamRunResult, TeamError>;
+    /// 向团队发送消息(经 queue seam 传输,channel 为 team:{team}:messages)。
+    fn send_message(
+        &self,
+        team: &str,
+        from: &str,
+        to: Option<&str>,
+        content: &str,
+    ) -> Result<TeamMessage, TeamError>;
+    /// 读取团队消息(按发送顺序)。
+    fn messages(&self, team: &str) -> Result<Vec<TeamMessage>, TeamError>;
 }

@@ -483,6 +483,9 @@ async fn teams_golden() {
     let ctx = Context::new();
     let mut plugins = base_plugins(&root);
     plugins.push(Arc::new(ah_plugins_subagent::SubagentPlugin));
+    plugins.push(Arc::new(ah_plugins_queue::QueuePlugin::new(
+        root.join("queue"),
+    )));
     plugins.push(Arc::new(ah_plugins_teams::TeamsPlugin));
     let effects = mount(&ctx, plugins);
     let teams = ctx.service::<dyn TeamRuntime>(&TEAMS).expect("teams");

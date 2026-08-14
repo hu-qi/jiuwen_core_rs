@@ -10,14 +10,15 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use ah_contracts::keys::{SUBAGENT, TEAMS};
+use ah_contracts::keys::{QUEUE, SUBAGENT, TEAMS};
 use ah_contracts::prelude::Effect;
+use ah_contracts::queue::{MessageQueue, QueueMessage};
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::subagent::{SubagentRuntime, SubagentSpec};
 use ah_contracts::teams::{
-    TeamError, TeamMemberSpec, TeamRunResult, TeamRuntime, TeamSpec, TeamTask, TeamTaskEvent,
-    TeamTaskStatus,
+    TeamError, TeamMemberSpec, TeamMessage, TeamRunResult, TeamRuntime, TeamSpec, TeamTask,
+    TeamTaskEvent, TeamTaskStatus,
 };
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
@@ -37,16 +38,27 @@ struct Team {
 pub struct InMemoryTeamRuntime {
     teams: Mutex<HashMap<String, Team>>,
     subagent: Arc<dyn SubagentRuntime>,
+    /// 消息传输经 queue seam(team:{team}:messages channel)。
+    queue: Arc<dyn MessageQueue>,
     ctx: Context,
 }
 
 impl InMemoryTeamRuntime {
-    pub fn new(subagent: Arc<dyn SubagentRuntime>, ctx: Context) -> Self {
+    pub fn new(
+        subagent: Arc<dyn SubagentRuntime>,
+        queue: Arc<dyn MessageQueue>,
+        ctx: Context,
+    ) -> Self {
         Self {
             teams: Mutex::new(HashMap::new()),
             subagent,
+            queue,
             ctx,
         }
+    }
+
+    fn channel(team: &str) -> String {
+        format!("team:{team}:messages")
     }
 
     fn team(
@@ -246,6 +258,62 @@ impl TeamRuntime for InMemoryTeamRuntime {
         ids
     }
 
+    fn send_message(
+        &self,
+        team: &str,
+        from: &str,
+        to: Option<&str>,
+        content: &str,
+    ) -> Result<TeamMessage, TeamError> {
+        {
+            let _guard = self.team(team)?;
+        }
+        self.queue
+            .publish(
+                &Self::channel(team),
+                json!({ "from": from, "to": to, "content": content }),
+            )
+            .map_err(|e| TeamError(format!("publish message: {e}")))?;
+        Ok(TeamMessage {
+            from: from.to_string(),
+            to: to.map(str::to_string),
+            content: content.to_string(),
+        })
+    }
+
+    fn messages(&self, team: &str) -> Result<Vec<TeamMessage>, TeamError> {
+        {
+            let _guard = self.team(team)?;
+        }
+        let mut msgs: Vec<QueueMessage> = self
+            .queue
+            .backlog(&Self::channel(team))
+            .map_err(|e| TeamError(format!("read messages: {e}")))?;
+        msgs.sort_by_key(|m| m.seq);
+        Ok(msgs
+            .into_iter()
+            .map(|m| TeamMessage {
+                from: m
+                    .payload
+                    .get("from")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                to: m
+                    .payload
+                    .get("to")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                content: m
+                    .payload
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+            })
+            .collect())
+    }
+
     async fn run_task(&self, team: &str, task: &str) -> Result<TeamRunResult, TeamError> {
         // 认领(依赖须满足):以首位团队成员身份认领。
         let member = {
@@ -324,7 +392,7 @@ impl Plugin for TeamsPlugin {
     }
 
     fn inject(&self) -> Vec<ServiceKey> {
-        vec![SUBAGENT]
+        vec![SUBAGENT, QUEUE]
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
@@ -334,8 +402,14 @@ impl Plugin for TeamsPlugin {
                 plugin: self.name(),
                 message: "subagent seam not registered".to_string(),
             })?;
+        let queue = ctx
+            .service::<dyn MessageQueue>(&QUEUE)
+            .ok_or_else(|| PluginError::Apply {
+                plugin: self.name(),
+                message: "queue seam not registered".to_string(),
+            })?;
         let runtime: Arc<dyn TeamRuntime> =
-            Arc::new(InMemoryTeamRuntime::new(subagent, ctx.clone()));
+            Arc::new(InMemoryTeamRuntime::new(subagent, queue, ctx.clone()));
         Ok(vec![ctx.register(TEAMS, runtime)])
     }
 }
@@ -361,6 +435,7 @@ mod tests {
                 &session_dir,
             )),
             StdArc::new(ah_plugins_subagent::SubagentPlugin),
+            StdArc::new(ah_plugins_queue::QueuePlugin::new(root.join("queue"))),
             StdArc::new(TeamsPlugin),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
@@ -503,5 +578,35 @@ mod tests {
     #[test]
     fn team_task_event_has_stable_id() {
         assert_eq!(TeamTaskEvent::ID, "teams/task");
+    }
+
+    #[tokio::test]
+    async fn team_messaging_via_queue_in_order() {
+        let root = std::env::temp_dir().join(format!("ah-teams-msg-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let runtime = ctx.service::<dyn TeamRuntime>(&TEAMS).expect("teams");
+
+        let (spec, members) = team();
+        runtime.create_team(spec, members).expect("create");
+        runtime
+            .send_message("t1", "m1", Some("m2"), "hello")
+            .expect("msg1");
+        runtime
+            .send_message("t1", "m2", None, "hi all")
+            .expect("msg2");
+        // 不存在的团队发送消息报错。
+        assert!(runtime.send_message("nope", "m1", None, "x").is_err());
+
+        let messages = runtime.messages("t1").expect("messages");
+        assert_eq!(messages.len(), 2, "ordered backlog");
+        assert_eq!(messages[0].from, "m1");
+        assert_eq!(messages[0].to.as_deref(), Some("m2"));
+        assert_eq!(messages[0].content, "hello");
+        assert_eq!(messages[1].from, "m2");
+        assert_eq!(messages[1].to, None);
+        assert_eq!(messages[1].content, "hi all");
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

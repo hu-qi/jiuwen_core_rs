@@ -3,14 +3,15 @@
 
 use std::sync::{Arc, Mutex};
 
-use ah_contracts::keys::{SUBAGENT, TEAMS};
+use ah_contracts::keys::{QUEUE, SUBAGENT, TEAMS};
 use ah_contracts::prelude::Effect;
+use ah_contracts::queue::{MessageQueue, QueueMessage};
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::subagent::{SubagentRuntime, SubagentSpec};
 use ah_contracts::teams::{
-    TeamError, TeamMemberSpec, TeamRunResult, TeamRuntime, TeamSpec, TeamTask, TeamTaskEvent,
-    TeamTaskStatus,
+    TeamError, TeamMemberSpec, TeamMessage, TeamRunResult, TeamRuntime, TeamSpec, TeamTask,
+    TeamTaskEvent, TeamTaskStatus,
 };
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
@@ -30,14 +31,21 @@ fn status_from_str(s: &str) -> Result<TeamTaskStatus, TeamError> {
 pub struct SqliteTeamRuntime {
     conn: Mutex<Connection>,
     subagent: Arc<dyn SubagentRuntime>,
+    /// 消息传输经 queue seam(team:{team}:messages channel)。
+    queue: Arc<dyn MessageQueue>,
     ctx: Context,
 }
 
 impl SqliteTeamRuntime {
+    fn channel(team: &str) -> String {
+        format!("team:{team}:messages")
+    }
+
     /// 打开(或创建)数据库并建表。
     pub fn open(
         path: &std::path::Path,
         subagent: Arc<dyn SubagentRuntime>,
+        queue: Arc<dyn MessageQueue>,
         ctx: Context,
     ) -> Result<Self, TeamError> {
         let conn =
@@ -64,6 +72,7 @@ impl SqliteTeamRuntime {
         Ok(Self {
             conn: Mutex::new(conn),
             subagent,
+            queue,
             ctx,
         })
     }
@@ -353,6 +362,68 @@ impl TeamRuntime for SqliteTeamRuntime {
         ids
     }
 
+    fn send_message(
+        &self,
+        team: &str,
+        from: &str,
+        to: Option<&str>,
+        content: &str,
+    ) -> Result<TeamMessage, TeamError> {
+        // 团队必须存在(SQLite 校验)。
+        let conn = self.conn.lock().unwrap();
+        let exists: Option<bool> = conn
+            .query_row("SELECT 1 FROM teams WHERE id = ?1 LIMIT 1", [team], |row| {
+                row.get::<_, bool>(0)
+            })
+            .optional()
+            .map_err(|e| TeamError(format!("team check: {e}")))?;
+        if !exists.unwrap_or(false) {
+            return Err(TeamError(format!("team not found: {team}")));
+        }
+        drop(conn);
+        self.queue
+            .publish(
+                &Self::channel(team),
+                json!({ "from": from, "to": to, "content": content }),
+            )
+            .map_err(|e| TeamError(format!("publish message: {e}")))?;
+        Ok(TeamMessage {
+            from: from.to_string(),
+            to: to.map(str::to_string),
+            content: content.to_string(),
+        })
+    }
+
+    fn messages(&self, team: &str) -> Result<Vec<TeamMessage>, TeamError> {
+        let mut msgs: Vec<QueueMessage> = self
+            .queue
+            .backlog(&Self::channel(team))
+            .map_err(|e| TeamError(format!("read messages: {e}")))?;
+        msgs.sort_by_key(|m| m.seq);
+        Ok(msgs
+            .into_iter()
+            .map(|m| TeamMessage {
+                from: m
+                    .payload
+                    .get("from")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                to: m
+                    .payload
+                    .get("to")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                content: m
+                    .payload
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+            })
+            .collect())
+    }
+
     async fn run_task(&self, team: &str, task: &str) -> Result<TeamRunResult, TeamError> {
         // 以首位团队成员身份认领(依赖须满足)。
         let member = {
@@ -447,7 +518,7 @@ impl Plugin for SqliteTeamsPlugin {
     }
 
     fn inject(&self) -> Vec<ServiceKey> {
-        vec![SUBAGENT]
+        vec![SUBAGENT, QUEUE]
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
@@ -457,12 +528,16 @@ impl Plugin for SqliteTeamsPlugin {
                 plugin: self.name(),
                 message: "subagent seam not registered".to_string(),
             })?;
-        let runtime =
-            SqliteTeamRuntime::open(&self.db_path, subagent, ctx.clone()).map_err(|e| {
-                PluginError::Apply {
-                    plugin: self.name(),
-                    message: e.0,
-                }
+        let queue = ctx
+            .service::<dyn MessageQueue>(&QUEUE)
+            .ok_or_else(|| PluginError::Apply {
+                plugin: self.name(),
+                message: "queue seam not registered".to_string(),
+            })?;
+        let runtime = SqliteTeamRuntime::open(&self.db_path, subagent, queue, ctx.clone())
+            .map_err(|e| PluginError::Apply {
+                plugin: self.name(),
+                message: e.0,
             })?;
         let runtime: Arc<dyn TeamRuntime> = Arc::new(runtime);
         Ok(vec![ctx.register(TEAMS, runtime)])
@@ -489,6 +564,7 @@ mod tests {
                 &session_dir,
             )),
             StdArc::new(ah_plugins_subagent::SubagentPlugin),
+            StdArc::new(ah_plugins_queue::QueuePlugin::new(root.join("queue"))),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
         (ctx, effects)
@@ -497,6 +573,11 @@ mod tests {
     fn subagent(ctx: &Context) -> StdArc<dyn SubagentRuntime> {
         ctx.service::<dyn SubagentRuntime>(&SUBAGENT)
             .expect("subagent")
+    }
+
+    fn queue(ctx: &Context) -> StdArc<dyn MessageQueue> {
+        ctx.service::<dyn MessageQueue>(&ah_contracts::keys::QUEUE)
+            .expect("queue")
     }
 
     fn members() -> Vec<TeamMemberSpec> {
@@ -531,7 +612,8 @@ mod tests {
         let root = std::env::temp_dir().join(format!("ah-sqlite-life-{}", std::process::id()));
         let (ctx, effects) = build_ctx(&root);
         let db = root.join("teams.db");
-        let rt = SqliteTeamRuntime::open(&db, subagent(&ctx), ctx.clone()).expect("open");
+        let rt =
+            SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("open");
 
         let spec = TeamSpec {
             id: "t1".into(),
@@ -550,7 +632,8 @@ mod tests {
         drop(rt);
 
         // 重启:同一数据库文件完整恢复状态。
-        let rt2 = SqliteTeamRuntime::open(&db, subagent(&ctx), ctx.clone()).expect("reopen");
+        let rt2 =
+            SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("reopen");
         let tasks = rt2.tasks("t1").expect("tasks");
         assert_eq!(tasks[0].status, TeamTaskStatus::Done, "status persisted");
         assert_eq!(tasks[0].assignee.as_deref(), Some("m1"));
@@ -566,7 +649,8 @@ mod tests {
         let root = std::env::temp_dir().join(format!("ah-sqlite-rev-{}", std::process::id()));
         let (ctx, effects) = build_ctx(&root);
         let db = root.join("teams.db");
-        let rt = SqliteTeamRuntime::open(&db, subagent(&ctx), ctx.clone()).expect("open");
+        let rt =
+            SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("open");
 
         rt.create_team(
             TeamSpec {
@@ -590,7 +674,8 @@ mod tests {
         drop(rt);
 
         // 重启:review 结论持久化。
-        let rt2 = SqliteTeamRuntime::open(&db, subagent(&ctx), ctx.clone()).expect("reopen");
+        let rt2 =
+            SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("reopen");
         assert_eq!(
             rt2.tasks("t1").expect("tasks")[0].status,
             TeamTaskStatus::Failed
@@ -605,7 +690,8 @@ mod tests {
         let root = std::env::temp_dir().join(format!("ah-sqlite-dep-{}", std::process::id()));
         let (ctx, effects) = build_ctx(&root);
         let db = root.join("teams.db");
-        let rt = SqliteTeamRuntime::open(&db, subagent(&ctx), ctx.clone()).expect("open");
+        let rt =
+            SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("open");
 
         rt.create_team(
             TeamSpec {
@@ -633,7 +719,8 @@ mod tests {
         let root = std::env::temp_dir().join(format!("ah-sqlite-run-{}", std::process::id()));
         let (ctx, effects) = build_ctx(&root);
         let db = root.join("teams.db");
-        let rt = SqliteTeamRuntime::open(&db, subagent(&ctx), ctx.clone()).expect("open");
+        let rt =
+            SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("open");
 
         rt.create_team(
             TeamSpec {
@@ -652,6 +739,40 @@ mod tests {
                 .unwrap_or_default()
                 .contains("mock final answer")
         );
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn sqlite_messaging_persists_via_queue() {
+        let root = std::env::temp_dir().join(format!("ah-sqlite-msg-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let db = root.join("teams.db");
+        let rt =
+            SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("open");
+
+        rt.create_team(
+            TeamSpec {
+                id: "t1".into(),
+                name: "Alpha".into(),
+            },
+            members(),
+        )
+        .expect("create");
+        rt.send_message("t1", "m1", Some("m2"), "persist me")
+            .expect("msg");
+
+        // 不存在的团队报错。
+        assert!(rt.send_message("nope", "m1", None, "x").is_err());
+        drop(rt);
+
+        // 重启:消息经 queue 文件持久化,仍可读取。
+        let rt2 =
+            SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("reopen");
+        let messages = rt2.messages("t1").expect("messages");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "persist me");
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
