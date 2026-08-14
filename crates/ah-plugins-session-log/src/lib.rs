@@ -194,6 +194,10 @@ impl SessionManagerImpl {
     fn path_for(&self, id: &str) -> PathBuf {
         self.dir.join(format!("{id}.jsonl"))
     }
+
+    fn checkpoint_path(&self, name: &str) -> PathBuf {
+        self.dir.join("checkpoints").join(format!("{name}.jsonl"))
+    }
 }
 
 impl Seam for SessionManagerImpl {}
@@ -220,6 +224,37 @@ impl SessionManager for SessionManagerImpl {
             return Err(SessionError(format!("session not found: {from}")));
         }
         std::fs::copy(&src, &dst).map_err(|e| SessionError(format!("fork copy failed: {e}")))?;
+        let log = JsonlSessionLog::open(dst, self.ctx.clone())?;
+        Ok(std::sync::Arc::new(log) as std::sync::Arc<dyn SessionLog>)
+    }
+
+    fn checkpoint(&self, id: &str, name: &str) -> Result<(), SessionError> {
+        let src = self.path_for(id);
+        if !src.exists() {
+            return Err(SessionError(format!("session not found: {id}")));
+        }
+        let dst = self.checkpoint_path(name);
+        if let Some(parent) = dst.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| SessionError(format!("create checkpoints dir failed: {e}")))?;
+        }
+        std::fs::copy(&src, &dst)
+            .map_err(|e| SessionError(format!("checkpoint copy failed: {e}")))?;
+        Ok(())
+    }
+
+    fn restore(
+        &self,
+        id: &str,
+        name: &str,
+    ) -> Result<std::sync::Arc<dyn SessionLog>, SessionError> {
+        let src = self.checkpoint_path(name);
+        if !src.exists() {
+            return Err(SessionError(format!("checkpoint not found: {name}")));
+        }
+        let dst = self.path_for(id);
+        // 以快照内容替换会话日志(日志即真相:回滚到检查点时刻)。
+        std::fs::copy(&src, &dst).map_err(|e| SessionError(format!("restore copy failed: {e}")))?;
         let log = JsonlSessionLog::open(dst, self.ctx.clone())?;
         Ok(std::sync::Arc::new(log) as std::sync::Arc<dyn SessionLog>)
     }
@@ -402,6 +437,45 @@ mod tests {
 
         // open 不存在报错
         assert!(manager.open("missing").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn checkpoint_and_restore_rolls_back_session() {
+        let dir = std::env::temp_dir().join(format!("ah-session-cp-{}", std::process::id()));
+        let manager = SessionManagerImpl::new(&dir, Context::new()).expect("manager");
+
+        let log = manager.create("s1").expect("create");
+        log.append(SessionEventKind::User, json!({ "content": "one" }))
+            .expect("1");
+        log.append(SessionEventKind::Assistant, json!({ "content": "two" }))
+            .expect("2");
+        manager.checkpoint("s1", "cp1").expect("checkpoint");
+
+        // 检查点之后继续写入。
+        log.append(SessionEventKind::User, json!({ "content": "three" }))
+            .expect("3");
+        assert_eq!(manager.open("s1").expect("open").events().len(), 3);
+
+        // 从检查点恢复:回到 2 条事件,seq 从 2 继续。
+        let restored = manager.restore("s1", "cp1").expect("restore");
+        let events = restored.events();
+        assert_eq!(events.len(), 2, "rolled back to checkpoint");
+        assert_eq!(events[0].payload["content"], "one");
+        restored
+            .append(
+                SessionEventKind::Assistant,
+                json!({ "content": "after restore" }),
+            )
+            .expect("append after restore");
+        let events = restored.events();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[2].seq, 2, "seq continues from checkpoint");
+
+        // 不存在的检查点报错。
+        assert!(manager.restore("s1", "missing").is_err());
+        assert!(manager.checkpoint("missing", "cp2").is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

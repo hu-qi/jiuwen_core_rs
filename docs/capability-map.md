@@ -63,7 +63,7 @@
 | controller(57 类) | 同上 | 任务调度/执行器/意图识别 | 真实调度与冲突处理
 | operator(8 类) | 同上 | LLM/Tool/Memory/Skill 算子 | 算子真实调用(现为回显)
 | runner(46 类) | ah-plugins-core-runner | 回调链、资源管理、取消、超时 | 回调链对等
-| session(38 类) | `sessions` seam + ah-plugins-session-log | 检查点、VCS/fork/restore、tracer | append-only 日志重建
+| session(38 类) | `sessions` seam + ah-plugins-session-log | 检查点、VCS/fork/restore、tracer | append-only 日志重建 + fork/checkpoint/restore 已落地(本回合) |
 | context_engine(72 文件) | `context` seam | 压缩、offload、token 预算、reinjection | 已实现(ah-plugins-context:预算组装/摘录压缩+LLM 总结/offload JSONL/reinject);精确 tokenizer 与向量化留待后续 |
 | memory(104 文件) | `memory` seam + ah-plugins-memory-* | graph/lite/coding 记忆、外部 provider | 记忆持久化 + provider 真实接入
 | retrieval(84 文件) | `retrieval` seam | indexing/embedding/reranker/vector store/retriever | BM25 + 本地确定性向量(哈希 n-gram TF + 余弦)已落地;reranker 与外部模型 embedding 留待后续 |
