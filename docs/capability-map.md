@@ -80,7 +80,7 @@
 | rails(143/57 文件) | 事件监听器(waterfall) | 规划/完成/心跳/重试/LSP/MCP/渐进工具 等 | 挂载点已就绪(tools/pre-execute);ShellGuard + PathGuard + ToolBudget(ah-plugins-rails)已落地;其余 rail 按需补充 |
 | subagents(24/8 文件) | `subagents` seam | code/research/plan/browser/mobile/verify | 真实子代理运行时(现为 Unsupported/Mock)
 | cli(113/19 文件) | ah-plugins-harness-cli | REPL、会话存储、渲染 | 现为 CliUiAdapter::unsupported
-| workspace/goal/manifest/resources/schema/security/prompts/kv_cache/lsp | 各插件 | 对应功能 | 逐模块对等
+| workspace/goal/manifest(本回合已落地:workspace.json + 目标状态机)/ resources/schema/security/prompts/kv_cache/lsp | 各插件 | 对应功能 | 逐模块对等;workspace 已实现 |
 
 ### 2.3 agent_teams(1104 符号)
 

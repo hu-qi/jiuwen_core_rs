@@ -15,6 +15,7 @@
 # - ah-plugins-store: 真实文件后端 store(KV + message)
 # - ah-plugins-prompt: 真实版本化 prompt 注册表
 # - ah-plugins-queue: 真实文件后端消息队列(日志+游标)
+# - ah-plugins-workspace: 真实工作区清单(workspace.json + 目标状态机)
 # - ah-plugins-mcp: 真实 MCP stdio 客户端(懒 spawn,首次调用时拉起子进程)
 # - ah-plugins-credentials: 真实凭据引用(环境变量 provider,只读)
 # - ah-plugins-telemetry: 真实 telemetry(span 记录 + JSONL 导出,OTLP 留待后续)
@@ -26,4 +27,4 @@ name = "prod"
 
 [[bundles]]
 id = "real"
-plugins = ["ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-context", "ah-plugins-store", "ah-plugins-prompt", "ah-plugins-queue", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-context", "ah-plugins-store", "ah-plugins-prompt", "ah-plugins-queue", "ah-plugins-workspace", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-agent-loop"]

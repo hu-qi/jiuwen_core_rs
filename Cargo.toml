@@ -7,6 +7,7 @@ members = [
     "crates/ah-plugins-store",
     "crates/ah-plugins-prompt",
     "crates/ah-plugins-queue",
+    "crates/ah-plugins-workspace",
     "crates/ah-plugins-mock",
     "crates/ah-plugins-tools",
     "crates/ah-plugins-sysop",
@@ -40,6 +41,7 @@ ah-plugins-context = { path = "crates/ah-plugins-context" }
 ah-plugins-store = { path = "crates/ah-plugins-store" }
 ah-plugins-prompt = { path = "crates/ah-plugins-prompt" }
 ah-plugins-queue = { path = "crates/ah-plugins-queue" }
+ah-plugins-workspace = { path = "crates/ah-plugins-workspace" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }
 ah-plugins-tools = { path = "crates/ah-plugins-tools" }
 ah-plugins-sysop = { path = "crates/ah-plugins-sysop" }

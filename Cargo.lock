@@ -30,6 +30,7 @@ dependencies = [
  "ah-plugins-telemetry",
  "ah-plugins-tools",
  "ah-plugins-workflow",
+ "ah-plugins-workspace",
  "serde_json",
  "tokio",
 ]
@@ -335,6 +336,15 @@ dependencies = [
  "futures-util",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-workspace"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]

@@ -33,6 +33,7 @@ use ah_plugins_teams::{SqliteTeamsPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_tools::ToolsPlugin;
 use ah_plugins_workflow::WorkflowPlugin;
+use ah_plugins_workspace::WorkspacePlugin;
 
 /// 插件目录:名称 → 插件对象。
 ///
@@ -101,6 +102,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-queue",
             Arc::new(QueuePlugin::new(workspace_root.join("queue"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-workspace",
+            Arc::new(WorkspacePlugin::new(workspace_root)) as DynPlugin,
         ),
         (
             "ah-plugins-session-log",

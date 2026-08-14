@@ -36,6 +36,7 @@ pub mod teams;
 pub mod telemetry;
 pub mod tools;
 pub mod workflow;
+pub mod workspace;
 
 pub use effect::Effect;
 
@@ -85,5 +86,8 @@ pub mod prelude {
     pub use crate::tools::{Tool, ToolError, ToolRegistry};
     pub use crate::workflow::{
         EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError, WorkflowOutput, WorkflowSpec,
+    };
+    pub use crate::workspace::{
+        Goal, GoalStatus, WorkspaceError, WorkspaceManifest, WorkspaceService,
     };
 }

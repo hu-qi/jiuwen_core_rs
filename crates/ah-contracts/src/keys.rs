@@ -71,3 +71,6 @@ pub const PROMPT: ServiceKey = ServiceKey::new("prompt");
 
 /// `queue` seam 服务键(消息队列)。
 pub const QUEUE: ServiceKey = ServiceKey::new("queue");
+
+/// `workspace` seam 服务键(工作区清单与目标)。
+pub const WORKSPACE: ServiceKey = ServiceKey::new("workspace");
