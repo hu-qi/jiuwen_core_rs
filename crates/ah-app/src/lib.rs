@@ -34,6 +34,7 @@ use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_tools::ToolsPlugin;
+use ah_plugins_web::WebPlugin;
 use ah_plugins_workflow::WorkflowPlugin;
 use ah_plugins_workspace::WorkspacePlugin;
 
@@ -117,6 +118,7 @@ pub fn plugin_catalog(
             "ah-plugins-code",
             Arc::new(CodePlugin::new(workspace_root.join("scratch"))) as DynPlugin,
         ),
+        ("ah-plugins-web", Arc::new(WebPlugin) as DynPlugin),
         (
             "ah-plugins-sandbox-rail",
             Arc::new(SandboxRailPlugin) as DynPlugin,

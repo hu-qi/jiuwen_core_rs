@@ -29,6 +29,7 @@ ah-app ──> ah-hub ──> ah-contracts
    ├─> ah-plugins-workspace (清单/目标状态机) ──> ah-hub, ah-contracts
    ├─> ah-plugins-sandbox (策略沙箱 + rail)   ──> ah-hub, ah-contracts
    ├─> ah-plugins-code (python3 子进程执行)  ──> ah-hub, ah-contracts
+   ├─> ah-plugins-web (ureq HTTP 客户端)     ──> ah-hub, ah-contracts
                                             └─dev-dep─> tokio process/time(测试)
                                             └─dev-dep─> ah-plugins-tools/sysop(测试)
                                             └─dev-dep─> ah-plugins-mock/tools/sysop/session-log(测试)

@@ -80,3 +80,6 @@ pub const SANDBOX: ServiceKey = ServiceKey::new("sandbox");
 
 /// `code` seam 服务键(代码执行)。
 pub const CODE: ServiceKey = ServiceKey::new("code");
+
+/// `web` seam 服务键(HTTP 客户端)。
+pub const WEB: ServiceKey = ServiceKey::new("web");
