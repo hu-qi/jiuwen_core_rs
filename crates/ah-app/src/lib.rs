@@ -12,6 +12,7 @@ use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
 use ah_plugins_agent_loop::AgentLoopPlugin;
+use ah_plugins_context::ContextPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
 use ah_plugins_mcp::McpPlugin;
@@ -69,6 +70,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-rsi",
             Arc::new(RsiPlugin::new(workspace_root.join("rsi"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-context",
+            Arc::new(ContextPlugin::new(workspace_root.join("context"))) as DynPlugin,
         ),
         (
             "ah-plugins-session-log",

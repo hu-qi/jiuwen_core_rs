@@ -33,6 +33,7 @@ ah-plugins-subagent = { workspace = true }
 ah-plugins-teams = { workspace = true }
 ah-plugins-evolving = { workspace = true }
 ah-plugins-rsi = { workspace = true }
+ah-plugins-context = { workspace = true }
 ah-plugins-telemetry = { workspace = true }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

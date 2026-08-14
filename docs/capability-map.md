@@ -64,7 +64,7 @@
 | operator(8 类) | 同上 | LLM/Tool/Memory/Skill 算子 | 算子真实调用(现为回显)
 | runner(46 类) | ah-plugins-core-runner | 回调链、资源管理、取消、超时 | 回调链对等
 | session(38 类) | `sessions` seam + ah-plugins-session-log | 检查点、VCS/fork/restore、tracer | append-only 日志重建
-| context_engine(72 文件) | `context` seam | 压缩、offload、token 预算、reinjection | 压缩语义对等(forked 家族)
+| context_engine(72 文件) | `context` seam | 压缩、offload、token 预算、reinjection | 已实现(ah-plugins-context:预算组装/摘录压缩+LLM 总结/offload JSONL/reinject);精确 tokenizer 与向量化留待后续 |
 | memory(104 文件) | `memory` seam + ah-plugins-memory-* | graph/lite/coding 记忆、外部 provider | 记忆持久化 + provider 真实接入
 | retrieval(84 文件) | `retrieval` seam | indexing/embedding/reranker/vector store/retriever | 真实向量库与解析链
 | security(20 类) | `security` seam | guardrail 后端、sanitizer、风险组合 | 规则+LLM 后端

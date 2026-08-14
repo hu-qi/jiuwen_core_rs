@@ -56,3 +56,6 @@ pub const EVOLVING: ServiceKey = ServiceKey::new("evolving");
 
 /// `rsi` seam 服务键(递归自改进管线)。
 pub const RSI: ServiceKey = ServiceKey::new("rsi");
+
+/// `context` seam 服务键(上下文组装与压缩)。
+pub const CONTEXT: ServiceKey = ServiceKey::new("context");
