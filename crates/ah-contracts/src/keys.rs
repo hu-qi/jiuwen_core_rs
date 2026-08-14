@@ -24,3 +24,6 @@ pub const SESSIONS: ServiceKey = ServiceKey::new("sessions");
 
 /// `session-manager` seam 服务键(多会话管理)。
 pub const SESSION_MANAGER: ServiceKey = ServiceKey::new("session-manager");
+
+/// `workflow` seam 服务键(工作流引擎)。
+pub const WORKFLOW: ServiceKey = ServiceKey::new("workflow");

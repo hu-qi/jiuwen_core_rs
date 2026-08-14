@@ -28,3 +28,4 @@
 2. 按语义选模式:观察 emit / 顺序副作用 serial / 扇出 parallel / 决策链 waterfall;
 3. waterfall 事件必须文档标注语义(是否允许短路、短路含义);
 4. 新增事件在本表登记后,才允许在生产代码中发布。
+| workflow/node | emit | WorkflowEngineImpl.execute_node | 遥测、审计 | **done(已实现)** |

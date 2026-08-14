@@ -3,10 +3,11 @@
 # - ah-plugins-tools: 真实工具注册表(含工具执行管线)
 # - ah-plugins-sysop: 真实 fs/shell 执行(真实副作用)
 # - ah-plugins-rails: 真实 rails(ShellGuard)
-# - ah-plugins-session-log: 真实会话事件日志(JSONL)
+# - ah-plugins-session-log: 真实会话事件日志(JSONL + 多会话)
+# - ah-plugins-workflow: 真实工作流引擎
 # - ah-plugins-agent-loop: 真实 ReAct 循环(日志驱动)
 name = "dev"
 
 [[bundles]]
 id = "boot"
-plugins = ["ah-plugins-mock", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-session-log", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-mock", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-agent-loop"]

@@ -15,6 +15,7 @@ dependencies = [
  "ah-plugins-session-log",
  "ah-plugins-sysop",
  "ah-plugins-tools",
+ "ah-plugins-workflow",
  "serde_json",
  "tokio",
 ]
@@ -121,6 +122,20 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-workflow"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-mock",
+ "ah-plugins-sysop",
+ "ah-plugins-tools",
  "async-trait",
  "serde_json",
  "tokio",

@@ -4,11 +4,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use ah_contracts::fs::FsProvider;
-use ah_contracts::keys::{AGENT_LOOP, FS, LLM, SESSION_MANAGER, SHELL, TOOLS};
+use ah_contracts::keys::{AGENT_LOOP, FS, LLM, SESSION_MANAGER, SHELL, TOOLS, WORKFLOW};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::session::SessionManager;
 use ah_contracts::shell::ShellProvider;
 use ah_contracts::tools::ToolRegistry;
+use ah_contracts::workflow::{EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowSpec};
 use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
@@ -19,6 +20,7 @@ use ah_plugins_rails::ShellGuardRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_tools::ToolsPlugin;
+use ah_plugins_workflow::WorkflowPlugin;
 use serde_json::json;
 
 /// 插件目录:名称 → 插件对象。
@@ -41,6 +43,7 @@ fn plugin_catalog(
             "ah-plugins-rails",
             Arc::new(ShellGuardRailPlugin) as DynPlugin,
         ),
+        ("ah-plugins-workflow", Arc::new(WorkflowPlugin) as DynPlugin),
         (
             "ah-plugins-session-log",
             Arc::new(SessionLogPlugin::new(session_path, session_dir)) as DynPlugin,
@@ -223,6 +226,65 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "[session] task-b projected messages: {}",
         task_b.derive_messages().len()
     );
+
+    // workflow:真实工作流(Start -> Tool(add) -> Llm(summarize) -> End)。
+    let engine = ctx
+        .service::<dyn WorkflowEngine>(&WORKFLOW)
+        .ok_or("workflow seam not registered")?;
+    let spec = WorkflowSpec {
+        id: "demo-pipeline".to_string(),
+        nodes: vec![
+            NodeSpec {
+                id: "start".into(),
+                kind: NodeKind::Start,
+                config: serde_json::json!({}),
+            },
+            NodeSpec {
+                id: "write".into(),
+                kind: NodeKind::Tool,
+                config: serde_json::json!({ "tool": "write_file", "args": { "path": "computed.txt", "content": "42" } }),
+            },
+            NodeSpec {
+                id: "llm".into(),
+                kind: NodeKind::Llm,
+                config: serde_json::json!({ "prompt": "summarize the computation" }),
+            },
+            NodeSpec {
+                id: "end".into(),
+                kind: NodeKind::End,
+                config: serde_json::json!({}),
+            },
+        ],
+        edges: vec![
+            EdgeSpec {
+                from: "start".into(),
+                to: "write".into(),
+                condition: None,
+            },
+            EdgeSpec {
+                from: "write".into(),
+                to: "llm".into(),
+                condition: None,
+            },
+            EdgeSpec {
+                from: "llm".into(),
+                to: "end".into(),
+                condition: None,
+            },
+        ],
+    };
+    let wf = engine
+        .run(&spec, serde_json::json!({}))
+        .await
+        .expect("workflow run");
+    println!("[workflow] executed: {}", wf.executed.join(" -> "));
+    println!(
+        "[workflow] real side effect: computed.txt exists = {}",
+        ctx.service::<dyn ah_contracts::fs::FsProvider>(&ah_contracts::keys::FS)
+            .map(|fs| fs.exists("computed.txt"))
+            .unwrap_or(false)
+    );
+    println!("[workflow] output: {}", wf.output);
 
     Ok(())
 }
