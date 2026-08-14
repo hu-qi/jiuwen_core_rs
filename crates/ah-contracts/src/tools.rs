@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::effect::Effect;
 use crate::seam::Seam;
@@ -31,6 +31,11 @@ pub trait Tool: Send + Sync + 'static {
 
     /// 工具描述(进入 prompt 组装)。
     fn description(&self) -> &'static str;
+
+    /// 参数 JSON schema(进入模型请求的 tools 字段);默认宽松 object。
+    fn parameters(&self) -> Value {
+        json!({ "type": "object" })
+    }
 
     /// 执行工具,返回 JSON 结果。
     async fn invoke(&self, arguments: Value) -> Result<Value, ToolError>;

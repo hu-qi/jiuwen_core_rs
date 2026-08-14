@@ -15,3 +15,6 @@ pub const FS: ServiceKey = ServiceKey::new("fs");
 
 /// `shell` seam 服务键。
 pub const SHELL: ServiceKey = ServiceKey::new("shell");
+
+/// `agent-loop` 服务键(agent 循环)。
+pub const AGENT_LOOP: ServiceKey = ServiceKey::new("agent-loop");

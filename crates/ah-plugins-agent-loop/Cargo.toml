@@ -1,9 +1,9 @@
 [package]
-name = "ah-plugins-mock"
+name = "ah-plugins-agent-loop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Mock LLM stub for dev boot only (no credentials). Not a deliverable: the real LLM provider is pending."
+description = "Real ReAct agent loop driving the llm and tools seams"
 
 [dependencies]
 ah-contracts = { workspace = true }
@@ -11,3 +11,8 @@ ah-hub = { workspace = true }
 async-trait = "0.1"
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "macros"] }
+
+[dev-dependencies]
+ah-plugins-mock = { workspace = true }
+ah-plugins-sysop = { workspace = true }
+ah-plugins-tools = { workspace = true }

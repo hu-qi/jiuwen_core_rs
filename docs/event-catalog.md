@@ -13,7 +13,8 @@
 | --- | --- | --- | --- | --- |
 | session/step | emit | agent 循环 | 日志、遥测、UI | 规划(会话子系统)
 | session/event | emit | 会话存储 | 投影、回放、持久化 | 规划(日志即真相)
-| agent/pre-step | waterfall | agent 循环 | rails、上下文注入 | 规划(agent-loop)
+| agent/step | emit | AgentLoop | 遥测、日志、UI | **done(已实现)**
+| agent/pre-step | waterfall | agent 循环 | rails、上下文注入 | 规划
 | agent/request | waterfall | agent 循环 | 模型适配、拦截 | 规划
 | tools/pre-execute | waterfall | 工具执行管线 | 策略、鉴权、超时 | 规划(tools seam)
 | tools/post-execute | serial | 工具执行管线 | 遥测、审计 | 规划

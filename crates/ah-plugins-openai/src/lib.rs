@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use ah_contracts::keys::LLM;
 use ah_contracts::llm::{
-    ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse,
+    ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse, ToolCall,
 };
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
@@ -56,16 +56,50 @@ struct WireRequest {
     model: String,
     messages: Vec<WireMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<WireTool>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct WireMessage {
     role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<WireToolCall>>,
+}
+
+#[derive(Serialize)]
+struct WireTool {
+    #[serde(rename = "type")]
+    kind: String,
+    function: WireFunction,
+}
+
+#[derive(Serialize)]
+struct WireFunction {
+    name: String,
+    description: String,
+    parameters: serde_json::Value,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct WireToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    kind: String,
+    function: WireFunctionCall,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct WireFunctionCall {
+    name: String,
+    arguments: String,
 }
 
 #[derive(Deserialize)]
@@ -134,8 +168,40 @@ impl ModelProvider for OpenAiModelProvider {
                 .map(|message: &ChatMessage| WireMessage {
                     role: wire_role(message.role).to_string(),
                     content: Some(message.content.clone()),
+                    tool_call_id: message.tool_call_id.clone(),
+                    tool_calls: message.tool_calls.as_ref().map(|calls| {
+                        calls
+                            .iter()
+                            .map(|call| WireToolCall {
+                                id: call.id.clone(),
+                                kind: "function".to_string(),
+                                function: WireFunctionCall {
+                                    name: call.name.clone(),
+                                    arguments: call.arguments.to_string(),
+                                },
+                            })
+                            .collect()
+                    }),
                 })
                 .collect(),
+            tools: if request.tools.is_empty() {
+                None
+            } else {
+                Some(
+                    request
+                        .tools
+                        .iter()
+                        .map(|schema| WireTool {
+                            kind: "function".to_string(),
+                            function: WireFunction {
+                                name: schema.name.clone(),
+                                description: schema.description.clone(),
+                                parameters: schema.parameters.clone(),
+                            },
+                        })
+                        .collect(),
+                )
+            },
             temperature: request.temperature,
             stream: None,
         };
@@ -162,15 +228,31 @@ impl ModelProvider for OpenAiModelProvider {
 
         let parsed: WireResponse = serde_json::from_str(&body)
             .map_err(|e| ModelError(format!("invalid provider response: {e}")))?;
-        let content = parsed
-            .choices
-            .into_iter()
-            .next()
-            .and_then(|choice| choice.message)
-            .and_then(|message| message.content)
+        let message = parsed.choices.into_iter().next().and_then(|c| c.message);
+        let content = message
+            .as_ref()
+            .and_then(|m| m.content.clone())
+            .unwrap_or_default();
+        let tool_calls = message
+            .as_ref()
+            .and_then(|m| m.tool_calls.clone())
+            .map(|calls| {
+                calls
+                    .into_iter()
+                    .map(|call| ToolCall {
+                        id: call.id,
+                        name: call.function.name,
+                        arguments: serde_json::from_str(&call.function.arguments)
+                            .unwrap_or(serde_json::Value::Null),
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
 
-        Ok(ModelResponse { content })
+        Ok(ModelResponse {
+            content,
+            tool_calls,
+        })
     }
 }
 

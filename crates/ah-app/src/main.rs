@@ -3,13 +3,14 @@
 use std::sync::Arc;
 
 use ah_contracts::fs::FsProvider;
-use ah_contracts::keys::{FS, LLM, SHELL, TOOLS};
+use ah_contracts::keys::{AGENT_LOOP, FS, LLM, SHELL, TOOLS};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::shell::ShellProvider;
 use ah_contracts::tools::ToolRegistry;
 use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
+use ah_plugins_agent_loop::{AgentLoop, AgentLoopPlugin, AgentStep};
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_sysop::SysopPlugin;
@@ -27,6 +28,10 @@ fn plugin_catalog(workspace_root: &std::path::Path) -> Vec<(&'static str, DynPlu
         (
             "ah-plugins-sysop",
             Arc::new(SysopPlugin::new(workspace_root)) as DynPlugin,
+        ),
+        (
+            "ah-plugins-agent-loop",
+            Arc::new(AgentLoopPlugin::default()) as DynPlugin,
         ),
     ];
     if let Some(plugin) = OpenAiPlugin::from_env() {
@@ -133,6 +138,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "[tools] write_file -> read_file roundtrip: {}",
         read["content"]
     );
+
+    // agent-loop:真实 ReAct 循环(工具执行真实;模型 dev=桩 / prod=真实)。
+    let _step_listener = ctx.on::<AgentStep>(|step| {
+        println!(
+            "[agent] step {}: tool_calls={} done={}",
+            step.iteration, step.tool_calls, step.done
+        );
+    });
+    let agent = ctx
+        .service::<AgentLoop>(&AGENT_LOOP)
+        .ok_or("agent-loop service not registered")?;
+    let answer = agent.run("explore the workspace").await?;
+    println!("[agent] answer: {answer}");
 
     Ok(())
 }

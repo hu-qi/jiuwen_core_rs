@@ -94,6 +94,7 @@ mod tests {
         async fn chat(&self, _request: ModelRequest) -> Result<ModelResponse, ModelError> {
             Ok(ModelResponse {
                 content: "fake reply".to_string(),
+                tool_calls: Vec::new(),
             })
         }
     }

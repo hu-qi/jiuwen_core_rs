@@ -2,9 +2,10 @@
 # - ah-plugins-tools: 真实工具注册表
 # - ah-plugins-sysop: 真实 fs/shell 执行
 # - ah-plugins-openai: 真实 LLM provider(需 OPENAI_API_KEY;缺失时挂载失败并显式报错)
+# - ah-plugins-agent-loop: 真实 ReAct 循环
 # 无 mock 插件;mock 门禁校验通过。
 name = "prod"
 
 [[bundles]]
 id = "real"
-plugins = ["ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-openai"]
+plugins = ["ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-openai", "ah-plugins-agent-loop"]

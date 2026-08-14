@@ -45,10 +45,11 @@
 
 ## 当前实现状态(截至框架提交)
 
-- 已实现:ah-hub(ServiceRegistry / EventBus 四分发 / Plugin+拓扑挂载 / Profile)、
-  ah-contracts(ServiceKey / Event / Seam / Effect / llm+tools 两个 seam)、
-  ah-plugins-mock(MockModelProvider + MockToolRegistry + Echo/Add 工具)、
-  ah-app(profile 启动端到端,同时消费 llm 与 tools seam)。
+- 已实现:ah-hub 内核;ah-contracts(llm/tools/fs/shell 四个 seam + agent-loop 服务);
+  ah-plugins-tools(真实工具注册表);ah-plugins-sysop(真实受限文件系统与 shell 执行);
+  ah-plugins-openai(真实 LLM HTTP provider);ah-plugins-agent-loop(真实 ReAct 循环);
+  ah-app(端到端:真实 fs/shell/tools/agent 循环副作用演示)。
+- 仅剩一个 boot 桩:ah-plugins-mock(llm,真实 provider 需凭据时仍保留占位)。
 - 规划:其余 seam 与插件(见 capability-map.md)。
 - 本仓库禁止用文档声称完成度;完成度只以代码证据(测试 + 真实路径)为准。
 

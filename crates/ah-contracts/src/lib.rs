@@ -26,9 +26,10 @@ pub mod prelude {
     pub use crate::effect::Effect;
     pub use crate::event::Event;
     pub use crate::fs::{FsError, FsProvider};
-    pub use crate::keys::{FS, LLM, SHELL, TOOLS};
+    pub use crate::keys::{AGENT_LOOP, FS, LLM, SHELL, TOOLS};
     pub use crate::llm::{
-        ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse,
+        ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse, ToolCall,
+        ToolSchema,
     };
     pub use crate::seam::Seam;
     pub use crate::service::ServiceKey;

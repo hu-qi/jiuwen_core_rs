@@ -27,7 +27,15 @@ impl Tool for ReadFileTool {
     }
 
     fn description(&self) -> &'static str {
-        "read a file inside the workspace; arguments: {path}"
+        "read a file inside the workspace"
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": { "path": { "type": "string" } },
+            "required": ["path"],
+        })
     }
 
     async fn invoke(&self, arguments: Value) -> Result<Value, ToolError> {
@@ -62,7 +70,18 @@ impl Tool for WriteFileTool {
     }
 
     fn description(&self) -> &'static str {
-        "write a file inside the workspace; arguments: {path, content}"
+        "write a file inside the workspace"
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "path": { "type": "string" },
+                "content": { "type": "string" },
+            },
+            "required": ["path", "content"],
+        })
     }
 
     async fn invoke(&self, arguments: Value) -> Result<Value, ToolError> {
@@ -99,7 +118,14 @@ impl Tool for ListDirTool {
     }
 
     fn description(&self) -> &'static str {
-        "list entries inside the workspace; arguments: {path}"
+        "list entries inside the workspace"
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": { "path": { "type": "string" } },
+        })
     }
 
     async fn invoke(&self, arguments: Value) -> Result<Value, ToolError> {
@@ -130,7 +156,19 @@ impl Tool for ShellTool {
     }
 
     fn description(&self) -> &'static str {
-        "run a command in the workspace; arguments: {command, args?, timeout_ms?}"
+        "run a command in the workspace"
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "command": { "type": "string" },
+                "args": { "type": "array", "items": { "type": "string" } },
+                "timeout_ms": { "type": "integer" },
+            },
+            "required": ["command"],
+        })
     }
 
     async fn invoke(&self, arguments: Value) -> Result<Value, ToolError> {
