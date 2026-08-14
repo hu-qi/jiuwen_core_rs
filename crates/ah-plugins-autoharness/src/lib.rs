@@ -308,7 +308,9 @@ mod tests {
                 &session_dir,
             )),
             StdArc::new(ah_plugins_subagent::SubagentPlugin),
-            StdArc::new(ah_plugins_evolving::EvolvingPlugin),
+            StdArc::new(ah_plugins_evolving::EvolvingPlugin::new(
+                root.join("evolving"),
+            )),
             StdArc::new(ah_plugins_rsi::RsiPlugin::new(root.join("rsi"))),
             StdArc::new(ah_plugins_git::GitPlugin),
             StdArc::new(ah_plugins_ci::CiPlugin),

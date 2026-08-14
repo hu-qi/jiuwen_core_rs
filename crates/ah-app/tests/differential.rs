@@ -269,7 +269,9 @@ async fn reference_evolving_evaluation() {
     let root = root_for("evolving");
     let ctx = Context::new();
     let mut plugins = base_plugins(&root);
-    plugins.push(Arc::new(ah_plugins_evolving::EvolvingPlugin));
+    plugins.push(Arc::new(ah_plugins_evolving::EvolvingPlugin::new(
+        root.join("evolving"),
+    )));
     let effects = mount(&ctx, plugins);
     let evolving = ctx
         .service::<dyn EvolvingRuntime>(&EVOLVING)

@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use ah_contracts::evolving::{
-    Evaluation, EvolvingError, EvolvingRuntime, Refinement, RefinementTarget, StepOutcome,
-    Trajectory, TrajectoryStep, Verdict,
+    Evaluation, EvolvingError, EvolvingRuntime, Experience, Refinement, RefinementTarget,
+    StepOutcome, Trajectory, TrajectoryStep, Verdict,
 };
 use ah_contracts::keys::{EVOLVING, LLM, SESSION_MANAGER};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
@@ -29,12 +29,26 @@ use serde_json::{Value, json};
 pub struct EvolvingRuntimeImpl {
     llm: Arc<dyn ModelProvider>,
     manager: Arc<dyn SessionManager>,
+    /// 经验持久化目录(experiences.jsonl)。
+    experience_dir: std::path::PathBuf,
 }
 
 impl EvolvingRuntimeImpl {
-    /// 构造运行时(需要 LLM 与 SessionManager seam)。
-    pub fn new(llm: Arc<dyn ModelProvider>, manager: Arc<dyn SessionManager>) -> Self {
-        Self { llm, manager }
+    /// 构造运行时(需要 LLM 与 SessionManager seam;经验写入 dir)。
+    pub fn new(
+        llm: Arc<dyn ModelProvider>,
+        manager: Arc<dyn SessionManager>,
+        experience_dir: impl Into<std::path::PathBuf>,
+    ) -> Self {
+        Self {
+            llm,
+            manager,
+            experience_dir: experience_dir.into(),
+        }
+    }
+
+    fn experience_path(&self) -> std::path::PathBuf {
+        self.experience_dir.join("experiences.jsonl")
     }
 }
 
@@ -481,10 +495,61 @@ impl EvolvingRuntime for EvolvingRuntimeImpl {
 
         Ok(refinements)
     }
+
+    fn save_experience(&self, experience: &Experience) -> Result<(), EvolvingError> {
+        std::fs::create_dir_all(&self.experience_dir)
+            .map_err(|e| EvolvingError(format!("create experience dir: {e}")))?;
+        let line = serde_json::to_string(experience)
+            .map_err(|e| EvolvingError(format!("serialize experience: {e}")))?;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.experience_path())
+            .map_err(|e| EvolvingError(format!("open experience file: {e}")))?;
+        use std::io::Write;
+        writeln!(file, "{line}").map_err(|e| EvolvingError(format!("append experience: {e}")))?;
+        Ok(())
+    }
+
+    fn load_experiences(&self) -> Result<Vec<Experience>, EvolvingError> {
+        let path = self.experience_path();
+        if !path.exists() {
+            return Ok(vec![]);
+        }
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| EvolvingError(format!("read experiences: {e}")))?;
+        let mut experiences = Vec::new();
+        for line in text.lines() {
+            if let Ok(experience) = serde_json::from_str::<Experience>(line) {
+                experiences.push(experience);
+            }
+        }
+        Ok(experiences)
+    }
+
+    fn search_experiences(&self, query: &str) -> Result<Vec<Experience>, EvolvingError> {
+        let query = query.to_lowercase();
+        Ok(self
+            .load_experiences()?
+            .into_iter()
+            .filter(|e| e.task.to_lowercase().contains(&query))
+            .collect())
+    }
 }
 
 /// evolving 插件:注入 LLM 与 SessionManager,提供 evolving seam。
-pub struct EvolvingPlugin;
+pub struct EvolvingPlugin {
+    experience_dir: std::path::PathBuf,
+}
+
+impl EvolvingPlugin {
+    /// 以经验目录创建插件。
+    pub fn new(experience_dir: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            experience_dir: experience_dir.into(),
+        }
+    }
+}
 
 impl Plugin for EvolvingPlugin {
     fn name(&self) -> &'static str {
@@ -512,7 +577,11 @@ impl Plugin for EvolvingPlugin {
                 plugin: self.name(),
                 message: "session-manager seam not registered".to_string(),
             })?;
-        let runtime: Arc<dyn EvolvingRuntime> = Arc::new(EvolvingRuntimeImpl::new(llm, manager));
+        let runtime: Arc<dyn EvolvingRuntime> = Arc::new(EvolvingRuntimeImpl::new(
+            llm,
+            manager,
+            self.experience_dir.clone(),
+        ));
         Ok(vec![ctx.register(EVOLVING, runtime)])
     }
 }
@@ -537,7 +606,7 @@ mod tests {
                 &default_path,
                 &session_dir,
             )),
-            StdArc::new(EvolvingPlugin),
+            StdArc::new(EvolvingPlugin::new(root.join("evolving"))),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
         (ctx, effects)
@@ -722,6 +791,82 @@ mod tests {
         assert!(refs.iter().any(|r| r.confidence >= 0.6));
 
         drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn experience_save_load_and_search() {
+        let root = std::env::temp_dir().join(format!("ah-evolve-exp-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let runtime = ctx
+            .service::<dyn EvolvingRuntime>(&EVOLVING)
+            .expect("evolving");
+
+        let experience = Experience {
+            id: "exp1".to_string(),
+            task: "list the workspace".to_string(),
+            verdict: Verdict::Pass,
+            score: 0.9,
+            issues: vec![],
+            saved_ms: 1234,
+        };
+        runtime.save_experience(&experience).expect("save");
+        runtime
+            .save_experience(&Experience {
+                id: "exp2".to_string(),
+                task: "quantum physics".to_string(),
+                verdict: Verdict::Fail,
+                score: 0.1,
+                issues: vec!["unfinished".to_string()],
+                saved_ms: 2345,
+            })
+            .expect("save2");
+
+        let all = runtime.load_experiences().expect("load");
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].id, "exp1");
+        assert_eq!(all[0].verdict, Verdict::Pass);
+
+        // 检索:按任务标题匹配。
+        let hits = runtime.search_experiences("workspace").expect("search");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, "exp1");
+        assert!(runtime.search_experiences("physics").expect("s2")[0].score < 0.5);
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn experience_persists_across_reopen() {
+        let root = std::env::temp_dir().join(format!("ah-evolve-re-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let runtime = ctx
+            .service::<dyn EvolvingRuntime>(&EVOLVING)
+            .expect("evolving");
+        runtime
+            .save_experience(&Experience {
+                id: "e1".to_string(),
+                task: "persist me".to_string(),
+                verdict: Verdict::NeedsWork,
+                score: 0.5,
+                issues: vec![],
+                saved_ms: 1,
+            })
+            .expect("save");
+        drop(effects);
+
+        // 重开:同一经验目录恢复。
+        let reopened = build_ctx(&root);
+        let runtime2 = reopened
+            .0
+            .service::<dyn EvolvingRuntime>(&EVOLVING)
+            .expect("evolving");
+        let all = runtime2.load_experiences().expect("load");
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].task, "persist me");
+
+        drop(reopened.1);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

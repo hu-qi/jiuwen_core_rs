@@ -386,7 +386,9 @@ mod tests {
                 &session_dir,
             )),
             StdArc::new(ah_plugins_subagent::SubagentPlugin),
-            StdArc::new(ah_plugins_evolving::EvolvingPlugin),
+            StdArc::new(ah_plugins_evolving::EvolvingPlugin::new(
+                root.join("evolving"),
+            )),
             StdArc::new(RsiPlugin::new(root.join("rsi"))),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");

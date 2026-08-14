@@ -94,7 +94,10 @@ pub fn plugin_catalog(
             "ah-plugins-teams-workflow",
             Arc::new(SwarmflowPlugin::new(workspace_root.join("swarm-journals"))) as DynPlugin,
         ),
-        ("ah-plugins-evolving", Arc::new(EvolvingPlugin) as DynPlugin),
+        (
+            "ah-plugins-evolving",
+            Arc::new(EvolvingPlugin::new(workspace_root.join("evolving"))) as DynPlugin,
+        ),
         (
             "ah-plugins-rsi",
             Arc::new(RsiPlugin::new(workspace_root.join("rsi"))) as DynPlugin,

@@ -99,6 +99,17 @@ impl std::error::Error for EvolvingError {}
 /// evolving Seam(Service Definition):真实轨迹抽取 + 本地判据评估 + 优化建议。
 ///
 /// 消费方(如 rsi 编排)通过 `evolving` 服务键解析本 trait。
+/// 一条经验(评估结果持久化,可检索复用)。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Experience {
+    pub id: String,
+    pub task: String,
+    pub verdict: Verdict,
+    pub score: f64,
+    pub issues: Vec<String>,
+    pub saved_ms: u64,
+}
+
 #[async_trait]
 pub trait EvolvingRuntime: Seam {
     /// 从会话事件日志抽取轨迹(真实解析:工具调用配对结果、迭代预算、完成标志)。
@@ -120,4 +131,13 @@ pub trait EvolvingRuntime: Seam {
         trajectory: &Trajectory,
         evaluation: &Evaluation,
     ) -> Result<Vec<Refinement>, EvolvingError>;
+
+    /// 保存一次评估为经验(真实 JSONL 落盘)。
+    fn save_experience(&self, experience: &Experience) -> Result<(), EvolvingError>;
+
+    /// 加载全部经验(按保存顺序)。
+    fn load_experiences(&self) -> Result<Vec<Experience>, EvolvingError>;
+
+    /// 检索与任务相关的经验(任务标题包含查询词)。
+    fn search_experiences(&self, query: &str) -> Result<Vec<Experience>, EvolvingError>;
 }

@@ -389,7 +389,9 @@ async fn evolving_golden() {
     let root = root_for("evolving");
     let ctx = Context::new();
     let mut plugins = base_plugins(&root);
-    plugins.push(Arc::new(ah_plugins_evolving::EvolvingPlugin));
+    plugins.push(Arc::new(ah_plugins_evolving::EvolvingPlugin::new(
+        root.join("evolving"),
+    )));
     let effects = mount(&ctx, plugins);
     let evolving = ctx
         .service::<dyn EvolvingRuntime>(&EVOLVING)
@@ -553,7 +555,9 @@ async fn rsi_golden() {
     let ctx = Context::new();
     let mut plugins = base_plugins(&root);
     plugins.push(Arc::new(ah_plugins_subagent::SubagentPlugin));
-    plugins.push(Arc::new(ah_plugins_evolving::EvolvingPlugin));
+    plugins.push(Arc::new(ah_plugins_evolving::EvolvingPlugin::new(
+        root.join("evolving"),
+    )));
     plugins.push(Arc::new(ah_plugins_rsi::RsiPlugin::new(root.join("rsi"))));
     let effects = mount(&ctx, plugins);
     let rsi = ctx.service::<dyn RsiRuntime>(&RSI).expect("rsi");
