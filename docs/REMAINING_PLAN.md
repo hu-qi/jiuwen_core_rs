@@ -6,7 +6,11 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 12 回合,169 tests / clippy 0 / fmt clean):
+> **账目更新**(第 13 回合,173 tests / clippy 0 / fmt clean):
+> - rsi 多轮编排 5c25592(run_rounds:评测→精化→checkpoint 续跑)
+> - web_fetch / run_code 真实工具 f636780(agent 可调用,seam 消费方闭环)
+>
+> **账目更新**(第 12 回合,169 tests):
 > - transport(A2A 风格 JSON-RPC over HTTP)35e0799 —— capability-map **零 missing** 达成
 >
 > **账目更新**(第 11 回合,166 tests):
