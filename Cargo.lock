@@ -134,9 +134,11 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "ah-plugins-mock",
+ "ah-plugins-session-log",
  "ah-plugins-sysop",
  "ah-plugins-tools",
  "async-trait",
+ "futures-util",
  "serde_json",
  "tokio",
 ]

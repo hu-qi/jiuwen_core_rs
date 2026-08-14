@@ -8,11 +8,12 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use ah_contracts::event::Event;
-use ah_contracts::keys::{LLM, TOOLS, WORKFLOW};
+use ah_contracts::keys::{LLM, SESSIONS, TOOLS, WORKFLOW};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
+use ah_contracts::session::{SessionEventKind, SessionLog};
 use ah_contracts::tools::ToolRegistry;
 use ah_contracts::workflow::{
     EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError, WorkflowOutput, WorkflowSpec,
@@ -20,6 +21,7 @@ use ah_contracts::workflow::{
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
+use futures_util::future::join_all;
 use serde_json::{Value, json};
 
 /// 节点执行事件(emit 模式,供遥测/审计)。
@@ -38,13 +40,24 @@ impl Event for WorkflowNodeEvent {
 pub struct WorkflowEngineImpl {
     llm: Arc<dyn ModelProvider>,
     tools: Arc<dyn ToolRegistry>,
+    sessions: Arc<dyn SessionLog>,
     ctx: Context,
 }
 
 impl WorkflowEngineImpl {
     /// 构建引擎(注入 llm + tools)。
-    pub fn new(llm: Arc<dyn ModelProvider>, tools: Arc<dyn ToolRegistry>, ctx: Context) -> Self {
-        Self { llm, tools, ctx }
+    pub fn new(
+        llm: Arc<dyn ModelProvider>,
+        tools: Arc<dyn ToolRegistry>,
+        sessions: Arc<dyn SessionLog>,
+        ctx: Context,
+    ) -> Self {
+        Self {
+            llm,
+            tools,
+            sessions,
+            ctx,
+        }
     }
 
     fn node<'a>(&self, spec: &'a WorkflowSpec, id: &str) -> Result<&'a NodeSpec, WorkflowError> {
@@ -171,6 +184,78 @@ impl WorkflowEngineImpl {
         Ok(current)
     }
 
+    /// 执行 SubWorkflow 节点:递归运行内嵌 WorkflowSpec。
+    async fn run_subworkflow(
+        &self,
+        node: &NodeSpec,
+        input: &Value,
+    ) -> Result<Value, WorkflowError> {
+        let sub: WorkflowSpec =
+            serde_json::from_value(node.config.get("workflow").cloned().ok_or_else(|| {
+                WorkflowError(format!("subworkflow node {} missing workflow", node.id))
+            })?)
+            .map_err(|e| WorkflowError(format!("invalid subworkflow spec: {e}")))?;
+        let output = self.run(&sub, input.clone()).await?;
+        Ok(json!({ "subworkflow": sub.id, "output": output.output }))
+    }
+
+    /// 执行 Parallel 节点:并发执行多个目标节点(Llm/Tool 叶节点),join 结果。
+    async fn run_parallel(
+        &self,
+        spec: &WorkflowSpec,
+        node: &NodeSpec,
+        input: &Value,
+    ) -> Result<Value, WorkflowError> {
+        let targets: Vec<String> = node
+            .config
+            .get("targets")
+            .and_then(Value::as_array)
+            .ok_or_else(|| WorkflowError(format!("parallel node {} missing targets", node.id)))?
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect();
+        if targets.is_empty() {
+            return Err(WorkflowError(format!(
+                "parallel node {} has no targets",
+                node.id
+            )));
+        }
+
+        // 并发执行每个目标(真实并发 join)。
+        let mut futures = Vec::new();
+        for target in &targets {
+            let target_node = self.node(spec, target)?.clone();
+            let input = input.clone();
+            futures.push(async move {
+                match target_node.kind {
+                    NodeKind::Llm => (
+                        target_node.id.clone(),
+                        self.run_llm(&target_node, &input).await,
+                    ),
+                    NodeKind::Tool => (
+                        target_node.id.clone(),
+                        self.run_tool(&target_node, &input).await,
+                    ),
+                    _ => (
+                        target_node.id.clone(),
+                        Err(WorkflowError(format!(
+                            "parallel target must be Llm or Tool, got {:?}",
+                            target_node.kind
+                        ))),
+                    ),
+                }
+            });
+        }
+        let results = join_all(futures).await;
+
+        let mut outputs = serde_json::Map::new();
+        for (id, result) in results {
+            outputs.insert(id, result?);
+        }
+        Ok(json!({ "outputs": outputs }))
+    }
+
     async fn execute_node(
         &self,
         spec: &WorkflowSpec,
@@ -183,12 +268,23 @@ impl WorkflowEngineImpl {
             NodeKind::Llm => self.run_llm(node, input).await?,
             NodeKind::Tool => self.run_tool(node, input).await?,
             NodeKind::Loop => self.run_loop(spec, node, input).await?,
+            NodeKind::SubWorkflow => self.run_subworkflow(node, input).await?,
+            NodeKind::Parallel => self.run_parallel(spec, node, input).await?,
         };
         self.ctx.emit(WorkflowNodeEvent {
             workflow_id: spec.id.clone(),
             node_id: node.id.clone(),
             output: output.clone(),
         });
+        // 轨迹写入会话日志(可审计;AgentStep 不影响消息投影)。
+        let _ = self.sessions.append(
+            SessionEventKind::AgentStep,
+            json!({
+                "workflow": spec.id,
+                "node": node.id,
+                "output": output,
+            }),
+        );
         Ok(output)
     }
 
@@ -318,7 +414,7 @@ impl Plugin for WorkflowPlugin {
     }
 
     fn inject(&self) -> Vec<ServiceKey> {
-        vec![LLM, TOOLS]
+        vec![LLM, TOOLS, SESSIONS]
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
@@ -334,8 +430,14 @@ impl Plugin for WorkflowPlugin {
                 plugin: self.name(),
                 message: "tools seam not registered".to_string(),
             })?;
+        let sessions =
+            ctx.service::<dyn SessionLog>(&SESSIONS)
+                .ok_or_else(|| PluginError::Apply {
+                    plugin: self.name(),
+                    message: "sessions seam not registered".to_string(),
+                })?;
         let engine: Arc<dyn WorkflowEngine> =
-            Arc::new(WorkflowEngineImpl::new(llm, tools, ctx.clone()));
+            Arc::new(WorkflowEngineImpl::new(llm, tools, sessions, ctx.clone()));
         Ok(vec![ctx.register(WORKFLOW, engine)])
     }
 }
@@ -349,10 +451,16 @@ mod tests {
 
     fn build_ctx(root: &std::path::Path) -> (Context, Vec<Effect>) {
         let ctx = Context::new();
+        let session_dir = root.join("sessions");
+        let default_path = session_dir.join("default.jsonl");
         let plugins: Vec<DynPlugin> = vec![
             StdArc::new(ah_plugins_mock::MockPlugin),
             StdArc::new(ah_plugins_tools::ToolsPlugin),
             StdArc::new(ah_plugins_sysop::SysopPlugin::new(root)),
+            StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                &default_path,
+                &session_dir,
+            )),
             StdArc::new(WorkflowPlugin),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
@@ -571,6 +679,218 @@ mod tests {
             .filter(|id| id.starts_with("loop("))
             .collect();
         assert_eq!(loop_marks.len(), 3);
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn subworkflow_node_runs_nested_spec() {
+        let root = std::env::temp_dir().join(format!("ah-wf-sub-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("workflow");
+
+        let sub = WorkflowSpec {
+            id: "sub-inner".to_string(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".into(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "write".into(),
+                    kind: NodeKind::Tool,
+                    config: json!({ "tool": "write_file", "args": { "path": "inner.txt", "content": "sub" } }),
+                },
+                NodeSpec {
+                    id: "end".into(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".into(),
+                    to: "write".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "write".into(),
+                    to: "end".into(),
+                    condition: None,
+                },
+            ],
+        };
+
+        let spec = WorkflowSpec {
+            id: "wf-sub".to_string(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".into(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "sub".into(),
+                    kind: NodeKind::SubWorkflow,
+                    config: json!({ "workflow": sub }),
+                },
+                NodeSpec {
+                    id: "end".into(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".into(),
+                    to: "sub".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "sub".into(),
+                    to: "end".into(),
+                    condition: None,
+                },
+            ],
+        };
+
+        let output = engine.run(&spec, json!({})).await.expect("run");
+        // 子工作流真实执行:inner.txt 被真实 write_file 创建。
+        let fs = ctx
+            .service::<dyn ah_contracts::fs::FsProvider>(&ah_contracts::keys::FS)
+            .expect("fs");
+        assert!(fs.exists("inner.txt"));
+        assert!(output.executed.contains(&"sub".to_string()));
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn parallel_node_runs_targets_concurrently() {
+        let root = std::env::temp_dir().join(format!("ah-wf-par-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("workflow");
+
+        let spec = WorkflowSpec {
+            id: "wf-par".to_string(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".into(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "par".into(),
+                    kind: NodeKind::Parallel,
+                    config: json!({ "targets": ["w1", "w2"] }),
+                },
+                NodeSpec {
+                    id: "w1".into(),
+                    kind: NodeKind::Tool,
+                    config: json!({ "tool": "write_file", "args": { "path": "a.txt", "content": "a" } }),
+                },
+                NodeSpec {
+                    id: "w2".into(),
+                    kind: NodeKind::Tool,
+                    config: json!({ "tool": "write_file", "args": { "path": "b.txt", "content": "b" } }),
+                },
+                NodeSpec {
+                    id: "end".into(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".into(),
+                    to: "par".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "par".into(),
+                    to: "end".into(),
+                    condition: None,
+                },
+            ],
+        };
+
+        let output = engine.run(&spec, json!({})).await.expect("run");
+        // 两个并行目标都真实执行(真实文件都创建)。
+        let fs = ctx
+            .service::<dyn ah_contracts::fs::FsProvider>(&ah_contracts::keys::FS)
+            .expect("fs");
+        assert!(fs.exists("a.txt"));
+        assert!(fs.exists("b.txt"));
+        // 输出合并了 w1/w2。
+        let out = output.output.to_string();
+        assert!(out.contains("a.txt"));
+        assert!(out.contains("b.txt"));
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn execution_trace_is_written_to_session_log() {
+        let root = std::env::temp_dir().join(format!("ah-wf-trace-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("workflow");
+        let sessions = ctx
+            .service::<dyn ah_contracts::session::SessionLog>(&ah_contracts::keys::SESSIONS)
+            .expect("sessions");
+
+        let spec = WorkflowSpec {
+            id: "wf-trace".to_string(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".into(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "write".into(),
+                    kind: NodeKind::Tool,
+                    config: json!({ "tool": "write_file", "args": { "path": "t.txt", "content": "t" } }),
+                },
+                NodeSpec {
+                    id: "end".into(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".into(),
+                    to: "write".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "write".into(),
+                    to: "end".into(),
+                    condition: None,
+                },
+            ],
+        };
+
+        let _ = engine.run(&spec, json!({})).await.expect("run");
+        // 每个已执行节点都写了轨迹事件(AgentStep,含 workflow/node)。
+        let events = sessions.events();
+        let traces: Vec<_> = events
+            .iter()
+            .filter(|e| e.kind == ah_contracts::session::SessionEventKind::AgentStep)
+            .collect();
+        assert_eq!(traces.len(), 2); // start + write
+        assert_eq!(traces[0].payload["workflow"], "wf-trace");
+        assert_eq!(traces[0].payload["node"], "start");
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);

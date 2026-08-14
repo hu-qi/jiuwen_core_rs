@@ -3,12 +3,13 @@ name = "ah-plugins-workflow"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Real workflow execution engine (Start/End/LLM/Tool/Loop + conditional edges)"
+description = "Real workflow execution engine (Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + conditional edges)"
 
 [dependencies]
 ah-contracts = { workspace = true }
 ah-hub = { workspace = true }
 async-trait = "0.1"
+futures-util = "0.3"
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
@@ -16,3 +17,4 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 ah-plugins-mock = { workspace = true }
 ah-plugins-tools = { workspace = true }
 ah-plugins-sysop = { workspace = true }
+ah-plugins-session-log = { workspace = true }

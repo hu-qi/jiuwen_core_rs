@@ -19,6 +19,10 @@ pub enum NodeKind {
     Tool,
     /// 循环组件:重复执行目标节点 N 次(config: {iterations, target})。
     Loop,
+    /// 子工作流组件:执行内嵌 WorkflowSpec(config: {workflow: WorkflowSpec})。
+    SubWorkflow,
+    /// 并行组件:并发执行多个目标节点(config: {targets: [node_id...]})。
+    Parallel,
 }
 
 /// 节点规格。
