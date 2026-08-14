@@ -32,6 +32,7 @@ ah-app ──> ah-hub ──> ah-contracts
    ├─> ah-plugins-web (ureq HTTP 客户端)     ──> ah-hub, ah-contracts
    ├─> ah-plugins-transport (A2A 风格 JSON-RPC) ──> ah-hub, ah-contracts
    ├─> ah-plugins-git (真实 git 子进程操作)   ──> ah-hub, ah-contracts
+   ├─> ah-plugins-ci (子进程 CI gate 运行器) ──> ah-hub, ah-contracts
                                             └─dev-dep─> tokio process/time(测试)
                                             └─dev-dep─> ah-plugins-tools/sysop(测试)
                                             └─dev-dep─> ah-plugins-mock/tools/sysop/session-log(测试)

@@ -1,0 +1,12 @@
+[package]
+name = "ah-plugins-ci"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real CI gate runner: subprocess gate commands with timeout, pass/fail + output"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time"] }

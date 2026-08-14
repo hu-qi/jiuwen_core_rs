@@ -13,6 +13,7 @@ members = [
     "crates/ah-plugins-web",
     "crates/ah-plugins-transport",
     "crates/ah-plugins-git",
+    "crates/ah-plugins-ci",
     "crates/ah-plugins-mock",
     "crates/ah-plugins-tools",
     "crates/ah-plugins-sysop",
@@ -52,6 +53,7 @@ ah-plugins-code = { path = "crates/ah-plugins-code" }
 ah-plugins-web = { path = "crates/ah-plugins-web" }
 ah-plugins-transport = { path = "crates/ah-plugins-transport" }
 ah-plugins-git = { path = "crates/ah-plugins-git" }
+ah-plugins-ci = { path = "crates/ah-plugins-ci" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }
 ah-plugins-tools = { path = "crates/ah-plugins-tools" }
 ah-plugins-sysop = { path = "crates/ah-plugins-sysop" }

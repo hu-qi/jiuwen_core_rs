@@ -92,3 +92,6 @@ pub const SWARM: ServiceKey = ServiceKey::new("teams-swarm");
 
 /// `git` seam 服务键(本地 git 操作)。
 pub const GIT: ServiceKey = ServiceKey::new("git");
+
+/// `ci` seam 服务键(CI gate 运行器)。
+pub const CI: ServiceKey = ServiceKey::new("ci");
