@@ -25,9 +25,9 @@
 
 插件引入可调参数时,必须在 profile 中声明配置字段并在本表登记:
 
-| 插件 | 配置字段(规划) | 说明 |
+| 插件 | 配置字段 | 说明 |
 | --- | --- | --- |
-| ah-plugins-openai | base_url / api_key_ref / model / timeout | LLM provider |
+| ah-plugins-openai(已实现) | base_url / api_key / model / timeout,来源 OPENAI_BASE_URL / OPENAI_API_KEY / OPENAI_MODEL | 真实 LLM provider;key 缺失时不挂载,生产 profile 引用则显式失败 |
 | ah-plugins-redis | url / ttl / namespace | 检查点与 KV |
 | ah-plugins-pulsar | url / topic / subscription | 消息队列 |
 | ah-plugins-elasticsearch | url / index / auth | 向量库 |

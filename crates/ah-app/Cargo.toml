@@ -15,5 +15,6 @@ ah-hub = { workspace = true }
 ah-plugins-mock = { workspace = true }
 ah-plugins-tools = { workspace = true }
 ah-plugins-sysop = { workspace = true }
+ah-plugins-openai = { workspace = true }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

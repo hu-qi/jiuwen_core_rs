@@ -6,6 +6,7 @@ members = [
     "crates/ah-plugins-mock",
     "crates/ah-plugins-tools",
     "crates/ah-plugins-sysop",
+    "crates/ah-plugins-openai",
     "crates/ah-app",
 ]
 
@@ -20,4 +21,5 @@ ah-hub = { path = "crates/ah-hub" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }
 ah-plugins-tools = { path = "crates/ah-plugins-tools" }
 ah-plugins-sysop = { path = "crates/ah-plugins-sysop" }
+ah-plugins-openai = { path = "crates/ah-plugins-openai" }
 ah-app = { path = "crates/ah-app" }

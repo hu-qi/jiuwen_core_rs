@@ -11,29 +11,39 @@ use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
 use ah_plugins_mock::MockPlugin;
+use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_tools::ToolsPlugin;
 use serde_json::json;
 
 /// 插件目录:名称 → 插件对象。
 ///
-/// 后续由动态注册 / 进程插件扩展;当前为静态目录。
+/// - ah-plugins-openai 仅在存在 OPENAI_API_KEY 时可用(真实 provider);
+/// - 生产 profile 引用 openai 但无 key 时,解析会显式失败(不静默降级)。
 fn plugin_catalog(workspace_root: &std::path::Path) -> Vec<(&'static str, DynPlugin)> {
-    vec![
+    let mut catalog: Vec<(&'static str, DynPlugin)> = vec![
         ("ah-plugins-mock", Arc::new(MockPlugin) as DynPlugin),
         ("ah-plugins-tools", Arc::new(ToolsPlugin) as DynPlugin),
         (
             "ah-plugins-sysop",
             Arc::new(SysopPlugin::new(workspace_root)) as DynPlugin,
         ),
-    ]
+    ];
+    if let Some(plugin) = OpenAiPlugin::from_env() {
+        catalog.push(("ah-plugins-openai", Arc::new(plugin) as DynPlugin));
+    }
+    catalog
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let profile = Profile::load("profiles/dev.toml")?;
+    let profile_path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "profiles/dev.toml".to_string());
+    let profile = Profile::load(&profile_path)?;
     println!(
-        "[boot] profile: {} ({})",
+        "[boot] profile {}: {} ({})",
+        profile_path,
         profile.name,
         profile.plugin_names().join(", ")
     );
@@ -51,7 +61,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .iter()
                 .find(|(candidate, _)| *candidate == name)
                 .map(|(_, plugin)| plugin.clone())
-                .ok_or_else(|| format!("unknown plugin: {name}"))
+                .ok_or_else(|| {
+                    format!(
+                        "unknown or unavailable plugin: {name} (real providers may need credentials)"
+                    )
+                })
         })
         .collect::<Result<_, _>>()?;
 
@@ -59,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _effects = ctx.mount_all(plugins)?;
     println!("[boot] mounted services: {:?}", ctx.service_keys());
 
-    // llm seam(boot 桩,真实 provider 待接入)
+    // llm seam(dev=mock 桩;prod=真实 openai-compatible)
     let provider = ctx
         .service::<dyn ModelProvider>(&LLM)
         .ok_or("llm seam not registered")?;
