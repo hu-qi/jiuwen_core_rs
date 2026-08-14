@@ -8,11 +8,12 @@ Rust 原生 agent harness,以高解耦插件架构为目标,设计思路参考 D
 ```text
 agent-harness/
   crates/
-    ah-contracts/             契约层: Seam trait + 纯类型,零实现
-    ah-hub/                   插件内核: ServiceRegistry + EventBus + Profile
-    (规划) ah-plugins-*/      各域插件(provider / 引擎 / 工具)
-    (规划) ah-app/            CLI + Web 入口
-  profiles/                     组合配置: dev(mock) / prod(真实)
+    ah-contracts/     契约层: Seam trait + 事件契约 + 纯类型,零实现
+    ah-hub/           插件内核: ServiceRegistry + EventBus + Plugin + Profile
+    ah-plugins-mock/  Mock 插件集(仅 dev/test profile)
+    ah-app/           boot 入口: 读取 profile → 组装插件 → 解析 seam
+    (规划) ah-plugins-*/  各域插件(provider / 引擎 / 工具)
+  profiles/           组合配置: dev(mock) / prod(真实)
 ```
 
 核心原则(对齐 DSH/Cordis):
@@ -20,18 +21,26 @@ agent-harness/
 - **无特权核心**:模型、工具、会话日志、agent 循环都是插件。
 - **Seam 契约**:契约 crate 只声明接口(Service Definition / Provider / Consumer 三角),
   实现者依赖契约而非彼此。
-- **类型化事件**:emit / waterfall / parallel / serial 四种分发。
-- **可逆注册**:插件注册以 RAII guard 表达,卸载自动回滚。
-- **日志即真相**:会话以 append-only 事件日志为唯一事实来源。
+- **类型化事件**:emit / serial / parallel / waterfall 四种分发。
+- **可逆注册**:插件注册以 RAII guard(Effect)表达,卸载自动回滚。
+- **日志即真相**:会话以 append-only 事件日志为唯一事实来源(规划)。
 - **Profile 门禁**:生产 profile 不允许出现 mock 插件,CI 校验展开后的插件清单。
 
-## 状态
+## 当前框架能力(已实现)
 
-脚手架阶段。当前仅 workspace + 两个基础 crate 的骨架。
+- ah-hub:
+  - ServiceRegistry:按键注册/查找 Seam trait 对象,注册返回 Effect,drop 自动反注册;
+  - EventBus:emit(同步)/ serial(串行 await)/ parallel(并发)/ waterfall(next 链 + 短路);
+  - Plugin trait + mount_all:依赖注入、拓扑排序挂载、循环依赖与重复 provider 检测;
+  - Profile:TOML 组合配置(bundle 顺序 + 插件清单,去重展开)。
+- ah-contracts:ServiceKey、Event、Seam 标记、第一个示例 seam ModelProvider。
+- ah-plugins-mock:MockModelProvider + 示例插件 MockPlugin。
+- ah-app:cargo run -p ah-app 从 profiles/dev.toml 启动,挂载 mock 插件并调用 llm seam。
 
-## 构建
+## 构建与运行
 
 ```sh
 cargo build --workspace
 cargo test --workspace
+cargo run -p ah-app
 ```

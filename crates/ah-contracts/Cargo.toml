@@ -6,3 +6,4 @@ license.workspace = true
 description = "Seam contracts: pure types and traits for the agent-harness plugin architecture"
 
 [dependencies]
+async-trait = "0.1"

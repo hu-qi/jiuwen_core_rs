@@ -1,0 +1,16 @@
+[package]
+name = "ah-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "agent-harness boot entry: compose a profile, mount plugins, run"
+
+[[bin]]
+name = "ah-app"
+path = "src/main.rs"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+ah-plugins-mock = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

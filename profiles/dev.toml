@@ -1,0 +1,7 @@
+# dev profile:全部使用 mock 插件。
+# 生产 profile(规划)只允许真实 provider,CI 校验展开后的插件清单。
+name = "dev"
+
+[[bundles]]
+id = "mock"
+plugins = ["ah-plugins-mock"]

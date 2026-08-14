@@ -3,7 +3,12 @@ name = "ah-hub"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Plugin kernel: ServiceRegistry + EventBus + Profile composition for agent-harness"
+description = "Plugin kernel: ServiceRegistry + EventBus + Plugin + Profile composition for agent-harness"
 
 [dependencies]
 ah-contracts = { workspace = true }
+async-trait = "0.1"
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["rt", "macros", "sync"] }
+toml = "0.8"
