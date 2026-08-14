@@ -43,7 +43,7 @@
 | telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约)/ partial(JSONL 导出真实;OTLP 导出留待后续)
 | queue | `queue` | `MessageQueue`(已实现:文件后端,每 channel append-only JSONL + 消费游标 offset 语义,重启恢复;teams 消息消费方) | done(契约+消费,本地)/ partial(外部 Pulsar/ZMQ) |
 | mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约)/ partial(stdio 真实,http 未实现) |
-| transport | `transport` | A2A 传输(规划) | missing
+| transport | `transport` | A2A 风格传输(已实现:JSON-RPC 2.0 over HTTP,agent/getCard + message/send;ureq 客户端 + 本地 HTTP/1.1 服务端) | done(契约+客户端+本地服务端)/ partial(SSE/流式/加密传输) |
 | credentials | `credentials` | `CredentialProvider`(已实现:真实环境变量 provider,映射可配置,如 `openai.api_key` → `OPENAI_API_KEY`;`get`/`list` 真实读 `std::env`,`set`/`remove` 显式报错 env 只读) | done(契约)/ partial(env 只读,无密钥管理后端;ah-plugins-credentials:tests 覆盖 get/list/set/remove 真实 env 路径,openai 集成测试经 credentials 解析 key 后真实 HTTP 往返) |
 
 ## 2. 域 → seam/插件映射(目标态)

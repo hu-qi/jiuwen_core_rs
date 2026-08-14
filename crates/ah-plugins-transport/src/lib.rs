@@ -1,0 +1,429 @@
+//! # ah-plugins-transport
+//!
+//! 真实 A2A 风格 agent 传输(JSON-RPC 2.0 over HTTP):
+//! - JsonRpcTransport:ureq 客户端,agent/getCard 与 message/send;
+//! - AgentHttpServer:最小 HTTP/1.1 + JSON-RPC 服务端(真实 TCP 协议路径),
+//!   AgentHandler 处理 message/send。
+//!
+//! 完整 A2A 规范(SSE/流式)留待后续,文档注明。
+
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
+
+use ah_contracts::keys::TRANSPORT;
+use ah_contracts::prelude::Effect;
+use ah_contracts::seam::Seam;
+use ah_contracts::service::ServiceKey;
+use ah_contracts::transport::{
+    AgentCard, AgentHandler, AgentMessage, AgentTransport, TransportError,
+};
+use ah_hub::context::Context;
+use ah_hub::plugin::{Plugin, PluginError};
+use async_trait::async_trait;
+use serde_json::{Value, json};
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// 真实 JSON-RPC 客户端(ureq)。
+pub struct JsonRpcTransport {
+    card: AgentCard,
+}
+
+impl JsonRpcTransport {
+    /// 以本端点 agent 卡创建。
+    pub fn new(card: AgentCard) -> Self {
+        Self { card }
+    }
+
+    /// 构造 JSON-RPC 2.0 请求并 POST,返回 result 或显式错误。
+    fn call(&self, url: &str, method: &str, params: Value) -> Result<Value, TransportError> {
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": now_ms(),
+            "method": method,
+            "params": params,
+        });
+        let agent = ureq::AgentBuilder::new()
+            .timeout(std::time::Duration::from_secs(10))
+            .build();
+        let payload = serde_json::to_string(&request).expect("serialize");
+        let response = agent
+            .post(url)
+            .set("Content-Type", "application/json")
+            .send_string(&payload)
+            .map_err(|e| TransportError(format!("rpc call failed: {e}")))?;
+        let body: Value = response
+            .into_string()
+            .map_err(|e| TransportError(format!("read rpc body failed: {e}")))?
+            .parse()
+            .map_err(|e| TransportError(format!("parse rpc body failed: {e}")))?;
+        if let Some(error) = body.get("error") {
+            let message = error
+                .as_object()
+                .and_then(|o| o.get("message"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            return Err(TransportError(format!("rpc error: {message}")));
+        }
+        body.get("result")
+            .cloned()
+            .ok_or_else(|| TransportError("rpc response missing result".to_string()))
+    }
+}
+
+impl Seam for JsonRpcTransport {}
+
+#[async_trait]
+impl AgentTransport for JsonRpcTransport {
+    fn local_card(&self) -> AgentCard {
+        self.card.clone()
+    }
+
+    async fn fetch_card(&self, peer_url: &str) -> Result<AgentCard, TransportError> {
+        let result = self.call(peer_url, "agent/getCard", json!({}))?;
+        serde_json::from_value(result).map_err(|e| TransportError(format!("parse agent card: {e}")))
+    }
+
+    async fn send_message(
+        &self,
+        peer_url: &str,
+        message: AgentMessage,
+    ) -> Result<AgentMessage, TransportError> {
+        let result = self.call(peer_url, "message/send", json!({ "message": message }))?;
+        serde_json::from_value(result)
+            .map_err(|e| TransportError(format!("parse reply message: {e}")))
+    }
+}
+
+// ---------------- 服务端 ----------------
+
+/// 最小 HTTP/1.1 + JSON-RPC 服务端(真实 TCP 协议路径)。
+pub struct AgentHttpServer {
+    listener: TcpListener,
+    card: AgentCard,
+    handler: Arc<dyn AgentHandler>,
+}
+
+impl AgentHttpServer {
+    /// 绑定 127.0.0.1 随机端口并后台接受连接。
+    pub fn serve(card: AgentCard, handler: Arc<dyn AgentHandler>) -> Result<Self, TransportError> {
+        let listener =
+            TcpListener::bind("127.0.0.1:0").map_err(|e| TransportError(format!("bind: {e}")))?;
+        let addr = listener
+            .local_addr()
+            .map_err(|e| TransportError(format!("addr: {e}")))?;
+        let url = format!("http://{addr}/");
+        let mut card = card;
+        card.url = url;
+        let server = Self {
+            listener,
+            card,
+            handler,
+        };
+        let handle = server
+            .listener
+            .try_clone()
+            .map_err(|e| TransportError(e.to_string()))?;
+        let card_clone = server.card.clone();
+        let handler_clone = server.handler.clone();
+        std::thread::spawn(move || {
+            for stream in handle.incoming().flatten() {
+                let card = card_clone.clone();
+                let handler = handler_clone.clone();
+                std::thread::spawn(move || {
+                    let _ = handle_connection(stream, card, handler);
+                });
+            }
+        });
+        Ok(server)
+    }
+
+    /// 端点 URL。
+    pub fn url(&self) -> String {
+        self.card.url.clone()
+    }
+}
+
+/// 处理单个 HTTP 连接:解析请求行/头/体,分发 JSON-RPC,回写响应。
+fn handle_connection(
+    mut stream: TcpStream,
+    card: AgentCard,
+    handler: Arc<dyn AgentHandler>,
+) -> Result<(), TransportError> {
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    // 读至请求头结束 + Content-Length 字节(简化:最多读 64KB)。
+    let mut total = 0usize;
+    loop {
+        let n = stream
+            .read(&mut chunk)
+            .map_err(|e| TransportError(format!("read: {e}")))?;
+        if n == 0 {
+            break;
+        }
+        buf.extend_from_slice(&chunk[..n]);
+        total += n;
+        if total > 64 * 1024 {
+            break;
+        }
+        // 请求头分隔符出现即够解析。
+        if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&buf).into_owned();
+    // 解析 Content-Length。
+    let body = extract_body(&text);
+
+    let response_body = dispatch(&body, &card, &handler);
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+        response_body.len(),
+        response_body
+    );
+    stream
+        .write_all(response.as_bytes())
+        .map_err(|e| TransportError(format!("write: {e}")))
+}
+
+fn extract_body(request: &str) -> String {
+    let header_end = request
+        .find("\r\n\r\n")
+        .map(|i| i + 4)
+        .unwrap_or(request.len());
+    let headers = &request[..header_end];
+    let mut content_length = 0usize;
+    for line in headers.lines().skip(1) {
+        if let Some((name, value)) = line.split_once(':')
+            && name.trim().eq_ignore_ascii_case("content-length")
+        {
+            content_length = value.trim().parse().unwrap_or(0);
+        }
+    }
+    let body = &request[header_end..];
+    let body: String = body.chars().take(content_length).collect();
+    body
+}
+
+/// 分发 JSON-RPC 方法并返回响应 JSON。
+fn dispatch(body: &str, card: &AgentCard, handler: &Arc<dyn AgentHandler>) -> String {
+    let parsed: Value = match serde_json::from_str(body) {
+        Ok(value) => value,
+        Err(e) => {
+            return json!({
+                "jsonrpc": "2.0", "id": Value::Null,
+                "error": { "code": -32700, "message": format!("parse error: {e}") }
+            })
+            .to_string();
+        }
+    };
+    let id = parsed.get("id").cloned().unwrap_or(Value::Null);
+    let method = parsed
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let result = match method {
+        "agent/getCard" => serde_json::to_value(card).unwrap_or(Value::Null),
+        "message/send" => {
+            let message: Result<AgentMessage, _> = serde_json::from_value(
+                parsed
+                    .get("params")
+                    .and_then(|p| p.get("message"))
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            );
+            match message {
+                Ok(message) => {
+                    let reply = handler.handle_message(message);
+                    // 同步桥:handler 为 async,这里用 tokio 运行时驱动。
+                    match tokio::runtime::Runtime::new()
+                        .map(|rt| rt.block_on(reply))
+                        .map_err(|e| TransportError(format!("runtime: {e}")))
+                    {
+                        Ok(Ok(reply)) => serde_json::to_value(reply).unwrap_or(Value::Null),
+                        Ok(Err(e)) => {
+                            return json!({
+                                "jsonrpc": "2.0", "id": id,
+                                "error": { "code": -32000, "message": e.0 }
+                            })
+                            .to_string();
+                        }
+                        Err(e) => {
+                            return json!({
+                                "jsonrpc": "2.0", "id": id,
+                                "error": { "code": -32000, "message": e.0 }
+                            })
+                            .to_string();
+                        }
+                    }
+                }
+                Err(e) => {
+                    return json!({
+                        "jsonrpc": "2.0", "id": id,
+                        "error": { "code": -32602, "message": format!("invalid params: {e}") }
+                    })
+                    .to_string();
+                }
+            }
+        }
+        other => {
+            return json!({
+                "jsonrpc": "2.0", "id": id,
+                "error": { "code": -32601, "message": format!("method not found: {other}") }
+            })
+            .to_string();
+        }
+    };
+    json!({ "jsonrpc": "2.0", "id": id, "result": result }).to_string()
+}
+
+/// transport 插件:提供本端点 agent 卡与客户端。
+pub struct TransportPlugin {
+    card: AgentCard,
+}
+
+impl TransportPlugin {
+    /// 以本端点 agent 卡创建。
+    pub fn new(card: AgentCard) -> Self {
+        Self { card }
+    }
+}
+
+impl Plugin for TransportPlugin {
+    fn name(&self) -> &'static str {
+        "ah-plugins-transport"
+    }
+
+    fn provides(&self) -> Vec<ServiceKey> {
+        vec![TRANSPORT]
+    }
+
+    fn inject(&self) -> Vec<ServiceKey> {
+        vec![]
+    }
+
+    fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
+        let transport: Arc<dyn AgentTransport> = Arc::new(JsonRpcTransport::new(self.card.clone()));
+        Ok(vec![ctx.register(TRANSPORT, transport)])
+    }
+}
+
+/// 测试用回声处理器(真实消息往返;测试专用桩)。
+pub struct EchoHandler;
+
+#[async_trait]
+impl AgentHandler for EchoHandler {
+    async fn handle_message(&self, message: AgentMessage) -> Result<AgentMessage, TransportError> {
+        Ok(AgentMessage {
+            id: format!("reply-{}", message.id),
+            role: "assistant".to_string(),
+            content: format!("echo: {}", message.content),
+            kind: "text".to_string(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ah_contracts::keys::TRANSPORT;
+    use ah_hub::plugin::DynPlugin;
+    use std::sync::Arc as StdArc;
+
+    fn card() -> AgentCard {
+        AgentCard {
+            name: "test-agent".to_string(),
+            description: "a test agent".to_string(),
+            url: "http://unset/".to_string(),
+            skills: vec!["list".to_string(), "search".to_string()],
+        }
+    }
+
+    fn build_ctx(card: AgentCard) -> (Context, Vec<Effect>) {
+        let ctx = Context::new();
+        let plugins: Vec<DynPlugin> = vec![StdArc::new(TransportPlugin::new(card))];
+        let effects = ctx.mount_all(plugins).expect("mount");
+        (ctx, effects)
+    }
+
+    #[tokio::test]
+    async fn fetch_card_and_send_message_over_real_http() {
+        let server = AgentHttpServer::serve(card(), StdArc::new(EchoHandler)).expect("serve");
+        let url = server.url();
+
+        let (ctx, effects) = build_ctx(card());
+        let transport = ctx
+            .service::<dyn AgentTransport>(&TRANSPORT)
+            .expect("transport");
+
+        // 拉取远端 agent 卡(真实 JSON-RPC agent/getCard)。
+        let remote_card = transport.fetch_card(&url).await.expect("fetch card");
+        assert_eq!(remote_card.name, "test-agent");
+        assert!(remote_card.skills.contains(&"search".to_string()));
+        assert_eq!(remote_card.url, url, "server injects its own url");
+
+        // 发送消息(真实 JSON-RPC message/send),得到回声回复。
+        let reply = transport
+            .send_message(
+                &url,
+                AgentMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "hello peer".to_string(),
+                    kind: "text".to_string(),
+                },
+            )
+            .await
+            .expect("send");
+        assert_eq!(reply.content, "echo: hello peer");
+        assert_eq!(reply.role, "assistant");
+
+        drop(effects);
+    }
+
+    #[tokio::test]
+    async fn unknown_method_errors_explicitly() {
+        let server = AgentHttpServer::serve(card(), StdArc::new(EchoHandler)).expect("serve");
+        let (ctx, effects) = build_ctx(card());
+        let transport = ctx
+            .service::<dyn AgentTransport>(&TRANSPORT)
+            .expect("transport");
+        // seam 暴露的方法仅 agent/getCard 与 message/send;未知方法走原始 RPC 验证。
+        assert_eq!(transport.local_card().name, "test-agent");
+
+        let raw = JsonRpcTransport::new(card());
+        let err = raw
+            .call(&server.url(), "no/suchMethod", json!({}))
+            .expect_err("unknown method");
+        assert!(err.0.contains("method not found"));
+
+        drop(effects);
+    }
+
+    #[test]
+    fn raw_tcp_client_receives_http_response() {
+        use std::io::{Read, Write};
+        use std::net::TcpStream;
+        let server = AgentHttpServer::serve(card(), StdArc::new(EchoHandler)).expect("serve");
+        let url = server.url();
+        let addr = url.trim_start_matches("http://").trim_end_matches('/');
+        let mut stream = TcpStream::connect(addr).expect("connect");
+        let request = format!(
+            "POST / HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"agent/getCard\",\"params\":{}}".len(),
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"agent/getCard\",\"params\":{}}"
+        );
+        stream.write_all(request.as_bytes()).expect("write");
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).expect("read");
+        let text = String::from_utf8_lossy(&buf).into_owned();
+        println!("SERVER RESPONSE: {text}");
+        assert!(text.contains("HTTP/1.1 200"), "http status line: {text}");
+    }
+}

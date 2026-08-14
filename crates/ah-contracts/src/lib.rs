@@ -37,6 +37,7 @@ pub mod subagent;
 pub mod teams;
 pub mod telemetry;
 pub mod tools;
+pub mod transport;
 pub mod web;
 pub mod workflow;
 pub mod workspace;
@@ -91,6 +92,9 @@ pub mod prelude {
     };
     pub use crate::telemetry::{Span, TelemetryError, TelemetryProvider};
     pub use crate::tools::{Tool, ToolError, ToolRegistry};
+    pub use crate::transport::{
+        AgentCard, AgentHandler, AgentMessage, AgentTransport, TransportError,
+    };
     pub use crate::web::{WebError, WebFetchRequest, WebFetchResult, WebProvider};
     pub use crate::workflow::{
         EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError, WorkflowOutput, WorkflowSpec,

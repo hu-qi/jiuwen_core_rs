@@ -34,6 +34,7 @@ use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_tools::ToolsPlugin;
+use ah_plugins_transport::TransportPlugin;
 use ah_plugins_web::WebPlugin;
 use ah_plugins_workflow::WorkflowPlugin;
 use ah_plugins_workspace::WorkspacePlugin;
@@ -119,6 +120,15 @@ pub fn plugin_catalog(
             Arc::new(CodePlugin::new(workspace_root.join("scratch"))) as DynPlugin,
         ),
         ("ah-plugins-web", Arc::new(WebPlugin) as DynPlugin),
+        (
+            "ah-plugins-transport",
+            Arc::new(TransportPlugin::new(ah_contracts::transport::AgentCard {
+                name: "agent-harness".to_string(),
+                description: "agent-harness local agent endpoint".to_string(),
+                url: "http://127.0.0.1:0/".to_string(),
+                skills: vec!["agent".to_string()],
+            })) as DynPlugin,
+        ),
         (
             "ah-plugins-sandbox-rail",
             Arc::new(SandboxRailPlugin) as DynPlugin,

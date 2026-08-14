@@ -83,3 +83,6 @@ pub const CODE: ServiceKey = ServiceKey::new("code");
 
 /// `web` seam 服务键(HTTP 客户端)。
 pub const WEB: ServiceKey = ServiceKey::new("web");
+
+/// `transport` seam 服务键(agent 传输)。
+pub const TRANSPORT: ServiceKey = ServiceKey::new("transport");
