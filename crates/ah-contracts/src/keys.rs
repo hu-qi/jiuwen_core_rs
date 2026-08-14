@@ -39,3 +39,6 @@ pub const SECURITY: ServiceKey = ServiceKey::new("security");
 
 /// `subagent` seam 服务键(子任务委派)。
 pub const SUBAGENT: ServiceKey = ServiceKey::new("subagent");
+
+/// `mcp` seam 服务键(Model Context Protocol 客户端)。
+pub const MCP: ServiceKey = ServiceKey::new("mcp");

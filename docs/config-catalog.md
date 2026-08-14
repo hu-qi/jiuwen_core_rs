@@ -31,7 +31,7 @@
 | ah-plugins-redis | url / ttl / namespace | 检查点与 KV |
 | ah-plugins-pulsar | url / topic / subscription | 消息队列 |
 | ah-plugins-elasticsearch | url / index / auth | 向量库 |
-| ah-plugins-mcp | 传输类型 / 端点 | 工具传输 |
+| ah-plugins-mcp(已实现,stdio) | command / args(默认 npx -y @modelcontextprotocol/server-everything;经 McpPlugin::new 注入) | 真实 MCP stdio transport;懒 spawn 子进程,首次调用时建立协议连接;http 传输规划 |
 
 ## 4. 配置纪律
 

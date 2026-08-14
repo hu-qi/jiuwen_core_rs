@@ -42,7 +42,8 @@
 | rsi | `rsi` | RSI 管线(规划) | missing
 | telemetry | `telemetry` | `Tracer`(规划) | missing
 | queue | `queue` | `MessageQueue`(规划) | missing
-| transport | `transport` | MCP/A2A 传输(规划) | missing
+| mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约)/ partial(stdio 真实,http 未实现) |
+| transport | `transport` | A2A 传输(规划) | missing
 | credentials | `credentials` | 凭据引用(规划) | missing
 
 ## 2. 域 → seam/插件映射(目标态)
@@ -132,7 +133,7 @@
 | a2a | `transport` seam + ah-plugins-a2a | HTTP server/client、流式 | 现 local adapter
 | tracer_otel | `telemetry` seam + ah-plugins-otel | OTLP 导出、semconv | 现内存 exporter
 | context_evolver(58 文件) | `memory` seam + ah-plugins-context-evolver | LLM 记忆流水线、Milvus | 现 0%
-| mcp(stdio/http) | `transport` seam + ah-plugins-mcp | 子进程/HTTP、能力协商 | 现 InMemoryMcpTransport
+| mcp(stdio/http) | `mcp` seam + ah-plugins-mcp | stdio 子进程、newline-delimited JSON-RPC 2.0、initialize 握手、list_tools/call_tool/shutdown | stdio 真实(ah-plugins-mcp:tests/mcp_stdio.rs 真实子进程验证);http 规划 |
 | vendor_specific | `llm` seam | 各厂商重排/嵌入 | 现词法 fallback
 
 ### 2.7 dev_tools(141 符号) + symphony

@@ -9,6 +9,7 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "ah-plugins-agent-loop",
+ "ah-plugins-mcp",
  "ah-plugins-memory",
  "ah-plugins-mock",
  "ah-plugins-openai",
@@ -54,6 +55,18 @@ dependencies = [
  "ah-plugins-mock",
  "ah-plugins-session-log",
  "ah-plugins-sysop",
+ "ah-plugins-tools",
+ "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-mcp"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
  "ah-plugins-tools",
  "async-trait",
  "serde_json",

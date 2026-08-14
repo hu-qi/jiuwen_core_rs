@@ -12,6 +12,7 @@ use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
 use ah_plugins_agent_loop::AgentLoopPlugin;
+use ah_plugins_mcp::McpPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
@@ -63,6 +64,17 @@ pub fn plugin_catalog(
         (
             "ah-plugins-retrieval",
             Arc::new(RetrievalPlugin::new(retrieval_dir)) as DynPlugin,
+        ),
+        (
+            // 真实 MCP stdio 客户端:懒 spawn(首次调用才拉起子进程),boot 无副作用。
+            "ah-plugins-mcp",
+            Arc::new(McpPlugin::new(
+                "npx",
+                vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-everything".to_string(),
+                ],
+            )) as DynPlugin,
         ),
         (
             "ah-plugins-agent-loop",

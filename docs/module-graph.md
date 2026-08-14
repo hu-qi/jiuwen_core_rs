@@ -18,8 +18,10 @@ ah-app ──> ah-hub ──> ah-contracts
    ├─> ah-plugins-memory (真实记忆)       ──> ah-hub, ah-contracts
    ├─> ah-plugins-retrieval (知识库检索)   ──> ah-hub, ah-contracts
    ├─> ah-plugins-security (安全检测)      ──> ah-hub, ah-contracts
-   └─> ah-plugins-subagent (子代理委派)    ──> ah-hub, ah-contracts
+   ├─> ah-plugins-subagent (子代理委派)    ──> ah-hub, ah-contracts
+   ├─> ah-plugins-mcp (真实 MCP stdio 传输) ──> ah-hub, ah-contracts
                                             └─dev-dep─> ah-plugins-tools(测试)
+                                            (ah-plugins-mcp 另注入 mcp_call_tool 到 tools seam)
 ```
 
 依赖方向(单向、禁止环):
@@ -50,7 +52,8 @@ ah-plugins-teams            团队运行时(迁移 residual.rs)
 ah-plugins-evolving         agent_evolving 域
 ah-plugins-rsi              RSI + auto_harness
 ah-plugins-store-*          redis/pulsar/gaussdb/elasticsearch/milvus/chroma
-ah-plugins-transport-*      mcp/a2a
+ah-plugins-mcp              真实 MCP stdio transport(已实现:子进程 + newline-delimited JSON-RPC 2.0)
+ah-plugins-transport-*      a2a(规划)
 ah-plugins-otel             telemetry
 ah-plugins-openai           第一个真实 LLM provider(迁移 OpenAiCompatibleClient)
 ah-plugins-devtools         dev_tools 域

@@ -33,9 +33,10 @@ agent-harness/
   - EventBus:emit(同步)/ serial(串行 await)/ parallel(并发)/ waterfall(next 链 + 短路);
   - Plugin trait + mount_all:依赖注入、拓扑排序挂载、循环依赖与重复 provider 检测;
   - Profile:TOML 组合配置(bundle 顺序 + 插件清单,去重展开)。
-- ah-contracts:ServiceKey、Event、Seam 标记、第一个示例 seam ModelProvider。
+- ah-contracts:ServiceKey、Event、Seam 标记,以及 llm/tools/fs/shell/session/workflow/memory/retrieval/security/subagent/mcp 等 seam 契约。
 - ah-plugins-mock:MockModelProvider + 示例插件 MockPlugin。
-- ah-app:cargo run -p ah-app 从 profiles/dev.toml 启动,挂载 mock 插件并调用 llm seam。
+- ah-plugins-mcp:真实 MCP stdio transport —— tokio 子进程 + newline-delimited JSON-RPC 2.0,真实 initialize 握手 / list_tools / call_tool / shutdown,并提供 mcp_call_tool 工具(集成测试用真实 fake server 子进程验证)。
+- ah-app:cargo run -p ah-app 从 profiles/dev.toml 启动,挂载插件并调用 llm seam。
 
 ## 构建与运行
 

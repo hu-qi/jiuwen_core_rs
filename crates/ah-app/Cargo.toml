@@ -25,6 +25,7 @@ ah-plugins-rails = { workspace = true }
 ah-plugins-session-log = { workspace = true }
 ah-plugins-workflow = { workspace = true }
 ah-plugins-memory = { workspace = true }
+ah-plugins-mcp = { workspace = true }
 ah-plugins-retrieval = { workspace = true }
 ah-plugins-security = { workspace = true }
 ah-plugins-subagent = { workspace = true }

@@ -1,0 +1,16 @@
+[package]
+name = "ah-plugins-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real MCP stdio transport: subprocess client speaking newline-delimited JSON-RPC 2.0"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+async-trait = "0.1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros", "process", "io-util", "time", "sync"] }
+
+[dev-dependencies]
+ah-plugins-tools = { workspace = true }

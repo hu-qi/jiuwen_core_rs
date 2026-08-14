@@ -9,9 +9,10 @@
 # - ah-plugins-memory: 真实持久化记忆
 # - ah-plugins-retrieval: 真实知识库检索
 # - ah-plugins-subagent: 真实子代理(隔离会话委派)
+# - ah-plugins-mcp: 真实 MCP stdio 客户端(懒 spawn,首次调用时拉起子进程)
 # - ah-plugins-agent-loop: 真实 ReAct 循环(日志驱动)
 name = "dev"
 
 [[bundles]]
 id = "boot"
-plugins = ["ah-plugins-mock", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-mock", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-mcp", "ah-plugins-agent-loop"]
