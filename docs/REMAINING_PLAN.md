@@ -8,7 +8,10 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 15 回合,190 tests / clippy 0 / fmt clean):
+> **账目更新**(第 16 回合,193 tests / clippy 0 / fmt clean):
+> - evaluation_result_analyzer aa892da(确定性信号 + 根因归因 + analysis.json)
+>
+> **账目更新**(第 15 回合,190 tests):
 > - git seam c25e510(真实子进程:init/add/commit/log/status/diff/branch)
 > - ci seam ddd1157(子进程门禁 + 超时 + 通过判定)  —— auto_harness git/CI 基建完成
 >
