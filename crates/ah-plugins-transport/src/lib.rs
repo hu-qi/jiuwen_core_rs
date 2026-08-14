@@ -158,9 +158,14 @@ fn handle_connection(
 ) -> Result<(), TransportError> {
     let mut buf = Vec::new();
     let mut chunk = [0u8; 4096];
-    // 读至请求头结束 + Content-Length 字节(简化:最多读 64KB)。
-    let mut total = 0usize;
+    // 阶段 1:读至请求头结束(CRLF 分隔符出现为止)。
     loop {
+        if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+            break;
+        }
+        if buf.len() > 64 * 1024 {
+            break;
+        }
         let n = stream
             .read(&mut chunk)
             .map_err(|e| TransportError(format!("read: {e}")))?;
@@ -168,18 +173,29 @@ fn handle_connection(
             break;
         }
         buf.extend_from_slice(&chunk[..n]);
-        total += n;
-        if total > 64 * 1024 {
-            break;
-        }
-        // 请求头分隔符出现即够解析。
-        if buf.windows(4).any(|w| w == b"\r\n\r\n") {
-            break;
-        }
     }
-    let text = String::from_utf8_lossy(&buf).into_owned();
-    // 解析 Content-Length。
-    let body = extract_body(&text);
+    // 阶段 2:继续读到 Content-Length 声明的请求体完整到达(避免分包竞态)。
+    let header_end = buf
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .map(|i| i + 4)
+        .unwrap_or(buf.len());
+    let content_length = content_length_of(&buf[..header_end]);
+    while buf.len() < header_end + content_length {
+        let n = stream
+            .read(&mut chunk)
+            .map_err(|e| TransportError(format!("read body: {e}")))?;
+        if n == 0 {
+            break;
+        }
+        buf.extend_from_slice(&chunk[..n]);
+    }
+    let body_bytes = &buf[header_end..];
+    let body: String = body_bytes
+        .iter()
+        .take(content_length)
+        .map(|&b| b as char)
+        .collect();
 
     let response_body = dispatch(&body, &card, &handler);
     let response = format!(
@@ -192,23 +208,18 @@ fn handle_connection(
         .map_err(|e| TransportError(format!("write: {e}")))
 }
 
-fn extract_body(request: &str) -> String {
-    let header_end = request
-        .find("\r\n\r\n")
-        .map(|i| i + 4)
-        .unwrap_or(request.len());
-    let headers = &request[..header_end];
+/// 从请求头字节中解析 Content-Length。
+fn content_length_of(headers: &[u8]) -> usize {
+    let text = String::from_utf8_lossy(headers);
     let mut content_length = 0usize;
-    for line in headers.lines().skip(1) {
+    for line in text.lines().skip(1) {
         if let Some((name, value)) = line.split_once(':')
             && name.trim().eq_ignore_ascii_case("content-length")
         {
             content_length = value.trim().parse().unwrap_or(0);
         }
     }
-    let body = &request[header_end..];
-    let body: String = body.chars().take(content_length).collect();
-    body
+    content_length
 }
 
 /// 分发 JSON-RPC 方法并返回响应 JSON。
