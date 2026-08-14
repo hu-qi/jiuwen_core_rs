@@ -6,7 +6,11 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 6 回合,145 tests / clippy 0 / fmt clean):
+> **账目更新**(第 7 回合,150 tests / clippy 0 / fmt clean):
+> - teams SQLite 持久化 be31244(SqliteTeamRuntime 真实事务,重启恢复)
+> - session 检查点 2cea108(checkpoint/restore 命名快照,seq 续接)
+>
+> **账目更新**(第 6 回合,145 tests):
 > - retrieval 向量化 9483740(哈希 n-gram TF embedding + 余弦,CJK 二元组,search 工具 vector 模式)
 > - harness rails ebc089c(PathGuard 路径逃逸 + ToolBudget 调用上限,复用 pre-execute 挂载点)
 > - prompt seam 三角闭环 6aa8d54(agent-loop 消费方:注册模板渲染注入系统提示)

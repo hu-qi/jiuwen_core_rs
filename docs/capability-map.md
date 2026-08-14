@@ -26,9 +26,9 @@
 | prompt | `prompt` | `PromptRegistry`(已实现:版本化注册 + {{var}} 渲染 + 缺失变量显式报错 + 文件持久化);agent-loop 消费方注入渲染系统提示 | done(契约+消费)/ partial(无结构化 schema prompt) |
 | store | `store` | `BaseKVStore`/`BaseMessageStore`(已实现,文件后端);DB/Vector 留待后续 | done(契约,本地文件后端)/ partial(外部后端 Redis/GaussDB/ES/Milvus) |
 | session | `sessions` + `session-manager` | `SessionLog` append-only 日志 + JSONL 持久化 + 投影;`SessionManager` 多会话 create/open/fork/list(已实现) | done(契约)/ partial(无分布式/跨进程会话) |
-| context | `context` | `ContextEngine`(规划) | missing
+| context | `context` | `ContextEngine`(已实现:预算组装/摘录压缩+LLM 总结/offload/reinject;agent-loop 与 subagent 消费) | done(契约+消费)/ partial(精确 tokenizer) |
 | memory | `memory` | `MemoryProvider`(已实现:JSON 文件持久化 + remember/recall/forget 工具) | done(契约)/ partial(无图记忆/外部 provider) |
-| retrieval | `retrieval` | `RetrievalProvider`(已实现:本地 BM25 分块检索 + JSON 持久化 + ingest/search 工具) | done(契约)/ partial(无向量库/embedding/reranker) |
+| retrieval | `retrieval` | `RetrievalProvider`(已实现:BM25 + 本地确定性向量(哈希 n-gram TF + 余弦) + JSON 持久化 + ingest/search 工具) | done(契约)/ partial(无外部模型 embedding/reranker) |
 | fs | `fs` | `FsProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | shell | `shell` | `ShellProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | code | `code` | `CodeProvider`(规划) | missing
