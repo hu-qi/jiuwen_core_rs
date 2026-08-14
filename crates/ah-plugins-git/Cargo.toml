@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-git"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real local git operations via git subprocess (init/status/add/commit/log/diff/branch) for auto_harness"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

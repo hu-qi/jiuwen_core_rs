@@ -16,6 +16,7 @@ use ah_plugins_code::CodePlugin;
 use ah_plugins_context::ContextPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
+use ah_plugins_git::GitPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
@@ -133,6 +134,7 @@ pub fn plugin_catalog(
                 skills: vec!["agent".to_string()],
             })) as DynPlugin,
         ),
+        ("ah-plugins-git", Arc::new(GitPlugin) as DynPlugin),
         (
             "ah-plugins-sandbox-rail",
             Arc::new(SandboxRailPlugin) as DynPlugin,

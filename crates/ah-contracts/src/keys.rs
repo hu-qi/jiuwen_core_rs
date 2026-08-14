@@ -89,3 +89,6 @@ pub const TRANSPORT: ServiceKey = ServiceKey::new("transport");
 
 /// `teams-swarm` seam 服务键(swarmflow 编排)。
 pub const SWARM: ServiceKey = ServiceKey::new("teams-swarm");
+
+/// `git` seam 服务键(本地 git 操作)。
+pub const GIT: ServiceKey = ServiceKey::new("git");

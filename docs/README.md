@@ -67,6 +67,7 @@
   ah-plugins-code(真实代码执行:隔离 scratch 目录 + python3 子进程 + 超时强杀 + 输出/退出码);
   ah-plugins-web(真实 HTTP 客户端:ureq GET + 超时 + 状态/响应头/正文;TLS 需启用 ureq tls 特性);
   ah-plugins-transport(真实 A2A 风格 agent 传输:JSON-RPC 2.0 over HTTP,客户端 + 本地 HTTP 服务端);
+  ah-plugins-git(真实本地 git 操作:init/status/add/commit/log/diff/branch,auto_harness 基建);
   ah-plugins-mcp(真实 MCP stdio transport:子进程 + JSON-RPC 2.0 + mcp_call_tool 工具);
   ah-plugins-credentials(真实凭据引用:环境变量 provider,openai.api_key → OPENAI_API_KEY 等映射可配置;get/list 真实读 env,set/remove 显式报错);
   ah-plugins-telemetry(真实 telemetry:内存 span 记录 + JSONL 导出,agent/step 与 tools/post-execute 监听生成真实 span;OTLP 导出留待后续);

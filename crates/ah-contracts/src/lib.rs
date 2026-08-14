@@ -18,6 +18,7 @@ pub mod effect;
 pub mod event;
 pub mod evolving;
 pub mod fs;
+pub mod git;
 pub mod keys;
 pub mod llm;
 pub mod mcp;
@@ -59,6 +60,7 @@ pub mod prelude {
         Trajectory, TrajectoryStep, Verdict,
     };
     pub use crate::fs::{FsError, FsProvider};
+    pub use crate::git::{GitCommit, GitError, GitProvider, GitStatusEntry};
     pub use crate::keys::{
         AGENT_LOOP, CREDENTIALS, FS, LLM, MCP, MEMORY, RETRIEVAL, SESSION_MANAGER, SESSIONS, SHELL,
         TELEMETRY, TOOLS, WORKFLOW,

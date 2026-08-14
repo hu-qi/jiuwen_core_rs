@@ -42,6 +42,7 @@ ah-plugins-sandbox = { workspace = true }
 ah-plugins-code = { workspace = true }
 ah-plugins-web = { workspace = true }
 ah-plugins-transport = { workspace = true }
+ah-plugins-git = { workspace = true }
 ah-plugins-telemetry = { workspace = true }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

@@ -13,6 +13,7 @@ dependencies = [
  "ah-plugins-context",
  "ah-plugins-credentials",
  "ah-plugins-evolving",
+ "ah-plugins-git",
  "ah-plugins-mcp",
  "ah-plugins-memory",
  "ah-plugins-mock",
@@ -125,6 +126,14 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-git"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
 ]
 
 [[package]]
