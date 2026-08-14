@@ -33,7 +33,7 @@
 | shell | `shell` | `ShellProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | code | `code` | `CodeProvider`(规划) | missing
 | sandbox | `sandbox` | `SandboxProvider`(规划) | missing
-| security | `security` | `Guardrail`(规划) | missing
+| security | `security` | `SecurityProvider`(已实现:规则 guardrails + pre-execute rail) | done(契约)/ partial(无 LLM 后端/API) |
 | agent-loop | `agent-loop` | `AgentLoop`(已实现,真实 ReAct,日志驱动,工具错误回喂模型) | done
 | workflow | `workflow` | `WorkflowEngine`(已实现:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边 + 轨迹入日志) | done(契约)/ partial(无流式) |
 | subagent | `subagents` | `SubagentRuntime`(规划) | missing

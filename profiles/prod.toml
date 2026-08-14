@@ -2,6 +2,7 @@
 # - ah-plugins-tools: 真实工具注册表(含工具执行管线)
 # - ah-plugins-sysop: 真实 fs/shell 执行
 # - ah-plugins-rails: 真实 rails(ShellGuard)
+# - ah-plugins-security: 真实安全检测(guardrails + pre-execute rail)
 # - ah-plugins-session-log: 真实会话事件日志(JSONL + 多会话)
 # - ah-plugins-workflow: 真实工作流引擎
 # - ah-plugins-memory: 真实持久化记忆
@@ -13,4 +14,4 @@ name = "prod"
 
 [[bundles]]
 id = "real"
-plugins = ["ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-openai", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-openai", "ah-plugins-agent-loop"]

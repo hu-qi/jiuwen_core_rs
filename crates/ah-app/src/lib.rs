@@ -17,6 +17,7 @@ use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_rails::ShellGuardRailPlugin;
 use ah_plugins_retrieval::RetrievalPlugin;
+use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_tools::ToolsPlugin;
@@ -43,6 +44,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-rails",
             Arc::new(ShellGuardRailPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-security",
+            Arc::new(SecurityRailPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-session-log",

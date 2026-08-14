@@ -18,6 +18,7 @@ pub mod llm;
 pub mod memory;
 pub mod retrieval;
 pub mod seam;
+pub mod security;
 pub mod service;
 pub mod session;
 pub mod shell;
@@ -40,6 +41,9 @@ pub mod prelude {
     pub use crate::memory::{MemoryError, MemoryProvider, MemoryRecord};
     pub use crate::retrieval::{RetrievalError, RetrievalHit, RetrievalProvider};
     pub use crate::seam::Seam;
+    pub use crate::security::{
+        Guardrail, GuardrailDecision, SecurityError, SecurityProvider, SecurityVerdict, Severity,
+    };
     pub use crate::service::ServiceKey;
     pub use crate::session::{SessionError, SessionEvent, SessionEventKind, SessionLog};
     pub use crate::shell::{ShellError, ShellOutput, ShellProvider};

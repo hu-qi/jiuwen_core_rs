@@ -16,7 +16,8 @@ ah-app ──> ah-hub ──> ah-contracts
    ├─> ah-plugins-session-log (JSONL 日志)   ──> ah-hub, ah-contracts
    ├─> ah-plugins-workflow (工作流引擎)     ──> ah-hub, ah-contracts
    ├─> ah-plugins-memory (真实记忆)       ──> ah-hub, ah-contracts
-   └─> ah-plugins-retrieval (知识库检索)   ──> ah-hub, ah-contracts
+   ├─> ah-plugins-retrieval (知识库检索)   ──> ah-hub, ah-contracts
+   └─> ah-plugins-security (安全检测)      ──> ah-hub, ah-contracts
                                             └─dev-dep─> ah-plugins-tools(测试)
 ```
 

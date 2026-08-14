@@ -33,3 +33,6 @@ pub const MEMORY: ServiceKey = ServiceKey::new("memory");
 
 /// `retrieval` seam 服务键(知识库检索)。
 pub const RETRIEVAL: ServiceKey = ServiceKey::new("retrieval");
+
+/// `security` seam 服务键(安全检测)。
+pub const SECURITY: ServiceKey = ServiceKey::new("security");
