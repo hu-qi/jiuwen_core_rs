@@ -49,6 +49,16 @@ pub struct RsiCheckpoint {
     pub updated_at_ms: u64,
 }
 
+/// LLM 驱动的数据集生成结果。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct GeneratedDataset {
+    /// "llm" = 模型合成; "deterministic" = LLM 不可用显式回退确定性扩展。
+    pub source: String,
+    /// 生成说明(如 LLM 不可用原因)。
+    pub note: String,
+    pub cases: Vec<RsiCase>,
+}
+
 /// rsi 错误。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RsiError(pub String);
@@ -66,12 +76,20 @@ impl std::error::Error for RsiError {}
 /// 消费方(如 ah-cli 的 rsi 子命令)通过 "rsi" 服务键解析本 trait。
 #[async_trait]
 pub trait RsiRuntime: Seam {
-    /// 从种子任务生成数据集(真实确定性扩展:改写/组合/边界,LLM 生成留待后续)。
+    /// 从种子任务生成数据集(真实确定性扩展:改写/组合/边界)。
     fn generate_dataset(
         &self,
         seed_tasks: Vec<String>,
         count: usize,
     ) -> Result<Vec<RsiCase>, RsiError>;
+
+    /// 模型驱动数据集生成:向 LLM 请求任务变体 JSON,解析/去重;
+    /// LLM 不可用或响应不可解析时显式回退确定性扩展(source 注明)。
+    async fn generate_dataset_llm(
+        &self,
+        seed_tasks: Vec<String>,
+        count: usize,
+    ) -> Result<GeneratedDataset, RsiError>;
 
     /// 执行单个用例:经 SubagentRuntime 真实委派,再以 evolving 评估。
     async fn run_case(

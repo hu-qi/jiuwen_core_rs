@@ -11,9 +11,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use ah_contracts::evolving::{EvolvingRuntime, RefinementTarget, Verdict};
-use ah_contracts::keys::{EVOLVING, RSI, SUBAGENT};
+use ah_contracts::keys::{EVOLVING, LLM, RSI, SUBAGENT};
+use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::prelude::Effect;
-use ah_contracts::rsi::{RsiCase, RsiCheckpoint, RsiError, RsiReport, RsiRunOutcome, RsiRuntime};
+use ah_contracts::rsi::{
+    GeneratedDataset, RsiCase, RsiCheckpoint, RsiError, RsiReport, RsiRunOutcome, RsiRuntime,
+};
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::subagent::{SubagentRuntime, SubagentSpec};
@@ -36,12 +39,14 @@ use async_trait::async_trait;
 pub struct RsiRuntimeImpl {
     subagent: Arc<dyn SubagentRuntime>,
     evolving: Arc<dyn EvolvingRuntime>,
+    /// LLM(数据集合成;不可用时显式回退确定性扩展)。
+    llm: Option<Arc<dyn ModelProvider>>,
     /// checkpoint 目录(JSONL 文件)。
     dir: PathBuf,
 }
 
 impl RsiRuntimeImpl {
-    /// 构造运行时(需要 subagent 与 evolving seam;checkpoint 写入 dir)。
+    /// 构造运行时(需要 subagent 与 evolving seam;可选 llm;checkpoint 写入 dir)。
     pub fn new(
         subagent: Arc<dyn SubagentRuntime>,
         evolving: Arc<dyn EvolvingRuntime>,
@@ -50,8 +55,15 @@ impl RsiRuntimeImpl {
         Self {
             subagent,
             evolving,
+            llm: None,
             dir: dir.into(),
         }
+    }
+
+    /// 挂载 LLM seam(数据集合成)。
+    pub fn with_llm(mut self, llm: Arc<dyn ModelProvider>) -> Self {
+        self.llm = Some(llm);
+        self
     }
 
     fn checkpoint_path(&self) -> PathBuf {
@@ -107,6 +119,99 @@ impl RsiRuntime for RsiRuntimeImpl {
             round += 1;
         }
         Ok(cases)
+    }
+
+    async fn generate_dataset_llm(
+        &self,
+        seed_tasks: Vec<String>,
+        count: usize,
+    ) -> Result<GeneratedDataset, RsiError> {
+        if seed_tasks.is_empty() {
+            return Err(RsiError("no seed tasks".to_string()));
+        }
+        if count == 0 {
+            return Ok(GeneratedDataset {
+                source: "deterministic".to_string(),
+                note: "count=0, empty dataset".to_string(),
+                cases: vec![],
+            });
+        }
+        // LLM 可用时:请求任务变体 JSON 数组。
+        let Some(llm) = &self.llm else {
+            return Ok(GeneratedDataset {
+                source: "deterministic".to_string(),
+                note: "llm seam unavailable; fell back to deterministic expansion".to_string(),
+                cases: self.generate_dataset(seed_tasks, count)?,
+            });
+        };
+        let seeds = seed_tasks.join("\n- ");
+        let prompt = format!(
+            "Generate {count} diverse task variations based on these seed tasks. Return ONLY a JSON array of objects with a single key task (string).\nSeeds:\n- {seeds}"
+        );
+        let response = llm
+            .chat(ModelRequest {
+                messages: vec![ChatMessage::new(ChatRole::User, prompt)],
+                ..Default::default()
+            })
+            .await;
+        let content = match response {
+            Ok(r) => r.content,
+            Err(e) => {
+                return Ok(GeneratedDataset {
+                    source: "deterministic".to_string(),
+                    note: format!("llm unavailable ({e}); fell back to deterministic expansion"),
+                    cases: self.generate_dataset(seed_tasks, count)?,
+                });
+            }
+        };
+        // 提取 JSON 数组(容忍代码围栏与前后杂文)。
+        let extracted = content
+            .find('[')
+            .and_then(|start| content[start..].rfind(']').map(|end| start + end))
+            .map(|end| &content[..end + 1])
+            .unwrap_or_default();
+        let parsed: Result<Vec<serde_json::Value>, _> = serde_json::from_str(extracted);
+        let Ok(values) = parsed else {
+            return Ok(GeneratedDataset {
+                source: "deterministic".to_string(),
+                note: "llm response not a JSON array; fell back to deterministic expansion"
+                    .to_string(),
+                cases: self.generate_dataset(seed_tasks, count)?,
+            });
+        };
+        // 提取任务文本,去重,截断到 count。
+        let mut seen = std::collections::HashSet::new();
+        let mut cases: Vec<RsiCase> = Vec::new();
+        for value in values {
+            if cases.len() >= count {
+                break;
+            }
+            let Some(task) = value.get("task").and_then(serde_json::Value::as_str) else {
+                continue;
+            };
+            let task = task.trim().to_string();
+            if task.is_empty() || !seen.insert(task.clone()) {
+                continue;
+            }
+            cases.push(RsiCase {
+                id: format!("llm-{}", cases.len()),
+                task,
+                expected: None,
+            });
+        }
+        if cases.is_empty() {
+            return Ok(GeneratedDataset {
+                source: "deterministic".to_string(),
+                note: "llm returned no usable task; fell back to deterministic expansion"
+                    .to_string(),
+                cases: self.generate_dataset(seed_tasks, count)?,
+            });
+        }
+        Ok(GeneratedDataset {
+            source: "llm".to_string(),
+            note: format!("generated {} cases via llm", cases.len()),
+            cases,
+        })
     }
 
     async fn run_case(
@@ -360,8 +465,12 @@ impl Plugin for RsiPlugin {
                 plugin: self.name(),
                 message: "evolving seam not registered".to_string(),
             })?;
-        let runtime: Arc<dyn RsiRuntime> =
-            Arc::new(RsiRuntimeImpl::new(subagent, evolving, self.dir.clone()));
+        // LLM 可选:有则用于数据集合成,无则确定性扩展(显式记录)。
+        let mut runtime = RsiRuntimeImpl::new(subagent, evolving, self.dir.clone());
+        if let Some(llm) = ctx.service::<dyn ModelProvider>(&LLM) {
+            runtime = runtime.with_llm(llm);
+        }
+        let runtime: Arc<dyn RsiRuntime> = Arc::new(runtime);
         Ok(vec![ctx.register(RSI, runtime)])
     }
 }
@@ -395,6 +504,51 @@ mod tests {
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
         (ctx, effects)
+    }
+
+    /// 测试用 JSON LLM:返回固定 JSON 任务变体数组(真实协议路径验证)。
+    struct JsonLlmProvider;
+
+    impl ah_contracts::seam::Seam for JsonLlmProvider {}
+
+    impl Plugin for JsonLlmProvider {
+        fn name(&self) -> &'static str {
+            "ah-plugins-rsi-json-llm"
+        }
+
+        fn provides(&self) -> Vec<ServiceKey> {
+            vec![ah_contracts::keys::LLM]
+        }
+
+        fn inject(&self) -> Vec<ServiceKey> {
+            vec![]
+        }
+
+        fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
+            Ok(vec![ctx.register(
+                ah_contracts::keys::LLM,
+                StdArc::new(JsonLlmProvider) as StdArc<dyn ah_contracts::llm::ModelProvider>,
+            )])
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ah_contracts::llm::ModelProvider for JsonLlmProvider {
+        fn name(&self) -> &'static str {
+            "json-test"
+        }
+
+        async fn chat(
+            &self,
+            _request: ah_contracts::llm::ModelRequest,
+        ) -> Result<ah_contracts::llm::ModelResponse, ah_contracts::llm::ModelError> {
+            Ok(ah_contracts::llm::ModelResponse {
+                content:
+                    r#"[{"task":"variant one"},{"task":"variant two"},{"task":"variant three"}]"#
+                        .to_string(),
+                tool_calls: vec![],
+            })
+        }
     }
 
     #[tokio::test]
@@ -604,6 +758,59 @@ mod tests {
         assert_eq!(resumed[0].round, 3);
 
         drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn generate_dataset_llm_falls_back_and_uses_llm() {
+        let root = std::env::temp_dir().join(format!("ah-rsi-llmgen-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let rsi = ctx.service::<dyn RsiRuntime>(&RSI).expect("rsi");
+
+        // 1) mock LLM 返回非 JSON → 显式回退确定性扩展。
+        let result = rsi
+            .generate_dataset_llm(vec!["list files".to_string()], 3)
+            .await
+            .expect("gen");
+        assert_eq!(result.source, "deterministic", "mock non-JSON falls back");
+        assert!(
+            result.note.contains("fell back"),
+            "note explains fallback: {}",
+            result.note
+        );
+        assert!(!result.cases.is_empty());
+
+        // 2) 挂载一个返回 JSON 的 provider → llm 源。
+        let ctx2 = Context::new();
+        let session_dir = root.join("sessions2");
+        let default_path = session_dir.join("default.jsonl");
+        let plugins2: Vec<DynPlugin> = vec![
+            StdArc::new(ah_plugins_tools::ToolsPlugin),
+            StdArc::new(ah_plugins_sysop::SysopPlugin::new(&root)),
+            StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                &default_path,
+                &session_dir,
+            )),
+            StdArc::new(ah_plugins_subagent::SubagentPlugin),
+            StdArc::new(JsonLlmProvider),
+            StdArc::new(ah_plugins_evolving::EvolvingPlugin::new(
+                root.join("evolving2"),
+            )),
+            StdArc::new(RsiPlugin::new(root.join("rsi2"))),
+        ];
+        let effects2 = ctx2.mount_all(plugins2).expect("mount2");
+        let rsi2 = ctx2.service::<dyn RsiRuntime>(&RSI).expect("rsi2");
+        let result2 = rsi2
+            .generate_dataset_llm(vec!["list files".to_string()], 3)
+            .await
+            .expect("gen2");
+        assert_eq!(result2.source, "llm", "json provider drives llm generation");
+        assert_eq!(result2.cases.len(), 3);
+        assert!(result2.cases[0].task.contains("variant"));
+        assert!(result2.cases.iter().all(|c| c.expected.is_none()));
+
+        drop(effects);
+        drop(effects2);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

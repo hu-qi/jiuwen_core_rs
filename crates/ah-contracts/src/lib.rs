@@ -127,7 +127,9 @@ pub mod prelude {
     pub use crate::queue::{MessageQueue, QueueError, QueueMessage};
     pub use crate::retrieval::{RetrievalError, RetrievalHit, RetrievalProvider};
     pub use crate::reward::{RewardCase, RewardConfig, RewardError, RewardFunction, RewardOutput};
-    pub use crate::rsi::{RsiCase, RsiCheckpoint, RsiError, RsiReport, RsiRunOutcome, RsiRuntime};
+    pub use crate::rsi::{
+        GeneratedDataset, RsiCase, RsiCheckpoint, RsiError, RsiReport, RsiRunOutcome, RsiRuntime,
+    };
     pub use crate::runner::{
         CallbackChain, CallbackMetrics, ChainAction, ChainCallback, ChainContext, ChainResult,
         RunnerError,

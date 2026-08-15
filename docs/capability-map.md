@@ -112,7 +112,7 @@
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
 | orchestrator(100) | ah-plugins-rsi | 多轮优化编排、checkpoint/resume | 已落地:run_rounds 多轮循环(评测→精化→checkpoint 续跑,本回合);git/CI 基建留待后续 |
-| dataset_generator(72) / dataset_curator(13) / data_loader(5) | ah-plugins-rsi | LLM 生成、curate、分批 | 已落地确定性扩展(改写/组合/边界);LLM 生成留待后续 |
+| dataset_generator(72) / dataset_curator(13) / data_loader(5) | ah-plugins-rsi | LLM 生成、curate、分批 | 已落地(确定性扩展 + LLM 合成:提示→JSON 任务变体解析/去重,LLM 不可用显式回退确定性扩展);curate/分批留待后续 |
 | evaluator(judger 91/case_runner 56/…) | `evolving` seam + ah-plugins-rsi | LLM judge、执行后端 | 已落地(expected 匹配优先 + evolving 轨迹评估(本地判据 + LLM judge 附加)) |
 | evaluation_result_analyzer(73) | ah-plugins-rsi | 信号提取、根因归因、证据引用、artifact 落盘 | 已落地(本回合:确定性信号 + 规则归因 + analysis.json);LLM 深度诊断留待后续 |
 | member_optimizer(16 文件) | ah-plugins-rsi | attribution→plan→execute→verify→publish | 未实现(0%;由 single_harness 候选门禁替代编排,后续可补) |

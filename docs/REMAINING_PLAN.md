@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 50 回合,273 tests / clippy 0 / fmt clean):
+> - RSI LLM 数据集生成 generate_dataset_llm(提示 → JSON 任务变体解析/去重/截断;LLM seam 可选注入,不可用/响应不可解析时显式回退确定性扩展并注明 source/note)
+>
 > **账目更新**(第 49 回合,272 tests / clippy 0 / fmt clean):
 > - 自进化训练器 ah-plugins-trainer(基线评估 → 每 epoch train 前向 → Optimizer 文本梯度应用 → 验证门禁(严格改进才推进 best)→ early stop;trainer seam)
 >
