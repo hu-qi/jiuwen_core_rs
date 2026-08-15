@@ -39,6 +39,7 @@ pub mod optimizer;
 pub mod pregel;
 pub mod prompt;
 pub mod queue;
+pub mod rerank;
 pub mod retrieval;
 pub mod reward;
 pub mod rl_step;
@@ -138,6 +139,7 @@ pub mod prelude {
     };
     pub use crate::prompt::{PromptError, PromptRegistry, PromptTemplate, RenderedPrompt};
     pub use crate::queue::{MessageQueue, QueueError, QueueMessage};
+    pub use crate::rerank::{RerankConfig, RerankError, RerankedHit, Reranker};
     pub use crate::retrieval::{RetrievalError, RetrievalHit, RetrievalProvider};
     pub use crate::reward::{RewardCase, RewardConfig, RewardError, RewardFunction, RewardOutput};
     pub use crate::rl_step::{PpoParams, RlSample, RlStep, RlStepError, RlStepResult};

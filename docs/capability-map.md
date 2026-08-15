@@ -28,7 +28,7 @@
 | session | `sessions` + `session-manager` | `SessionLog` append-only 日志 + JSONL 持久化 + 投影;`SessionManager` 多会话 create/open/fork/list(已实现) | done(契约)/ partial(无分布式/跨进程会话) |
 | context | `context` | `ContextEngine`(已实现:预算组装/摘录压缩+LLM 总结/offload/reinject;agent-loop 与 subagent 消费) | done(契约+消费)/ partial(精确 tokenizer) |
 | memory | `memory` | `MemoryProvider`(已实现:JSON 文件持久化 + remember/recall/forget 工具);graph-memory 知识图谱记忆(实体/关系/episode + 检索/邻居) | done(契约+图记忆)/ partial(外部 provider) |
-| retrieval | `retrieval` | `RetrievalProvider`(已实现:BM25 + 本地确定性向量(哈希 n-gram TF + 余弦) + JSON 持久化 + ingest/search 工具) | done(契约)/ partial(无外部模型 embedding/reranker) |
+| retrieval | `retrieval` | `RetrievalProvider` + `Reranker`(已实现:BM25 + 本地确定性向量(哈希 n-gram TF + 余弦) + JSON 持久化 + ingest/search 工具 + 词法/向量融合重排(多样性惩罚)) | done(契约)/ partial(无外部模型 embedding) |
 | fs | `fs` | `FsProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | shell | `shell` | `ShellProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | code | `code` | `CodeProvider`(已实现:隔离 scratch + python3 子进程 + 超时强杀 + 输出/退出码) | done(契约)/ partial(仅 python3,无沙箱容器) |
@@ -66,7 +66,7 @@
 | session(38 类) | `sessions` seam + ah-plugins-session-log | 检查点、VCS/fork/restore、tracer | append-only 日志重建 + fork/checkpoint/restore 已落地(本回合) |
 | context_engine(72 文件) | `context` seam + `tokenizer` seam | 压缩、offload、token 预算、reinjection | 已实现(ah-plugins-context:预算组装/摘录压缩+LLM 总结/offload JSONL/reinject;精确 tokenizer 已落地(BPE-lite + CJK 感知,注册后 estimate_tokens 用精确计数));向量化留待后续 |
 | memory(104 文件) | `memory` seam + ah-plugins-graph-memory | graph/lite/coding 记忆、外部 provider | 图记忆已落地(本回合:确定性实体抽取 + 共现关系 + episode + JSONL 持久化 + 关键词检索/邻居遍历 + graph_* 工具);lite/coding 与外部 provider 留待后续 |
-| retrieval(84 文件) | `retrieval` seam | indexing/embedding/reranker/vector store/retriever | BM25 + 本地确定性向量(哈希 n-gram TF + 余弦)已落地;reranker 与外部模型 embedding 留待后续 |
+| retrieval(84 文件) | `retrieval` seam | indexing/embedding/reranker/vector store/retriever | BM25 + 本地确定性向量(哈希 n-gram TF + 余弦)已落地;reranker 本地确定性融合重排已落地(ah-plugins-rerank:词法+向量归一化加权融合 + 多样性惩罚);外部模型 embedding 留待后续 |
 | security(20 类) | `security` seam | guardrail 后端、sanitizer、风险组合 | 规则+LLM 后端
 | sys_operation(56 类) | `fs`/`shell`/`code`/`sandbox` seam + ah-plugins-sysop-* | 本地/远程受限执行 | 现成 sys_operation 资产;补远程沙箱
 | single_agent(60 类) | ah-plugins-core-single-agent | ReAct、中断恢复、skills、ability manager | 中断可恢复;非 mock 模型

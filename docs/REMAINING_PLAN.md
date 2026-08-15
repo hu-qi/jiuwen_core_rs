@@ -2,13 +2,16 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 270 tests / 49 crates,clippy -D warnings 0,fmt clean。
+> 当前 293 tests / 57 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 56 回合,289 tests / clippy 0 / fmt clean):
+> **账目更新**(第 57 回合,293 tests / clippy 0 / fmt clean):
+> - 检索重排 ah-plugins-rerank(词法+向量候选按 doc_id+chunk 合并;各路径候选内归一化;lexical_weight × bm25_norm + vector_weight × cosine_norm 加权融合;多样性惩罚(与前 k 个已选共享词扣分);按融合分降序输出 top-k;空输入/负权重显式报错;rerank seam + 注册即反注册)
+>
+**账目更新**(第 56 回合,289 tests / clippy 0 / fmt clean):
 > - RL 训练步数学 ah-plugins-rl-step(advantage=reward−value;policy ratio=exp(Δlogp);clipped PPO objective(ε=0.2,advantage 正负分支);value loss=(v−r)²;policy/value loss 聚合;无效/非有限样本显式剔除)
 >
 > **账目更新**(第 55 回合,285 tests / clippy 0 / fmt clean):

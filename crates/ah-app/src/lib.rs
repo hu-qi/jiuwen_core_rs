@@ -41,6 +41,7 @@ use ah_plugins_queue::redis_queue::RedisQueuePlugin;
 use ah_plugins_rails::{
     ApprovalRailPlugin, PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin,
 };
+use ah_plugins_rerank::RerankPlugin;
 use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rl::RlPlugin;
 use ah_plugins_rl_step::RlStepPlugin;
@@ -253,6 +254,7 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-rl", Arc::new(RlPlugin) as DynPlugin),
         ("ah-plugins-rl-step", Arc::new(RlStepPlugin) as DynPlugin),
+        ("ah-plugins-rerank", Arc::new(RerankPlugin) as DynPlugin),
         ("ah-plugins-runner", Arc::new(RunnerPlugin) as DynPlugin),
         (
             "ah-plugins-subagents",
