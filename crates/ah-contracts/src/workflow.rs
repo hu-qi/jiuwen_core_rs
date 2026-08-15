@@ -28,6 +28,9 @@ pub enum NodeKind {
     /// 意图路由组件(config: {intents: [{id, description}], mode: "keyword"|"llm",
     /// patterns: {id: [keywords]}}),输出 {intent, confidence}。
     Intent,
+    /// 提问组件(config: {question, timeout_ms?}):经 queue 发布问题并等待回答,
+    /// 输出 {answer}。
+    Questioner,
 }
 
 /// 节点规格。

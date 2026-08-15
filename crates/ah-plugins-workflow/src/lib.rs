@@ -8,9 +8,10 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use ah_contracts::event::Event;
-use ah_contracts::keys::{LLM, SESSIONS, TOOLS, WEB, WORKFLOW};
+use ah_contracts::keys::{LLM, QUEUE, SESSIONS, TOOLS, WEB, WORKFLOW};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::prelude::Effect;
+use ah_contracts::queue::MessageQueue;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::session::{SessionEventKind, SessionLog};
@@ -44,6 +45,8 @@ pub struct WorkflowEngineImpl {
     sessions: Arc<dyn SessionLog>,
     /// 可选 web seam(Http 节点用;未挂载时 Http 节点显式报错)。
     web: Option<Arc<dyn WebProvider>>,
+    /// 可选 queue seam(Questioner 节点用;未挂载时显式报错)。
+    queue: Option<Arc<dyn MessageQueue>>,
     ctx: Context,
 }
 
@@ -54,6 +57,7 @@ impl WorkflowEngineImpl {
         tools: Arc<dyn ToolRegistry>,
         sessions: Arc<dyn SessionLog>,
         web: Option<Arc<dyn WebProvider>>,
+        queue: Option<Arc<dyn MessageQueue>>,
         ctx: Context,
     ) -> Self {
         Self {
@@ -61,6 +65,7 @@ impl WorkflowEngineImpl {
             tools,
             sessions,
             web,
+            queue,
             ctx,
         }
     }
@@ -197,6 +202,59 @@ impl WorkflowEngineImpl {
                 "intent node {}: unknown mode {other}",
                 node.id
             ))),
+        }
+    }
+
+    /// Questioner 节点:把问题发布到 queue(workflow:question:{node_id}),
+    /// 等待答复 channel(workflow:answer:{node_id})的回答(config: {question, timeout_ms?})。
+    async fn run_questioner(&self, node: &NodeSpec, input: &Value) -> Result<Value, WorkflowError> {
+        let question = node
+            .config
+            .get("question")
+            .and_then(Value::as_str)
+            .unwrap_or("please answer");
+        let queue = self
+            .queue
+            .clone()
+            .ok_or_else(|| WorkflowError("questioner node: queue seam not mounted".to_string()))?;
+        let q_channel = format!("workflow:question:{}", node.id);
+        let a_channel = format!("workflow:answer:{}", node.id);
+        let context = input
+            .get("output")
+            .cloned()
+            .unwrap_or_else(|| input.clone());
+        queue
+            .publish(
+                &q_channel,
+                json!({ "question": question, "context": context }),
+            )
+            .map_err(|e| WorkflowError(format!("questioner publish: {e}")))?;
+        let timeout_ms = node
+            .config
+            .get("timeout_ms")
+            .and_then(Value::as_u64)
+            .unwrap_or(10_000);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+        loop {
+            if let Some(message) = queue
+                .consume(&a_channel)
+                .map_err(|e| WorkflowError(format!("questioner consume: {e}")))?
+            {
+                let answer = message
+                    .payload
+                    .get("answer")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                return Ok(json!({ "answer": answer }));
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(WorkflowError(format!(
+                    "questioner node {}: no answer within {timeout_ms}ms",
+                    node.id
+                )));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
     }
 
@@ -412,6 +470,7 @@ impl WorkflowEngineImpl {
             NodeKind::Parallel => self.run_parallel(spec, node, input).await?,
             NodeKind::Http => self.run_http(node, input).await?,
             NodeKind::Intent => self.run_intent(node, input).await?,
+            NodeKind::Questioner => self.run_questioner(node, input).await?,
         };
         self.ctx.emit(WorkflowNodeEvent {
             workflow_id: spec.id.clone(),
@@ -583,6 +642,7 @@ impl Plugin for WorkflowPlugin {
             tools,
             sessions,
             ctx.service::<dyn WebProvider>(&WEB),
+            ctx.service::<dyn MessageQueue>(&QUEUE),
             ctx.clone(),
         ));
         Ok(vec![ctx.register(WORKFLOW, engine)])
@@ -609,6 +669,7 @@ mod tests {
                 &session_dir,
             )),
             StdArc::new(ah_plugins_web::WebPlugin),
+            StdArc::new(ah_plugins_queue::QueuePlugin::new(root.join("queue"))),
             StdArc::new(WorkflowPlugin),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
@@ -1268,6 +1329,112 @@ mod tests {
             .await
             .expect_err("mock cannot route");
         assert!(err.0.contains("unparseable") || err.0.contains("unknown intent"));
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn questioner_asks_via_queue_and_consumes_answer() {
+        use ah_contracts::queue::MessageQueue;
+
+        let root = std::env::temp_dir().join(format!("ah-wf-q-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let queue = ctx
+            .service::<dyn MessageQueue>(&ah_contracts::keys::QUEUE)
+            .expect("queue");
+        // 预置回答:真实 queue 通道(workflow:answer:ask)。
+        queue
+            .publish("workflow:answer:ask", json!({ "answer": "42" }))
+            .expect("pre-answer");
+
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("engine");
+        let spec = WorkflowSpec {
+            id: "wf-q".to_string(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".to_string(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "ask".to_string(),
+                    kind: NodeKind::Questioner,
+                    config: json!({ "question": "what is the meaning?", "timeout_ms": 3000 }),
+                },
+                NodeSpec {
+                    id: "end".to_string(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".to_string(),
+                    to: "ask".to_string(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "ask".to_string(),
+                    to: "end".to_string(),
+                    condition: None,
+                },
+            ],
+        };
+        let output = engine.run(&spec, json!({})).await.expect("run");
+        assert_eq!(output.output["answer"], "42");
+        // 问题已发布到真实 queue。
+        let question = queue.backlog("workflow:question:ask").expect("questions");
+        assert_eq!(question.len(), 1);
+        assert_eq!(question[0].payload["question"], "what is the meaning?");
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn questioner_times_out_without_answer() {
+        let root = std::env::temp_dir().join(format!("ah-wf-qto-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("engine");
+        let spec = WorkflowSpec {
+            id: "wf-qto".to_string(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".to_string(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "ask".to_string(),
+                    kind: NodeKind::Questioner,
+                    config: json!({ "question": "anyone?", "timeout_ms": 300 }),
+                },
+                NodeSpec {
+                    id: "end".to_string(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".to_string(),
+                    to: "ask".to_string(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "ask".to_string(),
+                    to: "end".to_string(),
+                    condition: None,
+                },
+            ],
+        };
+        let err = engine.run(&spec, json!({})).await.expect_err("no answer");
+        assert!(err.0.contains("no answer within"));
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);

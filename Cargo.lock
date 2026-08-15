@@ -452,6 +452,7 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "ah-plugins-mock",
+ "ah-plugins-queue",
  "ah-plugins-session-log",
  "ah-plugins-sysop",
  "ah-plugins-tools",
