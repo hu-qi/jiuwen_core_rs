@@ -427,6 +427,7 @@ dependencies = [
  "ah-plugins-session-log",
  "ah-plugins-sysop",
  "ah-plugins-tools",
+ "ah-plugins-web",
  "async-trait",
  "futures-util",
  "serde_json",

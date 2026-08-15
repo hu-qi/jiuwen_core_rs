@@ -8,13 +8,14 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use ah_contracts::event::Event;
-use ah_contracts::keys::{LLM, SESSIONS, TOOLS, WORKFLOW};
+use ah_contracts::keys::{LLM, SESSIONS, TOOLS, WEB, WORKFLOW};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::session::{SessionEventKind, SessionLog};
 use ah_contracts::tools::ToolRegistry;
+use ah_contracts::web::{WebFetchRequest, WebProvider};
 use ah_contracts::workflow::{
     EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError, WorkflowOutput, WorkflowSpec,
 };
@@ -41,22 +42,161 @@ pub struct WorkflowEngineImpl {
     llm: Arc<dyn ModelProvider>,
     tools: Arc<dyn ToolRegistry>,
     sessions: Arc<dyn SessionLog>,
+    /// 可选 web seam(Http 节点用;未挂载时 Http 节点显式报错)。
+    web: Option<Arc<dyn WebProvider>>,
     ctx: Context,
 }
 
 impl WorkflowEngineImpl {
-    /// 构建引擎(注入 llm + tools)。
+    /// 构建引擎(注入 llm + tools + 可选 web)。
     pub fn new(
         llm: Arc<dyn ModelProvider>,
         tools: Arc<dyn ToolRegistry>,
         sessions: Arc<dyn SessionLog>,
+        web: Option<Arc<dyn WebProvider>>,
         ctx: Context,
     ) -> Self {
         Self {
             llm,
             tools,
             sessions,
+            web,
             ctx,
+        }
+    }
+
+    /// 挂载 web seam(可选;Http 节点使用)。
+    pub fn with_web(mut self, web: Arc<dyn WebProvider>) -> Self {
+        self.web = Some(web);
+        self
+    }
+
+    /// Http 节点:真实 HTTP GET(config: {url, timeout_ms?})。
+    async fn run_http(&self, node: &NodeSpec, _input: &Value) -> Result<Value, WorkflowError> {
+        let url = node
+            .config
+            .get("url")
+            .and_then(Value::as_str)
+            .ok_or_else(|| WorkflowError(format!("http node {} missing url", node.id)))?;
+        let web = self
+            .web
+            .clone()
+            .ok_or_else(|| WorkflowError("http node: web seam not mounted".to_string()))?;
+        let timeout_ms = node.config.get("timeout_ms").and_then(Value::as_u64);
+        let result = web
+            .fetch(WebFetchRequest {
+                url: url.to_string(),
+                timeout_ms,
+            })
+            .map_err(|e| WorkflowError(format!("http node failed: {e}")))?;
+        Ok(json!({ "status": result.status, "body": result.body }))
+    }
+
+    /// Intent 节点:关键字确定性路由或 LLM 路由(config: {intents, mode, patterns})。
+    async fn run_intent(&self, node: &NodeSpec, input: &Value) -> Result<Value, WorkflowError> {
+        let intents = node
+            .config
+            .get("intents")
+            .and_then(Value::as_array)
+            .ok_or_else(|| WorkflowError(format!("intent node {} missing intents", node.id)))?;
+        let mode = node
+            .config
+            .get("mode")
+            .and_then(Value::as_str)
+            .unwrap_or("keyword");
+        let text = input
+            .get("output")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let input_text = if text.is_empty() {
+            input.get("input").and_then(Value::as_str).unwrap_or("")
+        } else {
+            text
+        };
+
+        match mode {
+            "keyword" => {
+                // 确定性:命中关键词的第一个 intent。
+                let patterns = node.config.get("patterns").cloned().unwrap_or(Value::Null);
+                let lower = input_text.to_lowercase();
+                for intent in intents {
+                    let id = intent.get("id").and_then(Value::as_str).unwrap_or_default();
+                    let keywords = patterns
+                        .get(id)
+                        .and_then(Value::as_array)
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(Value::as_str)
+                                .map(|k| k.to_lowercase())
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                    if keywords.iter().any(|k| lower.contains(k)) {
+                        return Ok(json!({ "intent": id, "confidence": 1.0 }));
+                    }
+                }
+                Err(WorkflowError(format!(
+                    "intent node {}: no keyword matched input",
+                    node.id
+                )))
+            }
+            "llm" => {
+                // 真实 LLM 路由:要求严格 JSON;不可解析显式报错。
+                let candidates = intents
+                    .iter()
+                    .map(|i| {
+                        json!({
+                            "id": i.get("id").cloned().unwrap_or_default(),
+                            "description": i.get("description").cloned().unwrap_or_default(),
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let prompt = format!(
+                    "Classify the user request into exactly one intent. Reply with ONLY \
+                     {{\"intent\":\"<id>\"}}.\nIntents: {}\nRequest: {}",
+                    serde_json::to_string(&candidates).unwrap_or_default(),
+                    input_text
+                );
+                let response = self
+                    .llm
+                    .chat(ModelRequest {
+                        messages: vec![ChatMessage::new(ChatRole::User, prompt)],
+                        ..Default::default()
+                    })
+                    .await
+                    .map_err(|e| WorkflowError(format!("intent llm failed: {e}")))?;
+                let content = response.content;
+                let start = content.find('{');
+                let end = content.rfind('}');
+                let parsed = start.and_then(|s| end.filter(|e| *e > s).map(|e| &content[s..=e]));
+                let parsed = parsed
+                    .and_then(|slice| serde_json::from_str::<Value>(slice).ok())
+                    .ok_or_else(|| {
+                        WorkflowError(format!(
+                            "intent node {}: llm returned unparseable routing: {}",
+                            node.id,
+                            content.chars().take(120).collect::<String>()
+                        ))
+                    })?;
+                let intent = parsed
+                    .get("intent")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let valid = intents
+                    .iter()
+                    .any(|i| i.get("id").and_then(Value::as_str) == Some(intent));
+                if !valid {
+                    return Err(WorkflowError(format!(
+                        "intent node {}: llm returned unknown intent {intent}",
+                        node.id
+                    )));
+                }
+                Ok(json!({ "intent": intent, "confidence": 1.0 }))
+            }
+            other => Err(WorkflowError(format!(
+                "intent node {}: unknown mode {other}",
+                node.id
+            ))),
         }
     }
 
@@ -270,6 +410,8 @@ impl WorkflowEngineImpl {
             NodeKind::Loop => self.run_loop(spec, node, input).await?,
             NodeKind::SubWorkflow => self.run_subworkflow(node, input).await?,
             NodeKind::Parallel => self.run_parallel(spec, node, input).await?,
+            NodeKind::Http => self.run_http(node, input).await?,
+            NodeKind::Intent => self.run_intent(node, input).await?,
         };
         self.ctx.emit(WorkflowNodeEvent {
             workflow_id: spec.id.clone(),
@@ -436,8 +578,13 @@ impl Plugin for WorkflowPlugin {
                     plugin: self.name(),
                     message: "sessions seam not registered".to_string(),
                 })?;
-        let engine: Arc<dyn WorkflowEngine> =
-            Arc::new(WorkflowEngineImpl::new(llm, tools, sessions, ctx.clone()));
+        let engine: Arc<dyn WorkflowEngine> = Arc::new(WorkflowEngineImpl::new(
+            llm,
+            tools,
+            sessions,
+            ctx.service::<dyn WebProvider>(&WEB),
+            ctx.clone(),
+        ));
         Ok(vec![ctx.register(WORKFLOW, engine)])
     }
 }
@@ -461,6 +608,7 @@ mod tests {
                 &default_path,
                 &session_dir,
             )),
+            StdArc::new(ah_plugins_web::WebPlugin),
             StdArc::new(WorkflowPlugin),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
@@ -934,6 +1082,192 @@ mod tests {
 
         let error = engine.run(&spec, json!({})).await.expect_err("cycle");
         assert!(error.0.contains("cycle"));
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn http_node_calls_real_local_server() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let url = format!("http://{addr}/");
+        let handle = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf);
+                let body = "wf http ok";
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+
+        let root = std::env::temp_dir().join(format!("ah-wf-http-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("engine");
+        let spec = WorkflowSpec {
+            id: "wf-http".to_string(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".to_string(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "fetch".to_string(),
+                    kind: NodeKind::Http,
+                    config: json!({ "url": url, "timeout_ms": 5000 }),
+                },
+                NodeSpec {
+                    id: "end".to_string(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".to_string(),
+                    to: "fetch".to_string(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "fetch".to_string(),
+                    to: "end".to_string(),
+                    condition: None,
+                },
+            ],
+        };
+        let output = engine.run(&spec, json!({})).await.expect("run");
+        assert_eq!(output.output["status"], 200);
+        assert_eq!(output.output["body"], "wf http ok");
+
+        handle.join().expect("server");
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn intent_keyword_routes_deterministically() {
+        let root = std::env::temp_dir().join(format!("ah-wf-intent-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("engine");
+        let spec = WorkflowSpec {
+            id: "wf-intent".to_string(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".to_string(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "route".to_string(),
+                    kind: NodeKind::Intent,
+                    config: json!({
+                        "mode": "keyword",
+                        "intents": [
+                            { "id": "research", "description": "research a topic" },
+                            { "id": "coding", "description": "write code" },
+                        ],
+                        "patterns": {
+                            "research": ["research", "investigate"],
+                            "coding": ["code", "implement", "write"],
+                        },
+                    }),
+                },
+                NodeSpec {
+                    id: "end".to_string(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".to_string(),
+                    to: "route".to_string(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "route".to_string(),
+                    to: "end".to_string(),
+                    condition: None,
+                },
+            ],
+        };
+        let output = engine
+            .run(&spec, json!({ "input": "please implement a feature" }))
+            .await
+            .expect("run");
+        assert_eq!(output.output["intent"], "coding");
+        assert_eq!(output.output["confidence"], 1.0);
+        // 无匹配 → 显式错误。
+        let err = engine
+            .run(&spec, json!({ "input": "completely unrelated" }))
+            .await
+            .expect_err("no keyword");
+        assert!(err.0.contains("no keyword matched"));
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn intent_llm_mode_errors_explicitly_with_stub() {
+        let root = std::env::temp_dir().join(format!("ah-wf-intentllm-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("engine");
+        let spec = WorkflowSpec {
+            id: "wf-intent-llm".to_string(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".to_string(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "route".to_string(),
+                    kind: NodeKind::Intent,
+                    config: json!({
+                        "mode": "llm",
+                        "intents": [{ "id": "a", "description": "intent a" }],
+                    }),
+                },
+                NodeSpec {
+                    id: "end".to_string(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".to_string(),
+                    to: "route".to_string(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "route".to_string(),
+                    to: "end".to_string(),
+                    condition: None,
+                },
+            ],
+        };
+        // dev 用 mock 桩不会返回严格 JSON → 显式报错(不静默)。
+        let err = engine
+            .run(&spec, json!({ "input": "do something" }))
+            .await
+            .expect_err("mock cannot route");
+        assert!(err.0.contains("unparseable") || err.0.contains("unknown intent"));
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);

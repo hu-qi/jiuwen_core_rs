@@ -15,6 +15,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
 [dev-dependencies]
 ah-plugins-mock = { workspace = true }
+ah-plugins-web = { workspace = true }
 ah-plugins-tools = { workspace = true }
 ah-plugins-sysop = { workspace = true }
 ah-plugins-session-log = { workspace = true }

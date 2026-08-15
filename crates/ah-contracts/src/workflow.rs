@@ -23,6 +23,11 @@ pub enum NodeKind {
     SubWorkflow,
     /// 并行组件:并发执行多个目标节点(config: {targets: [node_id...]})。
     Parallel,
+    /// HTTP 组件:真实请求(config: {url, timeout_ms?}),输出 {status, body}。
+    Http,
+    /// 意图路由组件(config: {intents: [{id, description}], mode: "keyword"|"llm",
+    /// patterns: {id: [keywords]}}),输出 {intent, confidence}。
+    Intent,
 }
 
 /// 节点规格。
