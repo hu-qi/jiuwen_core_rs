@@ -18,6 +18,7 @@ use ah_plugins_ci::CiPlugin;
 use ah_plugins_cli::CliPlugin;
 use ah_plugins_code::CodePlugin;
 use ah_plugins_context::ContextPlugin;
+use ah_plugins_controller::ControllerPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
 use ah_plugins_external::ExternalCliPlugin;
@@ -146,6 +147,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-context",
             Arc::new(ContextPlugin::new(workspace_root.join("context"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-controller",
+            Arc::new(ControllerPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-store",

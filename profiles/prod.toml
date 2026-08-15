@@ -34,6 +34,7 @@
 # - ah-plugins-agentbuilder: 真实 agent 构建(NL→设计→DSL→工作流执行)
 # - ah-plugins-cli: 真实终端渲染(Claude Code 风格:工具调用/结果/todo checkbox)
 # - ah-plugins-external: 真实外部 CLI agent 运行时(流式 stdin + 单发 argv,子进程真实拉起)
+# - ah-plugins-controller: 真实控制器(任务生命周期/优先级/层级/调度冲突/意图识别)
 # - ah-plugins-mcp: 真实 MCP stdio 客户端(懒 spawn,首次调用时拉起子进程)
 # - ah-plugins-credentials: 真实凭据引用(环境变量 provider,只读)
 # - ah-plugins-telemetry: 真实 telemetry(span 记录 + JSONL 导出,OTLP 留待后续)
@@ -45,4 +46,4 @@ name = "prod"
 
 [[bundles]]
 id = "real"
-plugins = ["ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-teams-workflow", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-rsi-analyzer", "ah-plugins-context", "ah-plugins-store-redis", "ah-plugins-queue-redis", "ah-plugins-prompt", "ah-plugins-workspace", "ah-plugins-sandbox", "ah-plugins-sandbox-rail", "ah-plugins-code", "ah-plugins-web", "ah-plugins-transport", "ah-plugins-git", "ah-plugins-ci", "ah-plugins-autoharness", "ah-plugins-rl", "ah-plugins-subagents", "ah-plugins-skill", "ah-plugins-pregel", "ah-plugins-tune", "ah-plugins-oauth", "ah-plugins-agentbuilder", "ah-plugins-symphony", "ah-plugins-cli", "ah-plugins-external", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-teams-workflow", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-rsi-analyzer", "ah-plugins-context", "ah-plugins-store-redis", "ah-plugins-queue-redis", "ah-plugins-prompt", "ah-plugins-workspace", "ah-plugins-sandbox", "ah-plugins-sandbox-rail", "ah-plugins-code", "ah-plugins-web", "ah-plugins-transport", "ah-plugins-git", "ah-plugins-ci", "ah-plugins-autoharness", "ah-plugins-rl", "ah-plugins-subagents", "ah-plugins-skill", "ah-plugins-pregel", "ah-plugins-tune", "ah-plugins-oauth", "ah-plugins-agentbuilder", "ah-plugins-symphony", "ah-plugins-cli", "ah-plugins-external", "ah-plugins-controller", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-agent-loop"]

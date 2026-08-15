@@ -18,6 +18,7 @@ pub mod ci;
 pub mod cli;
 pub mod code;
 pub mod context;
+pub mod controller;
 pub mod credentials;
 pub mod effect;
 pub mod event;
@@ -75,6 +76,9 @@ pub mod prelude {
     pub use crate::code::{CodeError, CodeExecRequest, CodeExecResult, CodeProvider};
     pub use crate::context::{
         AssembledContext, ContextEngine, ContextError, ContextSummary, SummarySource,
+    };
+    pub use crate::controller::{
+        Controller, ControllerError, Intent, IntentType, Task, TaskExecutor, TaskFilter, TaskStatus,
     };
     pub use crate::credentials::{Credential, CredentialError, CredentialProvider};
     pub use crate::effect::Effect;
