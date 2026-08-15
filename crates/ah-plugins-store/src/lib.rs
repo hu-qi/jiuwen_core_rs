@@ -22,7 +22,9 @@ use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use serde_json::Value;
 
+pub mod pg_store;
 pub mod redis_store;
+pub use pg_store::{PgStore, PgStorePlugin};
 pub use redis_store::{RedisKVStore, RedisStorePlugin};
 
 fn now_ms() -> u64 {

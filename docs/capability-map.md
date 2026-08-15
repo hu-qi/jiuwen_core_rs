@@ -24,7 +24,7 @@
 | llm | `llm` | `ModelProvider`(已实现;`OpenAiConfig` 支持从 credentials seam 解析 key/base_url,credentials 优先、环境变量兜底) | done(契约)/ partial(真实 provider + credentials 集成 e2e 已落地,其余 provider 未实现) |
 | tools | `tools` | `Tool` + `ToolRegistry`(已实现) | done(契约)/ partial(已有真实工具,注册表通用) |
 | prompt | `prompt` | `PromptRegistry`(已实现:版本化注册 + {{var}} 渲染 + 缺失变量显式报错 + 文件持久化);agent-loop 消费方注入渲染系统提示 | done(契约+消费)/ partial(无结构化 schema prompt) |
-| store | `store` | `BaseKVStore`/`BaseMessageStore`(已实现,文件后端);DB/Vector 留待后续 | done(契约,本地文件后端)/ partial(外部后端 Redis/GaussDB/ES/Milvus) |
+| store | `store` | `BaseKVStore`/`BaseMessageStore`(已实现,文件后端);DB/Vector 留待后续 | done(契约,本地文件+Redis+PostgreSQL 后端)/ partial(ES/Milvus) |
 | session | `sessions` + `session-manager` | `SessionLog` append-only 日志 + JSONL 持久化 + 投影;`SessionManager` 多会话 create/open/fork/list(已实现) | done(契约)/ partial(无分布式/跨进程会话) |
 | context | `context` | `ContextEngine`(已实现:预算组装/摘录压缩+LLM 总结/offload/reinject;agent-loop 与 subagent 消费) | done(契约+消费)/ partial(精确 tokenizer) |
 | memory | `memory` | `MemoryProvider`(已实现:JSON 文件持久化 + remember/recall/forget 工具) | done(契约)/ partial(无图记忆/外部 provider) |
@@ -127,7 +127,7 @@
 | --- | --- | --- | --- |
 | checkpointer(Redis) | `store` seam + ah-plugins-store-redis | TTL/集群/pipeline | Redis 后端已落地(本回合:真实 SET/GET/DEL/KEYS,与文件后端同 seam 互换) |
 | message_queue(Pulsar) | `queue` seam + ah-plugins-queue-redis | producer/consumer/replay | 已落地(本回合:Redis LIST 日志 + INCR 序号 + 游标,真实外部 provider 可互换后端;Pulsar 留待后续) |
-| store(GaussDB/ES) | `store` seam + ah-plugins-gaussdb/elasticsearch | SQL/向量检索 | 现执行日志/内存余弦
+| store(GaussDB/ES) | `store` seam + ah-plugins-store-pg(GaussDB 兼容 SQL)/elasticsearch | SQL/向量检索 | 已落地(本回合:真实 PostgreSQL SQL 后端,kv/messages 两表 + UPSERT + 增量读,与文件/Redis 同 seam 互换;ES 留待后续) |
 | sys_operation(远程沙箱 9 provider) | `sandbox` seam + 进程插件 | AIO/jiuwenbox/yuanrong | 现 4 个白名单命令
 | external_provider(OpenAI OAuth) | `oauth` seam + ah-plugins-oauth | 设备码 OAuth、模型目录 | 设备码流已落地(本回合:start/poll,pending/expired 映射);模型目录留待后续 |
 | a2a | `transport` seam + ah-plugins-transport | HTTP server/client、流式 | server/client + SSE 流式已落地(本回合:stream_send 与 text/event-stream 端点) |

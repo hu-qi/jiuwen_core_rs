@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 38 回合,241 tests / clippy 0 / fmt clean):
+> - PostgreSQL store 后端 ah-plugins-store-pg(真实 SQL:kv/messages 两表 + UPSERT + 增量读 + 幂等建表;GaussDB 兼容,与文件/Redis 同 seam 互换;docker-gated 测试真实连 ah-pg)
+>
 > **账目更新**(第 37 回合,239 tests / clippy 0 / fmt clean):
 > - external CLI agent 运行时 ah-plugins-external(真实子进程:流式长驻 stdin + 单发每轮 argv 两风味;adapter 启动知识/完成标记/steer/abort/超时;TeamJoinDescriptor 编码;codex proto 辅助)
 >
