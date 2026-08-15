@@ -51,6 +51,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("[llm] {}: {}", provider.name(), response.content);
 
+    // llm 流式:默认退化单块;支持流式的 provider(openai-compatible)走真实 SSE。
+    let (stream_tx, mut stream_rx) = tokio::sync::mpsc::channel(64);
+    let mut streamed = String::new();
+    let stream_provider = provider.clone();
+    let stream_request = ModelRequest {
+        messages: vec![ChatMessage::new(ChatRole::User, "stream this")],
+        ..Default::default()
+    };
+    let stream_task =
+        tokio::spawn(async move { stream_provider.stream_chat(stream_request, stream_tx).await });
+    while let Some(chunk) = stream_rx.recv().await {
+        if !chunk.done {
+            streamed.push_str(&chunk.content_delta);
+        }
+    }
+    stream_task.await??;
+    println!("[llm-stream] accumulated: {streamed:?}");
+
     // fs seam
     let fs = ctx
         .service::<dyn FsProvider>(&FS)

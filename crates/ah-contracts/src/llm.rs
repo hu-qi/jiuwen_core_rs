@@ -95,6 +95,26 @@ pub struct ModelResponse {
     pub tool_calls: Vec<ToolCall>,
 }
 
+/// 流式输出块(SSE / chunk 的增量)。
+#[derive(Debug, Clone, Default)]
+pub struct ModelChunk {
+    /// 本轮内容增量。
+    pub content_delta: String,
+    /// 增量工具调用(参数为增量拼接,消费方负责累加)。
+    pub tool_call_deltas: Vec<ToolCallDelta>,
+    /// 是否结束。
+    pub done: bool,
+}
+
+/// 工具调用增量(SSE tool_calls 的 delta)。
+#[derive(Debug, Clone, Default)]
+pub struct ToolCallDelta {
+    pub index: usize,
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub arguments: String,
+}
+
 /// 模型错误。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelError(pub String);
@@ -118,4 +138,31 @@ pub trait ModelProvider: Seam {
 
     /// 发送一轮对话,返回助手消息(可含工具调用)。
     async fn chat(&self, request: ModelRequest) -> Result<ModelResponse, ModelError>;
+
+    /// 流式对话:每收到一个块推入 sink,结束时推 done 块。
+    /// 默认实现退化为非流式 chat(单块);支持流式的 provider 覆写本方法。
+    async fn stream_chat(
+        &self,
+        request: ModelRequest,
+        sink: tokio::sync::mpsc::Sender<ModelChunk>,
+    ) -> Result<(), ModelError> {
+        let response = self.chat(request).await?;
+        let chunk = ModelChunk {
+            content_delta: response.content,
+            tool_call_deltas: response
+                .tool_calls
+                .into_iter()
+                .enumerate()
+                .map(|(index, call)| ToolCallDelta {
+                    index,
+                    id: Some(call.id),
+                    name: Some(call.name),
+                    arguments: call.arguments.to_string(),
+                })
+                .collect(),
+            done: true,
+        };
+        let _ = sink.send(chunk).await;
+        Ok(())
+    }
 }

@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 43 回合,259 tests / clippy 0 / fmt clean):
+> - LLM 流式 seam(ModelChunk/ToolCallDelta + ModelProvider::stream_chat 默认退化单块;OpenAI provider 真实 SSE 解析:data 行逐块,content/tool_calls delta 累加,[DONE] 结束;main.rs 流式演示)
+>
 > **账目更新**(第 42 回合,257 tests / clippy 0 / fmt clean):
 > - Anthropic provider ah-plugins-anthropic(真实 Messages API:/v1/messages,system 顶层拆分,tool_use/tool_result 块,工具 schema→input_schema,x-api-key+anthropic-version 头;本地 HTTP 协议往返测试)
 >

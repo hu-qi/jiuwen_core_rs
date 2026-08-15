@@ -10,7 +10,8 @@ use std::time::Duration;
 use ah_contracts::credentials::CredentialProvider;
 use ah_contracts::keys::{CREDENTIALS, LLM};
 use ah_contracts::llm::{
-    ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse, ToolCall,
+    ChatMessage, ChatRole, ModelChunk, ModelError, ModelProvider, ModelRequest, ModelResponse,
+    ToolCall, ToolCallDelta,
 };
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
@@ -285,6 +286,166 @@ impl ModelProvider for OpenAiModelProvider {
             tool_calls,
         })
     }
+
+    /// 流式对话:真实 SSE 解析(data: 行,delta.content / delta.tool_calls)。
+    async fn stream_chat(
+        &self,
+        request: ModelRequest,
+        sink: tokio::sync::mpsc::Sender<ModelChunk>,
+    ) -> Result<(), ModelError> {
+        let wire = WireRequest {
+            model: self.request_model(&request),
+            messages: request
+                .messages
+                .iter()
+                .map(|message: &ChatMessage| WireMessage {
+                    role: wire_role(message.role).to_string(),
+                    content: Some(message.content.clone()),
+                    tool_call_id: message.tool_call_id.clone(),
+                    tool_calls: message.tool_calls.as_ref().map(|calls| {
+                        calls
+                            .iter()
+                            .map(|call| WireToolCall {
+                                id: call.id.clone(),
+                                kind: "function".to_string(),
+                                function: WireFunctionCall {
+                                    name: call.name.clone(),
+                                    arguments: call.arguments.to_string(),
+                                },
+                            })
+                            .collect()
+                    }),
+                })
+                .collect(),
+            tools: if request.tools.is_empty() {
+                None
+            } else {
+                Some(
+                    request
+                        .tools
+                        .iter()
+                        .map(|schema| WireTool {
+                            kind: "function".to_string(),
+                            function: WireFunction {
+                                name: schema.name.clone(),
+                                description: schema.description.clone(),
+                                parameters: schema.parameters.clone(),
+                            },
+                        })
+                        .collect(),
+                )
+            },
+            temperature: request.temperature,
+            stream: Some(true),
+        };
+
+        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
+        let mut builder = self.http.post(&url).json(&wire).timeout(self.timeout);
+        builder = builder.header("accept", "text/event-stream");
+        if let Some(key) = &self.api_key {
+            builder = builder.bearer_auth(key);
+        }
+        let response = builder
+            .send()
+            .await
+            .map_err(|e| ModelError(format!("http request failed: {e}")))?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response
+                .text()
+                .await
+                .map_err(|e| ModelError(format!("read error body failed: {e}")))?;
+            return Err(ModelError(format!("provider returned {status}: {body}")));
+        }
+
+        // SSE:逐行解析 data: JSON,遇 [DONE] 结束;增量经 sink 推送。
+        // 用 response.chunk() 逐块读取(不引入 futures-util,镜像缺 futures-io)。
+        let mut response = response;
+        let mut buffer = String::new();
+        while let Some(bytes) = response
+            .chunk()
+            .await
+            .map_err(|e| ModelError(format!("stream read failed: {e}")))?
+        {
+            buffer.push_str(&String::from_utf8_lossy(&bytes));
+            // 按行切分(SSE 事件以 \n 分隔)。
+            let mut lines: Vec<String> = Vec::new();
+            for line in buffer.split('\n') {
+                lines.push(line.to_string());
+            }
+            buffer = lines.pop().unwrap_or_default();
+            for line in lines {
+                let line = line.trim();
+                if line == "data: [DONE]" {
+                    let _ = sink
+                        .send(ModelChunk {
+                            done: true,
+                            ..Default::default()
+                        })
+                        .await;
+                    return Ok(());
+                }
+                let Some(payload) = line.strip_prefix("data:") else {
+                    continue;
+                };
+                let payload = payload.trim();
+                if payload.is_empty() {
+                    continue;
+                }
+                let value: serde_json::Value = serde_json::from_str(payload)
+                    .map_err(|e| ModelError(format!("invalid SSE chunk: {e}")))?;
+                let mut chunk = ModelChunk::default();
+                if let Some(delta) = value
+                    .get("choices")
+                    .and_then(|c| c.get(0))
+                    .and_then(|c| c.get("delta"))
+                {
+                    if let Some(text) = delta.get("content").and_then(serde_json::Value::as_str) {
+                        chunk.content_delta = text.to_string();
+                    }
+                    if let Some(calls) = delta
+                        .get("tool_calls")
+                        .and_then(serde_json::Value::as_array)
+                    {
+                        for call in calls {
+                            let index = call
+                                .get("index")
+                                .and_then(serde_json::Value::as_u64)
+                                .unwrap_or(0) as usize;
+                            let id = call
+                                .get("id")
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_string);
+                            let function = call.get("function");
+                            let name = function
+                                .and_then(|f| f.get("name"))
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_string);
+                            let arguments = function
+                                .and_then(|f| f.get("arguments"))
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or_default()
+                                .to_string();
+                            chunk.tool_call_deltas.push(ToolCallDelta {
+                                index,
+                                id,
+                                name,
+                                arguments,
+                            });
+                        }
+                    }
+                }
+                let _ = sink.send(chunk).await;
+            }
+        }
+        let _ = sink
+            .send(ModelChunk {
+                done: true,
+                ..Default::default()
+            })
+            .await;
+        Ok(())
+    }
 }
 
 /// 真实 LLM provider 插件:注册到 llm seam。
@@ -406,6 +567,183 @@ mod tests {
             model: "test-model".to_string(),
             timeout: Duration::from_secs(10),
         }
+    }
+
+    /// SSE 测试服务器:流式输出三个 data 块 + [DONE]。
+    /// 请求体含 "tool" 时输出 tool_calls delta,否则输出 content delta。
+    fn start_sse_server() -> String {
+        let server = tiny_http::Server::http("127.0.0.1:0").expect("bind sse server");
+        let addr = server.server_addr().to_string();
+        let base_url = format!("http://{addr}");
+        let _handle = std::thread::spawn(move || {
+            for mut request in server.incoming_requests() {
+                let mut body = String::new();
+                let _ = request.as_reader().read_to_string(&mut body);
+                let payload = if body.contains("tool") {
+                    // 用 serde_json 构造,避免手写转义;arguments 为 JSON 字符串(增量拼接)。
+                    let part1 = serde_json::json!({
+                        "id": "c1",
+                        "object": "chat.completion.chunk",
+                        "choices": [{
+                            "index": 0,
+                            "delta": {
+                                "tool_calls": [{
+                                    "index": 0,
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": { "name": "read_file", "arguments": "{\"path\":\"a" }
+                                }]
+                            },
+                            "finish_reason": null
+                        }]
+                    });
+                    let part2 = serde_json::json!({
+                        "id": "c1",
+                        "object": "chat.completion.chunk",
+                        "choices": [{
+                            "index": 0,
+                            "delta": {
+                                "tool_calls": [{
+                                    "index": 0,
+                                    "function": { "arguments": ".txt\"}" }
+                                }]
+                            },
+                            "finish_reason": null
+                        }]
+                    });
+                    let part3 = serde_json::json!({
+                        "id": "c1",
+                        "object": "chat.completion.chunk",
+                        "choices": [{
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "tool_calls"
+                        }]
+                    });
+                    [
+                        format!("data: {part1}"),
+                        format!("data: {part2}"),
+                        format!("data: {part3}"),
+                        "data: [DONE]".to_string(),
+                    ]
+                } else {
+                    let part1 = serde_json::json!({
+                        "id": "c1",
+                        "object": "chat.completion.chunk",
+                        "choices": [{
+                            "index": 0,
+                            "delta": { "role": "assistant", "content": "hello" },
+                            "finish_reason": null
+                        }]
+                    });
+                    let part2 = serde_json::json!({
+                        "id": "c1",
+                        "object": "chat.completion.chunk",
+                        "choices": [{
+                            "index": 0,
+                            "delta": { "content": " world" },
+                            "finish_reason": null
+                        }]
+                    });
+                    let part3 = serde_json::json!({
+                        "id": "c1",
+                        "object": "chat.completion.chunk",
+                        "choices": [{
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop"
+                        }]
+                    });
+                    [
+                        format!("data: {part1}"),
+                        format!("data: {part2}"),
+                        format!("data: {part3}"),
+                        "data: [DONE]".to_string(),
+                    ]
+                }
+                .join("\n");
+                let response = tiny_http::Response::from_string(payload).with_header(
+                    tiny_http::Header::from_bytes("content-type", "text/event-stream")
+                        .expect("header"),
+                );
+                let _ = request.respond(response);
+            }
+        });
+        base_url
+    }
+
+    #[tokio::test]
+    async fn stream_chat_accumulates_content_deltas_from_sse() {
+        use ah_contracts::llm::ModelChunk;
+        let base_url = start_sse_server();
+        let provider = OpenAiModelProvider::new(config(base_url)).expect("provider");
+        let (tx, mut rx) = tokio::sync::mpsc::channel(16);
+
+        provider
+            .stream_chat(
+                ModelRequest {
+                    messages: vec![ChatMessage::new(ChatRole::User, "hi")],
+                    ..Default::default()
+                },
+                tx,
+            )
+            .await
+            .expect("stream chat");
+
+        let mut text = String::new();
+        let mut seen_done = false;
+        while let Some(chunk) = rx.recv().await {
+            text.push_str(&chunk.content_delta);
+            if chunk.done {
+                seen_done = true;
+            }
+        }
+        assert_eq!(
+            text, "hello world",
+            "SSE content deltas accumulated: {text:?}"
+        );
+        assert!(seen_done, "done chunk sent");
+        let _ = ModelChunk::default();
+    }
+
+    #[tokio::test]
+    async fn stream_chat_accumulates_tool_call_argument_deltas() {
+        let base_url = start_sse_server();
+        let provider = OpenAiModelProvider::new(config(base_url)).expect("provider");
+        let (tx, mut rx) = tokio::sync::mpsc::channel(16);
+
+        provider
+            .stream_chat(
+                ModelRequest {
+                    messages: vec![ChatMessage::new(ChatRole::User, "use the tool")],
+                    ..Default::default()
+                },
+                tx,
+            )
+            .await
+            .expect("stream chat");
+
+        let mut name = String::new();
+        let mut arguments = String::new();
+        let mut id = None;
+        while let Some(chunk) = rx.recv().await {
+            for delta in chunk.tool_call_deltas {
+                if let Some(n) = delta.name {
+                    name = n;
+                }
+                if let Some(delta_id) = delta.id {
+                    id = Some(delta_id);
+                }
+                arguments.push_str(&delta.arguments);
+            }
+        }
+        assert_eq!(name, "read_file");
+        assert_eq!(id.as_deref(), Some("call_1"));
+        let parsed: serde_json::Value = serde_json::from_str(&arguments).expect("valid json");
+        assert_eq!(
+            parsed["path"], "a.txt",
+            "tool call arguments accumulate to valid JSON"
+        );
     }
 
     #[tokio::test]

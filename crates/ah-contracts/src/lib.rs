@@ -100,8 +100,8 @@ pub mod prelude {
         TELEMETRY, TOOLS, WORKFLOW,
     };
     pub use crate::llm::{
-        ChatMessage, ChatRole, ModelError, ModelProvider, ModelRequest, ModelResponse, ToolCall,
-        ToolSchema,
+        ChatMessage, ChatRole, ModelChunk, ModelError, ModelProvider, ModelRequest, ModelResponse,
+        ToolCall, ToolCallDelta, ToolSchema,
     };
     pub use crate::mcp::{McpClient, McpContent, McpError, McpInfo, McpTool, McpToolResult};
     pub use crate::memory::{MemoryError, MemoryProvider, MemoryRecord};
