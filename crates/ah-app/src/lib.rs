@@ -33,6 +33,7 @@ use ah_plugins_rsi::analyzer::AnalyzerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
+use ah_plugins_skill::SkillPlugin;
 use ah_plugins_store::StorePlugin;
 use ah_plugins_store::redis_store::RedisStorePlugin;
 use ah_plugins_subagent::SubagentPlugin;
@@ -161,6 +162,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-subagents",
             Arc::new(SubagentsPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-skill",
+            Arc::new(SkillPlugin::new(workspace_root.join("skills"))) as DynPlugin,
         ),
         (
             "ah-plugins-sandbox-rail",

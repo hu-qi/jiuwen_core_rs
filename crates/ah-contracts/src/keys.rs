@@ -107,3 +107,6 @@ pub const REWARD: ServiceKey = ServiceKey::new("reward");
 
 /// `subagents` seam 服务键(类型化子代理)。
 pub const SUBAGENTS: ServiceKey = ServiceKey::new("subagents");
+
+/// `skill` seam 服务键(技能注册与评估)。
+pub const SKILL: ServiceKey = ServiceKey::new("skill");

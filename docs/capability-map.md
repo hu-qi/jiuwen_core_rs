@@ -143,7 +143,7 @@
 | prompt_builder | ah-plugins-devtools | meta/feedback/badcase 构建 | 现 {{var}} 渲染
 | agent_builder | ah-plugins-devtools | NL→设计→DL→DSL→执行 | 现 runtime=mock manifest
 | tune | ah-plugins-devtools | optimizer/evaluator/trainer 流水线 | 现 MockEvaluator/MockTrainer
-| skill_creator/evaluator | ah-plugins-devtools | 技能生成/评估 | 现格式启发式
+| skill_creator/evaluator | ah-plugins-skill | 技能注册/持久化/评估 | 已落地(本回合:文件后端 + subagent 委派 + evolving 轨迹评估) |
 | symphony | ah-plugins-symphony | 能力检索/编排/legacy runtime | Python 侧无代码,按 README 语义实现
 
 ## 3. 工作包生命周期与验收标准
