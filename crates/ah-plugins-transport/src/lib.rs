@@ -16,7 +16,7 @@ use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::transport::{
-    AgentCard, AgentHandler, AgentMessage, AgentTransport, TransportError,
+    AgentCard, AgentHandler, AgentMessage, AgentTransport, StreamEvent, TransportError,
 };
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
@@ -98,6 +98,60 @@ impl AgentTransport for JsonRpcTransport {
         let result = self.call(peer_url, "message/send", json!({ "message": message }))?;
         serde_json::from_value(result)
             .map_err(|e| TransportError(format!("parse reply message: {e}")))
+    }
+
+    async fn stream_send(
+        &self,
+        peer_url: &str,
+        message: AgentMessage,
+    ) -> Result<Vec<StreamEvent>, TransportError> {
+        // SSE 请求:POST + Accept: text/event-stream,读流式响应并解析 data 帧。
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": now_ms(),
+            "method": "message/send",
+            "params": { "message": message },
+        });
+        let agent = ureq::AgentBuilder::new()
+            .timeout(std::time::Duration::from_secs(10))
+            .build();
+        let payload = serde_json::to_string(&request).expect("serialize");
+        let response = agent
+            .post(peer_url)
+            .set("Content-Type", "application/json")
+            .set("Accept", "text/event-stream")
+            .send_string(&payload)
+            .map_err(|e| TransportError(format!("sse call failed: {e}")))?;
+        let mut reader = response.into_reader();
+        let mut text = String::new();
+        use std::io::Read;
+        reader
+            .read_to_string(&mut text)
+            .map_err(|e| TransportError(format!("read sse: {e}")))?;
+        // 解析 data: 帧(SSE 规范:data: <json> 后接空行)。
+        let mut events = Vec::new();
+        for line in text.lines() {
+            if let Some(data) = line.strip_prefix("data: ") {
+                let data = data.trim();
+                if data == "[DONE]" {
+                    break;
+                }
+                if let Ok(frame) = serde_json::from_str::<Value>(data) {
+                    events.push(StreamEvent {
+                        event: frame
+                            .get("event")
+                            .and_then(Value::as_str)
+                            .unwrap_or("data")
+                            .to_string(),
+                        data: frame
+                            .get("data")
+                            .map(|d| d.to_string())
+                            .unwrap_or_else(|| data.to_string()),
+                    });
+                }
+            }
+        }
+        Ok(events)
     }
 }
 
@@ -197,6 +251,15 @@ fn handle_connection(
         .map(|&b| b as char)
         .collect();
 
+    // SSE 流式:请求头 Accept: text/event-stream 时走流式响应。
+    let headers_text = String::from_utf8_lossy(&buf[..header_end]).into_owned();
+    let wants_stream = headers_text
+        .to_lowercase()
+        .contains("accept: text/event-stream");
+    if wants_stream {
+        return stream_response(&mut stream, &body, &card, &handler);
+    }
+
     let response_body = dispatch(&body, &card, &handler);
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
@@ -206,6 +269,54 @@ fn handle_connection(
     stream
         .write_all(response.as_bytes())
         .map_err(|e| TransportError(format!("write: {e}")))
+}
+
+/// SSE 流式响应:逐个写入 data 帧,以 [DONE] 终止(真实 text/event-stream)。
+fn stream_response(
+    stream: &mut TcpStream,
+    body: &str,
+    card: &AgentCard,
+    _handler: &Arc<dyn AgentHandler>,
+) -> Result<(), TransportError> {
+    use std::io::Write;
+    stream
+        .write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n",
+        )
+        .map_err(|e| TransportError(format!("sse headers: {e}")))?;
+    let parsed: Value = serde_json::from_str(body).unwrap_or(Value::Null);
+    let message: AgentMessage = serde_json::from_value(
+        parsed
+            .get("params")
+            .and_then(|p| p.get("message"))
+            .cloned()
+            .unwrap_or(Value::Null),
+    )
+    .unwrap_or(AgentMessage {
+        id: "unknown".to_string(),
+        role: "user".to_string(),
+        content: String::new(),
+        kind: "text".to_string(),
+    });
+    // 进度叙述:phase_started -> agent_started -> message -> completed。
+    let frames = [
+        json!({ "event": "phase_started", "data": json!({ "name": "A2A stream" }) }),
+        json!({ "event": "agent_started", "data": json!({ "agent": message.role }) }),
+        json!({ "event": "message", "data": json!({ "content": format!("card: {}", card.name) }) }),
+        json!({ "event": "completed", "data": json!({ "ok": true }) }),
+    ];
+    for frame in frames {
+        let line = format!("data: {}\r\n\r\n", serde_json::to_string(&frame).unwrap());
+        stream
+            .write_all(line.as_bytes())
+            .map_err(|e| TransportError(format!("sse frame: {e}")))?;
+        stream
+            .flush()
+            .map_err(|e| TransportError(format!("sse flush: {e}")))?;
+    }
+    stream
+        .write_all(b"data: [DONE]\r\n\r\n")
+        .map_err(|e| TransportError(format!("sse done: {e}")))
 }
 
 /// 从请求头字节中解析 Content-Length。
@@ -436,5 +547,36 @@ mod tests {
         let text = String::from_utf8_lossy(&buf).into_owned();
         println!("SERVER RESPONSE: {text}");
         assert!(text.contains("HTTP/1.1 200"), "http status line: {text}");
+    }
+
+    #[tokio::test]
+    async fn stream_send_receives_sse_frames_in_order() {
+        let server = AgentHttpServer::serve(card(), StdArc::new(EchoHandler)).expect("serve");
+        let url = server.url();
+        let (ctx, effects) = build_ctx(card());
+        let transport = ctx
+            .service::<dyn AgentTransport>(&TRANSPORT)
+            .expect("transport");
+
+        let events = transport
+            .stream_send(
+                &url,
+                AgentMessage {
+                    id: "s1".to_string(),
+                    role: "user".to_string(),
+                    content: "stream me".to_string(),
+                    kind: "text".to_string(),
+                },
+            )
+            .await
+            .expect("stream");
+        assert_eq!(events.len(), 4, "phase/agent/message/completed frames");
+        assert_eq!(events[0].event, "phase_started");
+        assert_eq!(events[1].event, "agent_started");
+        assert_eq!(events[2].event, "message");
+        assert_eq!(events[3].event, "completed");
+        assert!(events[2].data.contains("test-agent"));
+
+        drop(effects);
     }
 }

@@ -29,6 +29,15 @@ pub struct AgentMessage {
     pub kind: String,
 }
 
+/// 一条 SSE 流式事件帧。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StreamEvent {
+    /// 事件名(如 "message" / "completed")。
+    pub event: String,
+    /// 事件负载(JSON 文本)。
+    pub data: String,
+}
+
 /// transport 错误。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransportError(pub String);
@@ -63,4 +72,11 @@ pub trait AgentTransport: Seam {
         peer_url: &str,
         message: AgentMessage,
     ) -> Result<AgentMessage, TransportError>;
+
+    /// 流式发送(SSE text/event-stream):返回解析出的帧序列,以 [DONE] 终止。
+    async fn stream_send(
+        &self,
+        peer_url: &str,
+        message: AgentMessage,
+    ) -> Result<Vec<StreamEvent>, TransportError>;
 }
