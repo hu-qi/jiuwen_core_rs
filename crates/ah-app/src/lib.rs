@@ -44,6 +44,7 @@ use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_tools::ToolsPlugin;
 use ah_plugins_transport::TransportPlugin;
+use ah_plugins_tune::TunePlugin;
 use ah_plugins_web::WebPlugin;
 use ah_plugins_workflow::WorkflowPlugin;
 use ah_plugins_workspace::WorkspacePlugin;
@@ -169,6 +170,7 @@ pub fn plugin_catalog(
             Arc::new(SkillPlugin::new(workspace_root.join("skills"))) as DynPlugin,
         ),
         ("ah-plugins-pregel", Arc::new(PregelPlugin) as DynPlugin),
+        ("ah-plugins-tune", Arc::new(TunePlugin) as DynPlugin),
         (
             "ah-plugins-sandbox-rail",
             Arc::new(SandboxRailPlugin) as DynPlugin,

@@ -47,6 +47,7 @@ pub mod teams;
 pub mod telemetry;
 pub mod tools;
 pub mod transport;
+pub mod tune;
 pub mod web;
 pub mod workflow;
 pub mod workspace;
@@ -125,6 +126,7 @@ pub mod prelude {
     pub use crate::transport::{
         AgentCard, AgentHandler, AgentMessage, AgentTransport, TransportError,
     };
+    pub use crate::tune::{TuneError, TunePipeline, TuneRequest, TuneResult, TuneRoundResult};
     pub use crate::web::{WebError, WebFetchRequest, WebFetchResult, WebProvider};
     pub use crate::workflow::{
         EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError, WorkflowOutput, WorkflowSpec,

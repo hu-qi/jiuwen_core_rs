@@ -39,6 +39,7 @@ dependencies = [
  "ah-plugins-telemetry",
  "ah-plugins-tools",
  "ah-plugins-transport",
+ "ah-plugins-tune",
  "ah-plugins-web",
  "ah-plugins-workflow",
  "ah-plugins-workspace",
@@ -464,6 +465,23 @@ dependencies = [
  "serde_json",
  "tokio",
  "ureq",
+]
+
+[[package]]
+name = "ah-plugins-tune"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-evolving",
+ "ah-plugins-mock",
+ "ah-plugins-session-log",
+ "ah-plugins-subagent",
+ "ah-plugins-sysop",
+ "ah-plugins-tools",
+ "async-trait",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

@@ -113,3 +113,6 @@ pub const SKILL: ServiceKey = ServiceKey::new("skill");
 
 /// `pregel` seam 服务键(超级步图执行)。
 pub const PREGEL: ServiceKey = ServiceKey::new("pregel");
+
+/// `tune` seam 服务键(训练流水线)。
+pub const TUNE: ServiceKey = ServiceKey::new("tune");
