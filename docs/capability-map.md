@@ -125,7 +125,7 @@
 
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
-| checkpointer(Redis) | `store` seam + ah-plugins-redis | TTL/集群/pipeline | 现本地 fallback
+| checkpointer(Redis) | `store` seam + ah-plugins-store-redis | TTL/集群/pipeline | Redis 后端已落地(本回合:真实 SET/GET/DEL/KEYS,与文件后端同 seam 互换) |
 | message_queue(Pulsar) | `queue` seam + ah-plugins-pulsar | producer/consumer/replay | 现 broadcast 兜底
 | store(GaussDB/ES) | `store` seam + ah-plugins-gaussdb/elasticsearch | SQL/向量检索 | 现执行日志/内存余弦
 | sys_operation(远程沙箱 9 provider) | `sandbox` seam + 进程插件 | AIO/jiuwenbox/yuanrong | 现 4 个白名单命令

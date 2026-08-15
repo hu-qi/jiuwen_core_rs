@@ -22,6 +22,9 @@ use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use serde_json::Value;
 
+pub mod redis_store;
+pub use redis_store::{RedisKVStore, RedisStorePlugin};
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

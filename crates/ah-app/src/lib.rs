@@ -34,6 +34,7 @@ use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_store::StorePlugin;
+use ah_plugins_store::redis_store::RedisStorePlugin;
 use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_subagents::SubagentsPlugin;
 use ah_plugins_sysop::SysopPlugin;
@@ -115,6 +116,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-store",
             Arc::new(StorePlugin::new(workspace_root.join("store"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-store-redis",
+            Arc::new(RedisStorePlugin::new("redis://127.0.0.1:6379/")) as DynPlugin,
         ),
         (
             "ah-plugins-prompt",

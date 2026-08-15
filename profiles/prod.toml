@@ -14,7 +14,7 @@
 # - ah-plugins-rsi: 真实 RSI 管线(数据集/评测/精化/checkpoint)
 # - ah-plugins-rsi-analyzer: 真实评测结果分析(信号提取/根因归因/artifact)
 # - ah-plugins-context: 真实上下文引擎(预算组装/压缩/offload)
-# - ah-plugins-store: 真实文件后端 store(KV + message)
+# - ah-plugins-store-redis: 真实 Redis 后端 store(需本地 Redis 容器)
 # - ah-plugins-prompt: 真实版本化 prompt 注册表
 # - ah-plugins-queue: 真实文件后端消息队列(日志+游标)
 # - ah-plugins-workspace: 真实工作区清单(workspace.json + 目标状态机)
@@ -38,4 +38,4 @@ name = "prod"
 
 [[bundles]]
 id = "real"
-plugins = ["ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-teams-workflow", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-rsi-analyzer", "ah-plugins-context", "ah-plugins-store", "ah-plugins-prompt", "ah-plugins-queue", "ah-plugins-workspace", "ah-plugins-sandbox", "ah-plugins-sandbox-rail", "ah-plugins-code", "ah-plugins-web", "ah-plugins-transport", "ah-plugins-git", "ah-plugins-ci", "ah-plugins-autoharness", "ah-plugins-rl", "ah-plugins-subagents", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-teams-workflow", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-rsi-analyzer", "ah-plugins-context", "ah-plugins-store-redis", "ah-plugins-prompt", "ah-plugins-queue", "ah-plugins-workspace", "ah-plugins-sandbox", "ah-plugins-sandbox-rail", "ah-plugins-code", "ah-plugins-web", "ah-plugins-transport", "ah-plugins-git", "ah-plugins-ci", "ah-plugins-autoharness", "ah-plugins-rl", "ah-plugins-subagents", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-agent-loop"]
