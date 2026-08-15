@@ -40,7 +40,7 @@
 | teams | `teams` | `TeamRuntime`(已实现:内存 + SQLite 持久化两套运行时:任务板/依赖门控/成员校验/review/settle/run_task 真实委派/teams/task 事件/消息经 queue seam 传输) | done(契约+持久化+消息)/ partial(外部 CLI 进程/ZMQ) |
 | evolving | `evolving` | `EvolvingRuntime`(已实现:轨迹从会话日志真实抽取;本地判据评估 + LLM judge 附加;优化建议规则推导 + LLM 附加) | done(契约)/ partial(无持久化/RL) |
 | rsi | `rsi` | `RsiRuntime`(已实现:数据集生成 + 用例真实执行 + evolving 评估 + 报告 + 提示精化 + checkpoint 落盘) | done(契约)/ partial(无 LLM 数据生成/RL) |
-| telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约)/ partial(JSONL 导出真实;OTLP 导出留待后续)
+| telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约+JSONL+OTLP/JSON 导出)/ partial(semconv 留待后续) |
 | queue | `queue` | `MessageQueue`(已实现:文件后端,每 channel append-only JSONL + 消费游标 offset 语义,重启恢复;teams 消息消费方) | done(契约+消费,本地+Redis 外部后端)/ partial(外部 Pulsar/ZMQ) |
 | mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约)/ partial(stdio 真实,http 未实现) |
 | transport | `transport` | A2A 风格传输(JSON-RPC 2.0 + SSE 流式 over HTTP;ureq 客户端 + 本地 HTTP/1.1 服务端) | done(契约+客户端+服务端+流式)/ partial(加密传输) |
@@ -100,7 +100,7 @@
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
 | dataset(5) | ah-plugins-evolving | Case/EvaluatedCase/loader/shuffle/split | 字段语义对等
-| evaluator(40) | `evolving` seam | LLM-as-judge、指标、pipeline | 现为 mock 精确匹配
+| evaluator(40) | `evolving` seam | LLM-as-judge、指标、pipeline | 已落地(本地确定性判据必算 + LLM judge 附加,不可用原因显式记录,不静默) |
 | trajectory(94) | `evolving` seam | OTLP span codec、抽取、聚合、存储 | 已落地(本回合:Trajectory↔Span 树编解码 + 聚合统计,抽取/经验存储先前已落地) |
 | checkpointing/experience/sharing(21/54/20) | ah-plugins-evolving | 持久化、评分、分享 | experience 持久化已落地(本回合:save/load/search JSONL + 跨重开恢复);评分/分享留待后续 |
 | optimizer/updater/signal(59/3/32) | `optimizer` seam + ah-plugins-optimizer | LLM 梯度优化、信号检测 | 已落地(本回合:文本梯度 backward(失败信号过滤 + 问题→参数路由)+ step 经 OperatorRegistry 应用(冻结/缺失显式记录));LLM 梯度与信号检测留待后续 |
@@ -113,9 +113,9 @@
 | --- | --- | --- | --- |
 | orchestrator(100) | ah-plugins-rsi | 多轮优化编排、checkpoint/resume | 已落地:run_rounds 多轮循环(评测→精化→checkpoint 续跑,本回合);git/CI 基建留待后续 |
 | dataset_generator(72) / dataset_curator(13) / data_loader(5) | ah-plugins-rsi | LLM 生成、curate、分批 | 已落地确定性扩展(改写/组合/边界);LLM 生成留待后续 |
-| evaluator(judger 91/case_runner 56/…) | `evolving` seam + ah-plugins-rsi | LLM judge、执行后端 | 现为字符串相等
+| evaluator(judger 91/case_runner 56/…) | `evolving` seam + ah-plugins-rsi | LLM judge、执行后端 | 已落地(expected 匹配优先 + evolving 轨迹评估(本地判据 + LLM judge 附加)) |
 | evaluation_result_analyzer(73) | ah-plugins-rsi | 信号提取、根因归因、证据引用、artifact 落盘 | 已落地(本回合:确定性信号 + 规则归因 + analysis.json);LLM 深度诊断留待后续 |
-| member_optimizer(16 文件) | ah-plugins-rsi | attribution→plan→execute→verify→publish | 现为启发式 plan
+| member_optimizer(16 文件) | ah-plugins-rsi | attribution→plan→execute→verify→publish | 未实现(0%;由 single_harness 候选门禁替代编排,后续可补) |
 | team_skill_generator/optimizer(26/8) | ah-plugins-rsi | 技能生成与演化 | 现 0%/启发式
 | single_harness(72+12) | `single-harness` seam + ah-plugins-rsi-single-harness | 迭代编排、候选门禁 | 已落地(本回合:train/holdout 拆分 + 每 epoch 评测→精化→候选 holdout 门禁(严格优于才接受)+ best/checkpoint JSONL 落盘 + 中断续跑) |
 | auto_harness(65 文件) | ah-plugins-autoharness | assess/plan/implement/verify/commit/publish + 真实 git/CI | 编排已落地(本回合:六阶段真实执行,git 提交+分支);远端 PR/GitCode 留待后续 |
