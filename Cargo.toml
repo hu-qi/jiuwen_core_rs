@@ -19,6 +19,7 @@ members = [
     "crates/ah-plugins-ci",
     "crates/ah-plugins-autoharness",
     "crates/ah-plugins-rl",
+    "crates/ah-plugins-rl-step",
     "crates/ah-plugins-subagents",
     "crates/ah-plugins-skill",
     "crates/ah-plugins-pregel",
@@ -82,6 +83,7 @@ ah-plugins-graph-memory = { path = "crates/ah-plugins-graph-memory" }
 ah-plugins-ci = { path = "crates/ah-plugins-ci" }
 ah-plugins-autoharness = { path = "crates/ah-plugins-autoharness" }
 ah-plugins-rl = { path = "crates/ah-plugins-rl" }
+ah-plugins-rl-step = { path = "crates/ah-plugins-rl-step" }
 ah-plugins-subagents = { path = "crates/ah-plugins-subagents" }
 ah-plugins-skill = { path = "crates/ah-plugins-skill" }
 ah-plugins-pregel = { path = "crates/ah-plugins-pregel" }

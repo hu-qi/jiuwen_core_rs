@@ -43,6 +43,7 @@ use ah_plugins_rails::{
 };
 use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rl::RlPlugin;
+use ah_plugins_rl_step::RlStepPlugin;
 use ah_plugins_rsi::RsiPlugin;
 use ah_plugins_rsi::analyzer::AnalyzerPlugin;
 use ah_plugins_rsi::single_harness::SingleHarnessPlugin;
@@ -251,6 +252,7 @@ pub fn plugin_catalog(
             Arc::new(AutoHarnessPlugin) as DynPlugin,
         ),
         ("ah-plugins-rl", Arc::new(RlPlugin) as DynPlugin),
+        ("ah-plugins-rl-step", Arc::new(RlStepPlugin) as DynPlugin),
         ("ah-plugins-runner", Arc::new(RunnerPlugin) as DynPlugin),
         (
             "ah-plugins-subagents",

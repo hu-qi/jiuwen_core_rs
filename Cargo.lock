@@ -37,6 +37,7 @@ dependencies = [
  "ah-plugins-rails",
  "ah-plugins-retrieval",
  "ah-plugins-rl",
+ "ah-plugins-rl-step",
  "ah-plugins-rsi",
  "ah-plugins-runner",
  "ah-plugins-sandbox",
@@ -460,6 +461,15 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+]
+
+[[package]]
+name = "ah-plugins-rl-step"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]

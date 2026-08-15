@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-rl-step"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real RL training-step math: advantage (reward - value), policy ratio, clipped PPO objective, value loss, aggregated metrics (no torch)"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"
