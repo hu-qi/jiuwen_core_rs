@@ -15,6 +15,7 @@ pub mod agent_builder;
 pub mod analyzer;
 pub mod autoharness;
 pub mod ci;
+pub mod cli;
 pub mod code;
 pub mod context;
 pub mod credentials;
@@ -69,6 +70,7 @@ pub mod prelude {
         AutoHarness, AutoHarnessConfig, AutoHarnessError, CycleResult, StageKind, StageResult,
     };
     pub use crate::ci::{CiError, CiGateRequest, CiGateResult, CiGateRunner};
+    pub use crate::cli::{CliChunk, CliError, CliRenderer, TodoItem, TodoStatus};
     pub use crate::code::{CodeError, CodeExecRequest, CodeExecResult, CodeProvider};
     pub use crate::context::{
         AssembledContext, ContextEngine, ContextError, ContextSummary, SummarySource,

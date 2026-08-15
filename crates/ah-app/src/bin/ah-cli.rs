@@ -3,8 +3,9 @@
 
 use std::io::{BufRead, Write};
 
-use ah_contracts::keys::{CODE, QUEUE, RSI, SESSIONS, TEAMS, WEB, WORKSPACE};
-use ah_contracts::session::SessionLog;
+use ah_contracts::cli::CliRenderer;
+use ah_contracts::keys::{CLI_RENDERER, CODE, QUEUE, RSI, SESSIONS, TEAMS, WEB, WORKSPACE};
+use ah_contracts::session::{SessionEvent, SessionLog};
 use ah_contracts::workspace::{GoalStatus, WorkspaceService};
 use ah_plugins_agent_loop::AgentLoop;
 
@@ -309,15 +310,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             continue;
         }
-        // 任务:在当前会话运行。
+        // 任务:在当前会话运行。真实渲染:订阅会话事件,实时输出 Claude Code 风格行。
         let Some(session) = current.clone() else {
             println!("no active session; use /new <id>");
             continue;
+        };
+        let renderer = ctx.service::<dyn CliRenderer>(&CLI_RENDERER);
+        let _listener = if let Some(renderer) = renderer {
+            let renderer = renderer.clone();
+            Some(ctx.on::<SessionEvent>(move |event| {
+                for chunk in renderer.chunks_from_event(&event) {
+                    for line in renderer.render(&chunk) {
+                        println!("{line}");
+                    }
+                }
+            }))
+        } else {
+            None
         };
         match run_task(&agent, &session, &line).await {
             Ok(answer) => println!("answer: {answer}"),
             Err(error) => println!("error: {error}"),
         }
+        drop(_listener);
     }
     Ok(())
 }

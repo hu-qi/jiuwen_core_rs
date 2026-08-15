@@ -15,6 +15,7 @@ use ah_plugins_agent_loop::AgentLoopPlugin;
 use ah_plugins_agentbuilder::AgentBuilderPlugin;
 use ah_plugins_autoharness::AutoHarnessPlugin;
 use ah_plugins_ci::CiPlugin;
+use ah_plugins_cli::CliPlugin;
 use ah_plugins_code::CodePlugin;
 use ah_plugins_context::ContextPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
@@ -183,6 +184,7 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-git", Arc::new(GitPlugin) as DynPlugin),
         ("ah-plugins-ci", Arc::new(CiPlugin) as DynPlugin),
+        ("ah-plugins-cli", Arc::new(CliPlugin) as DynPlugin),
         (
             "ah-plugins-autoharness",
             Arc::new(AutoHarnessPlugin) as DynPlugin,

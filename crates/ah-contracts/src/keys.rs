@@ -128,3 +128,4 @@ pub const AGENT_BUILDER: ServiceKey = ServiceKey::new("agent-builder");
 
 /// `symphony` seam 服务键(能力编排)。
 pub const SYMPHONY: ServiceKey = ServiceKey::new("symphony");
+pub const CLI_RENDERER: ServiceKey = ServiceKey::new("cli-renderer");

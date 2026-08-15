@@ -79,7 +79,7 @@
 | tools(638 符号/117 文件) | `tools` seam + ah-plugins-harness-tools | 浏览器/web/LSP/shell/fs/mcp/多模态/移动 GUI | web_fetch / run_code 真实工具已注册(agent 可调用);browser/lsp 需外部进程 |
 | rails(143/57 文件) | 事件监听器(waterfall) | 规划/完成/心跳/重试/LSP/MCP/渐进工具 等 | ShellGuard + PathGuard + ToolBudget + 渐进披露 ApprovalRail(本回合,tool-approval seam,批准集持久化)已落地;其余按需补充 |
 | subagents(24/8 文件) | `subagents` seam + ah-plugins-subagents | code/research/plan/verify + browser/mobile | code/research/plan/verify 已落地(本回合:类型提示 + 工具白名单真实强制);browser/mobile 留待后续 |
-| cli(113/19 文件) | ah-plugins-harness-cli | REPL、会话存储、渲染 | 现为 CliUiAdapter::unsupported
+| cli(113/19 文件) | ah-plugins-cli | REPL、会话存储、渲染 | 已落地(本回合:Claude Code 风格渲染器 ● Tool(args)/⎿ 摘要/☑☐ todo checkbox/⚙ 消息,事件→块投影,CLI 实时渲染;REPL+会话存储先前已落地)
 | workspace/goal/manifest(本回合已落地:workspace.json + 目标状态机)/ resources/schema/security/prompts/kv_cache/lsp | 各插件 | 对应功能 | 逐模块对等;workspace 已实现 |
 
 ### 2.3 agent_teams(1104 符号)

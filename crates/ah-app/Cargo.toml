@@ -44,6 +44,7 @@ ah-plugins-web = { workspace = true }
 ah-plugins-transport = { workspace = true }
 ah-plugins-git = { workspace = true }
 ah-plugins-ci = { workspace = true }
+ah-plugins-cli = { workspace = true }
 ah-plugins-autoharness = { workspace = true }
 ah-plugins-rl = { workspace = true }
 ah-plugins-subagents = { workspace = true }
