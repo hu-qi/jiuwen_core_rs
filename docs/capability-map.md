@@ -61,7 +61,7 @@
 | workflow(78 类) | ah-plugins-workflow-engine | 组件、分支、循环、子工作流、检查点、流式 | Http/Intent/Questioner + 检查点续跑已落地;流式留待后续;Pregel 见下 |
 | graph/Pregel(53 类) | ah-plugins-pregel | 状态通道、中断、动态路由 | 已落地(本回合:超级步引擎 + missing/present/equals 条件 + halt 中断 + 上限) |
 | controller(57 类) | `controller` seam + ah-plugins-controller | 任务调度/执行器/意图识别 | 已落地(本回合:任务 CRUD/状态机/优先级/父子层级防环;执行器注册表 + 同会话冲突拒绝;确定性意图识别;LLM 意图留待后续) |
-| operator(8 类) | 同上 | LLM/Tool/Memory/Skill 算子 | 算子真实调用(现为回显)
+| operator(8 类) | `operator` seam + ah-plugins-operator | LLM/Tool/Memory/Skill 算子 | 已落地(本回合:自进化参数句柄,LLM/tool/memory/skill 四算子 + freeze 检查 + 回调同步 + 检查点) |
 | runner(46 类) | ah-plugins-core-runner | 回调链、资源管理、取消、超时 | 回调链对等
 | session(38 类) | `sessions` seam + ah-plugins-session-log | 检查点、VCS/fork/restore、tracer | append-only 日志重建 + fork/checkpoint/restore 已落地(本回合) |
 | context_engine(72 文件) | `context` seam | 压缩、offload、token 预算、reinjection | 已实现(ah-plugins-context:预算组装/摘录压缩+LLM 总结/offload JSONL/reinject);精确 tokenizer 与向量化留待后续 |

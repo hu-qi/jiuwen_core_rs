@@ -131,3 +131,4 @@ pub const SYMPHONY: ServiceKey = ServiceKey::new("symphony");
 pub const CLI_RENDERER: ServiceKey = ServiceKey::new("cli-renderer");
 pub const EXTERNAL_CLI: ServiceKey = ServiceKey::new("external-cli");
 pub const CONTROLLER: ServiceKey = ServiceKey::new("controller");
+pub const OPERATOR: ServiceKey = ServiceKey::new("operator");

@@ -54,6 +54,7 @@ ah-plugins-skill = { workspace = true }
 ah-plugins-pregel = { workspace = true }
 ah-plugins-tune = { workspace = true }
 ah-plugins-oauth = { workspace = true }
+ah-plugins-operator = { workspace = true }
 ah-plugins-agentbuilder = { workspace = true }
 ah-plugins-symphony = { workspace = true }
 ah-plugins-telemetry = { workspace = true }

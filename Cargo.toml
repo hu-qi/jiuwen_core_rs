@@ -22,6 +22,7 @@ members = [
     "crates/ah-plugins-pregel",
     "crates/ah-plugins-tune",
     "crates/ah-plugins-oauth",
+    "crates/ah-plugins-operator",
     "crates/ah-plugins-agentbuilder",
     "crates/ah-plugins-cli",
     "crates/ah-plugins-mock",
@@ -74,6 +75,7 @@ ah-plugins-skill = { path = "crates/ah-plugins-skill" }
 ah-plugins-pregel = { path = "crates/ah-plugins-pregel" }
 ah-plugins-tune = { path = "crates/ah-plugins-tune" }
 ah-plugins-oauth = { path = "crates/ah-plugins-oauth" }
+ah-plugins-operator = { path = "crates/ah-plugins-operator" }
 ah-plugins-agentbuilder = { path = "crates/ah-plugins-agentbuilder" }
 ah-plugins-cli = { path = "crates/ah-plugins-cli" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }

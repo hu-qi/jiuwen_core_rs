@@ -31,6 +31,7 @@ pub mod llm;
 pub mod mcp;
 pub mod memory;
 pub mod oauth;
+pub mod operator;
 pub mod pregel;
 pub mod prompt;
 pub mod queue;
@@ -105,6 +106,9 @@ pub mod prelude {
     pub use crate::memory::{MemoryError, MemoryProvider, MemoryRecord};
     pub use crate::oauth::{
         DeviceAuthRequest, DeviceCode, OAuthClient, OAuthError, PollResult, TokenResponse,
+    };
+    pub use crate::operator::{
+        Operator, OperatorError, OperatorRegistry, ParameterUpdated, TunableKind, TunableSpec,
     };
     pub use crate::pregel::{
         PregelEdge, PregelEngine, PregelError, PregelGraph, PregelNodeKind, PregelNodeSpec,
