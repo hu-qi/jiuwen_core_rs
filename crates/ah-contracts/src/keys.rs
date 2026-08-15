@@ -110,3 +110,6 @@ pub const SUBAGENTS: ServiceKey = ServiceKey::new("subagents");
 
 /// `skill` seam 服务键(技能注册与评估)。
 pub const SKILL: ServiceKey = ServiceKey::new("skill");
+
+/// `pregel` seam 服务键(超级步图执行)。
+pub const PREGEL: ServiceKey = ServiceKey::new("pregel");

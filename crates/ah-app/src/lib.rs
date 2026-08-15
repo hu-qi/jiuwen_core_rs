@@ -23,6 +23,7 @@ use ah_plugins_mcp::McpPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_openai::OpenAiPlugin;
+use ah_plugins_pregel::PregelPlugin;
 use ah_plugins_prompt::PromptPlugin;
 use ah_plugins_queue::QueuePlugin;
 use ah_plugins_rails::{PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin};
@@ -167,6 +168,7 @@ pub fn plugin_catalog(
             "ah-plugins-skill",
             Arc::new(SkillPlugin::new(workspace_root.join("skills"))) as DynPlugin,
         ),
+        ("ah-plugins-pregel", Arc::new(PregelPlugin) as DynPlugin),
         (
             "ah-plugins-sandbox-rail",
             Arc::new(SandboxRailPlugin) as DynPlugin,

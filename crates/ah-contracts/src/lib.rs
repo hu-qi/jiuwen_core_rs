@@ -26,6 +26,7 @@ pub mod keys;
 pub mod llm;
 pub mod mcp;
 pub mod memory;
+pub mod pregel;
 pub mod prompt;
 pub mod queue;
 pub mod retrieval;
@@ -85,6 +86,10 @@ pub mod prelude {
     };
     pub use crate::mcp::{McpClient, McpContent, McpError, McpInfo, McpTool, McpToolResult};
     pub use crate::memory::{MemoryError, MemoryProvider, MemoryRecord};
+    pub use crate::pregel::{
+        PregelEdge, PregelEngine, PregelError, PregelGraph, PregelNodeKind, PregelNodeSpec,
+        PregelResult,
+    };
     pub use crate::prompt::{PromptError, PromptRegistry, PromptTemplate, RenderedPrompt};
     pub use crate::queue::{MessageQueue, QueueError, QueueMessage};
     pub use crate::retrieval::{RetrievalError, RetrievalHit, RetrievalProvider};
