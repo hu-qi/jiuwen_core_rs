@@ -56,6 +56,7 @@ use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_subagents::SubagentsPlugin;
 use ah_plugins_symphony::SymphonyPlugin;
 use ah_plugins_sysop::SysopPlugin;
+use ah_plugins_team_skill::TeamSkillPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_tools::ToolsPlugin;
@@ -257,6 +258,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-symphony",
             Arc::new(SymphonyPlugin::new(workspace_root.join("symphony"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-skill",
+            Arc::new(TeamSkillPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sandbox-rail",

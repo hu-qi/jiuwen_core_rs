@@ -46,6 +46,7 @@ dependencies = [
  "ah-plugins-subagents",
  "ah-plugins-symphony",
  "ah-plugins-sysop",
+ "ah-plugins-team-skill",
  "ah-plugins-teams",
  "ah-plugins-telemetry",
  "ah-plugins-tools",
@@ -568,6 +569,24 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "ah-plugins-tools",
+ "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-team-skill"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-evolving",
+ "ah-plugins-mock",
+ "ah-plugins-session-log",
+ "ah-plugins-skill",
+ "ah-plugins-subagent",
+ "ah-plugins-sysop",
  "ah-plugins-tools",
  "async-trait",
  "serde_json",

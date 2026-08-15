@@ -54,6 +54,7 @@ pub mod subagent;
 pub mod subagents;
 pub mod swarm;
 pub mod symphony;
+pub mod team_skill;
 pub mod teams;
 pub mod telemetry;
 pub mod tool_approval;
@@ -162,6 +163,9 @@ pub mod prelude {
     pub use crate::symphony::{
         Capability, CapabilityFingerprint, ExecutionStep, OrchestrationPlan, Symphony,
         SymphonyError,
+    };
+    pub use crate::team_skill::{
+        GenerateTeamSkillRequest, GenerateTeamSkillResult, TeamSkillError, TeamSkillGenerator,
     };
     pub use crate::teams::{
         TeamError, TeamMemberSpec, TeamMessage, TeamRunResult, TeamRuntime, TeamSpec, TeamTask,

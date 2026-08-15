@@ -53,6 +53,7 @@ ah-plugins-rl = { workspace = true }
 ah-plugins-runner = { workspace = true }
 ah-plugins-subagents = { workspace = true }
 ah-plugins-skill = { workspace = true }
+ah-plugins-team-skill = { workspace = true }
 ah-plugins-pregel = { workspace = true }
 ah-plugins-tune = { workspace = true }
 ah-plugins-trainer = { workspace = true }

@@ -116,7 +116,7 @@
 | evaluator(judger 91/case_runner 56/…) | `evolving` seam + ah-plugins-rsi | LLM judge、执行后端 | 已落地(expected 匹配优先 + evolving 轨迹评估(本地判据 + LLM judge 附加)) |
 | evaluation_result_analyzer(73) | ah-plugins-rsi | 信号提取、根因归因、证据引用、artifact 落盘 | 已落地(本回合:确定性信号 + 规则归因 + analysis.json);LLM 深度诊断留待后续 |
 | member_optimizer(16 文件) | ah-plugins-rsi | attribution→plan→execute→verify→publish | 未实现(0%;由 single_harness 候选门禁替代编排,后续可补) |
-| team_skill_generator/optimizer(26/8) | ah-plugins-rsi | 技能生成与演化 | 现 0%/启发式
+| team_skill_generator/optimizer(26/8) | `team-skill` seam + ah-plugins-team-skill | 技能生成与演化 | 生成已落地(本回合:任务 → 确定性计划(关键词→能力/步骤)+ 注册 skill seam + 源任务验证(子代理+evolving)+ 修复重试);演化留待后续 |
 | single_harness(72+12) | `single-harness` seam + ah-plugins-rsi-single-harness | 迭代编排、候选门禁 | 已落地(本回合:train/holdout 拆分 + 每 epoch 评测→精化→候选 holdout 门禁(严格优于才接受)+ best/checkpoint JSONL 落盘 + 中断续跑) |
 | auto_harness(65 文件) | ah-plugins-autoharness | assess/plan/implement/verify/commit/publish + 真实 git/CI | 编排已落地(本回合:六阶段真实执行,git 提交+分支);远端 PR/GitCode 留待后续 |
 | storage/resource/config/schema | ah-plugins-rsi | 持久化、资源记账、配置、类型 | 现 in-memory

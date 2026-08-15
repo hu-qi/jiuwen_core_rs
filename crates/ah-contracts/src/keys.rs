@@ -137,3 +137,4 @@ pub const GRAPH_MEMORY: ServiceKey = ServiceKey::new("graph-memory");
 pub const SINGLE_HARNESS: ServiceKey = ServiceKey::new("single-harness");
 pub const OPTIMIZER: ServiceKey = ServiceKey::new("optimizer");
 pub const TRAINER: ServiceKey = ServiceKey::new("trainer");
+pub const TEAM_SKILL: ServiceKey = ServiceKey::new("team-skill");
