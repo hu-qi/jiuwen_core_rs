@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 37 回合,239 tests / clippy 0 / fmt clean):
+> - external CLI agent 运行时 ah-plugins-external(真实子进程:流式长驻 stdin + 单发每轮 argv 两风味;adapter 启动知识/完成标记/steer/abort/超时;TeamJoinDescriptor 编码;codex proto 辅助)
+>
 > **账目更新**(第 36 回合,236 tests / clippy 0 / fmt clean):
 > - Redis 队列后端 ah-plugins-queue-redis(真实外部 provider:LIST 日志 + INCR 序号 + 游标持久,重启续消费;prod 换用,dev 保持本地)
 >

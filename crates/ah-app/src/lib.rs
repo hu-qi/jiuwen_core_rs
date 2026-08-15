@@ -20,6 +20,7 @@ use ah_plugins_code::CodePlugin;
 use ah_plugins_context::ContextPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
+use ah_plugins_external::ExternalCliPlugin;
 use ah_plugins_git::GitPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_memory::MemoryPlugin;
@@ -190,6 +191,13 @@ pub fn plugin_catalog(
         ("ah-plugins-git", Arc::new(GitPlugin) as DynPlugin),
         ("ah-plugins-ci", Arc::new(CiPlugin) as DynPlugin),
         ("ah-plugins-cli", Arc::new(CliPlugin) as DynPlugin),
+        (
+            // 真实外部 CLI 运行时:通用流式 adapter(boot 不拉起,首次 start 才 spawn)。
+            "ah-plugins-external",
+            Arc::new(ExternalCliPlugin::new(
+                ah_contracts::external::CliAgentAdapter::generic_streaming("__DONE__"),
+            )) as DynPlugin,
+        ),
         (
             "ah-plugins-autoharness",
             Arc::new(AutoHarnessPlugin) as DynPlugin,

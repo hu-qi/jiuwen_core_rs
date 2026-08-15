@@ -22,6 +22,7 @@ pub mod credentials;
 pub mod effect;
 pub mod event;
 pub mod evolving;
+pub mod external;
 pub mod fs;
 pub mod git;
 pub mod keys;
@@ -81,6 +82,10 @@ pub mod prelude {
     pub use crate::evolving::{
         Evaluation, EvolvingError, EvolvingRuntime, Refinement, RefinementTarget, StepOutcome,
         Trajectory, TrajectoryStep, Verdict,
+    };
+    pub use crate::external::{
+        CliAgentAdapter, CompletionStrategy, ExternalCliError, ExternalCliRuntime, ExternalCliTurn,
+        InputFormat, TeamJoinDescriptor, codex_narration, codex_proto_line,
     };
     pub use crate::fs::{FsError, FsProvider};
     pub use crate::git::{GitCommit, GitError, GitProvider, GitStatusEntry};

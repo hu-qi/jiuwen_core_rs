@@ -90,7 +90,7 @@
 | agent/coordination/scheduling(57) | `teams` seam + teams-workflow | 协调内核、调度、生命周期 | swarmflow 编排已落地;生命周期/调度细化留待后续 |
 | runtime(27) | `teams` seam | 任务板/依赖/review/settle 真实状态迁移,run_task 真实委派 | 已落地(ah-plugins-teams);持久化/池/7 路 dispatch 留待后续 |
 | messager(16) | `queue` seam + ah-plugins-queue(本地日志+游标);ZMQ ROUTER/DEALER 留待后续 | 本地队列已落地(本回合) |
-| external(95) | `subagents` seam + 进程插件 | 外部 CLI agent、SSH | 全 crate 现无 std::process
+| external(95) | `external` seam + ah-plugins-external | 外部 CLI agent、SSH | 已落地(本回合:真实子进程运行时,流式 stdin + 单发 argv 两风味,adapter 启动知识/完成标记/steer/abort;SSH 留待后续) |
 | workflow(148) | ah-plugins-teams-workflow | swarmflow 引擎(phase/agent 并行 barrier/预算/事件流/journal 续跑) | 已落地(本回合,SwarmflowEngine,worker=SubagentRuntime) |
 | residual.rs 资产 | ah-plugins-teams | NativeTaskBoard/Journal/BudgetLedger/检测器 | 接入运行路径(现仅测试引用)
 | kv_cache/memory/monitor/models/rails/skill/prompts/cli/harness | 各插件 | 对应功能 | 现 0%
