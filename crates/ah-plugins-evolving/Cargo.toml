@@ -9,6 +9,7 @@ description = "Real evolving runtime: trajectory extraction from session logs, l
 ah-contracts = { workspace = true }
 ah-hub = { workspace = true }
 async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "macros"] }
 

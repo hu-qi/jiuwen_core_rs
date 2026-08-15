@@ -101,7 +101,7 @@
 | --- | --- | --- | --- |
 | dataset(5) | ah-plugins-evolving | Case/EvaluatedCase/loader/shuffle/split | 字段语义对等
 | evaluator(40) | `evolving` seam | LLM-as-judge、指标、pipeline | 现为 mock 精确匹配
-| trajectory(94) | `evolving` seam | OTLP span codec、抽取、聚合、存储 | 现为纯数据结构
+| trajectory(94) | `evolving` seam | OTLP span codec、抽取、聚合、存储 | 已落地(本回合:Trajectory↔Span 树编解码 + 聚合统计,抽取/经验存储先前已落地) |
 | checkpointing/experience/sharing(21/54/20) | ah-plugins-evolving | 持久化、评分、分享 | experience 持久化已落地(本回合:save/load/search JSONL + 跨重开恢复);评分/分享留待后续 |
 | optimizer/updater/signal(59/3/32) | `evolving` seam | LLM 梯度优化、信号检测 | 现为确定性假更新
 | agent_rl(216) | ah-plugins-rl | VERL/PPO、reward、LoRA、gateway | reward 函数已落地(本回合:确定性线性奖励,通过/失败/超时/工具错误/迭代项);VERL/PPO/LoRA/gateway 留待后续 |

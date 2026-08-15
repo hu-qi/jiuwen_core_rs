@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 45 回合,265 tests / clippy 0 / fmt clean):
+> - trajectory OTLP span codec(trajectory_codec:Trajectory↔Span 树编解码可逆 + aggregate_trajectories 聚合统计:完成率/错误/平均步数;与 telemetry Span 互通)
+>
 > **账目更新**(第 44 回合,263 tests / clippy 0 / fmt clean):
 > - 知识图谱记忆 ah-plugins-graph-memory(实体抽取:字母数字词 + CJK 二元组确定性;共现实体对 → relation;episode 记录;规范化名合并去重;JSONL 三集合持久化 + 重启恢复;关键词统一打分检索 + 邻居遍历;graph_add_memory/graph_search/graph_neighbors 工具)
 >

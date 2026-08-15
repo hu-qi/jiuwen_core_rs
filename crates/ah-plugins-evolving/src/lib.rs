@@ -25,6 +25,8 @@ use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
+pub mod trajectory_codec;
+
 /// 真实 evolving 运行时:轨迹抽取 + 本地判据评估 + 优化建议。
 pub struct EvolvingRuntimeImpl {
     llm: Arc<dyn ModelProvider>,
