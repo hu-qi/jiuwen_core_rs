@@ -9,6 +9,7 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "ah-plugins-agent-loop",
+ "ah-plugins-agentbuilder",
  "ah-plugins-autoharness",
  "ah-plugins-ci",
  "ah-plugins-code",
@@ -81,6 +82,23 @@ dependencies = [
  "ah-plugins-session-log",
  "ah-plugins-sysop",
  "ah-plugins-tools",
+ "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-agentbuilder"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-mock",
+ "ah-plugins-session-log",
+ "ah-plugins-sysop",
+ "ah-plugins-tools",
+ "ah-plugins-web",
+ "ah-plugins-workflow",
  "async-trait",
  "serde_json",
  "tokio",

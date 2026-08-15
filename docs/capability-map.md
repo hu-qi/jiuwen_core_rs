@@ -141,7 +141,7 @@
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
 | prompt_builder | ah-plugins-devtools | meta/feedback/badcase 构建 | 现 {{var}} 渲染
-| agent_builder | ah-plugins-devtools | NL→设计→DL→DSL→执行 | 现 runtime=mock manifest
+| agent_builder | ah-plugins-agentbuilder | NL→设计→DSL→执行 | 已落地(本回合:确定性意图解析 → WorkflowSpec DSL → WorkflowEngine 真实执行) |
 | tune | ah-plugins-tune | optimizer/evaluator/trainer 流水线 | 已落地(本回合:subagent 执行 + evolving 评估/优化精化 prompt + 最优跟踪) |
 | skill_creator/evaluator | ah-plugins-skill | 技能注册/持久化/评估 | 已落地(本回合:文件后端 + subagent 委派 + evolving 轨迹评估) |
 | symphony | ah-plugins-symphony | 能力检索/编排/legacy runtime | Python 侧无代码,按 README 语义实现

@@ -122,3 +122,6 @@ pub const TOOL_APPROVAL: ServiceKey = ServiceKey::new("tool-approval");
 
 /// `oauth` seam 服务键(设备码授权)。
 pub const OAUTH: ServiceKey = ServiceKey::new("oauth");
+
+/// `agent-builder` seam 服务键(NL → 设计 → DSL → 执行)。
+pub const AGENT_BUILDER: ServiceKey = ServiceKey::new("agent-builder");

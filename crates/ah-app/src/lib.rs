@@ -12,6 +12,7 @@ use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
 use ah_plugins_agent_loop::AgentLoopPlugin;
+use ah_plugins_agentbuilder::AgentBuilderPlugin;
 use ah_plugins_autoharness::AutoHarnessPlugin;
 use ah_plugins_ci::CiPlugin;
 use ah_plugins_code::CodePlugin;
@@ -197,6 +198,10 @@ pub fn plugin_catalog(
         ("ah-plugins-pregel", Arc::new(PregelPlugin) as DynPlugin),
         ("ah-plugins-tune", Arc::new(TunePlugin) as DynPlugin),
         ("ah-plugins-oauth", Arc::new(OAuthPlugin) as DynPlugin),
+        (
+            "ah-plugins-agentbuilder",
+            Arc::new(AgentBuilderPlugin) as DynPlugin,
+        ),
         (
             "ah-plugins-sandbox-rail",
             Arc::new(SandboxRailPlugin) as DynPlugin,
