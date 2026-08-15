@@ -49,6 +49,7 @@ dependencies = [
  "ah-plugins-teams",
  "ah-plugins-telemetry",
  "ah-plugins-tools",
+ "ah-plugins-trainer",
  "ah-plugins-transport",
  "ah-plugins-tune",
  "ah-plugins-web",
@@ -610,6 +611,26 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-trainer"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-evolving",
+ "ah-plugins-mock",
+ "ah-plugins-operator",
+ "ah-plugins-optimizer",
+ "ah-plugins-rsi",
+ "ah-plugins-session-log",
+ "ah-plugins-subagent",
+ "ah-plugins-sysop",
+ "ah-plugins-tools",
  "async-trait",
  "serde_json",
  "tokio",

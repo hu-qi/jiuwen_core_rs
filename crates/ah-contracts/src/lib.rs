@@ -58,6 +58,7 @@ pub mod teams;
 pub mod telemetry;
 pub mod tool_approval;
 pub mod tools;
+pub mod trainer;
 pub mod transport;
 pub mod tune;
 pub mod web;
@@ -167,6 +168,7 @@ pub mod prelude {
     pub use crate::telemetry::{Span, TelemetryError, TelemetryProvider};
     pub use crate::tool_approval::{ToolApproval, ToolApprovalError};
     pub use crate::tools::{Tool, ToolError, ToolRegistry};
+    pub use crate::trainer::{TrainEpoch, TrainRequest, TrainResult, Trainer, TrainerError};
     pub use crate::transport::{
         AgentCard, AgentHandler, AgentMessage, AgentTransport, TransportError,
     };

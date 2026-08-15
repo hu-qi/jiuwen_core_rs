@@ -35,14 +35,14 @@
 | sandbox | `sandbox` | `SandboxProvider`(已实现:策略化,sandbox.json 允许前缀/拒绝命令模式/绝对路径开关 + pre-execute rail 消费) | done(契约+消费,本地)/ partial(远程沙箱容器/VM) |
 | security | `security` | `SecurityProvider`(已实现:规则 guardrails + pre-execute rail) | done(契约)/ partial(无 LLM 后端/API) |
 | agent-loop | `agent-loop` | `AgentLoop`(已实现,真实 ReAct,日志驱动,工具错误回喂模型) | done
-| workflow | `workflow` | `WorkflowEngine`(已实现:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边 + 轨迹入日志) | done(契约)/ partial(无流式) |
+| workflow | `workflow` | `WorkflowEngine`(已实现:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边 + 轨迹入日志;LLM 节点流式消费) | done(契约+流式消费) |
 | subagent | `subagent` | `SubagentRuntime`(已实现:隔离会话委派 + 预算 + 上下文注入 + delegate_task 工具) | done(契约)/ partial(无进程外/跨产品子代理) |
 | teams | `teams` | `TeamRuntime`(已实现:内存 + SQLite 持久化两套运行时:任务板/依赖门控/成员校验/review/settle/run_task 真实委派/teams/task 事件/消息经 queue seam 传输) | done(契约+持久化+消息)/ partial(外部 CLI 进程/ZMQ) |
 | evolving | `evolving` | `EvolvingRuntime`(已实现:轨迹从会话日志真实抽取;本地判据评估 + LLM judge 附加;优化建议规则推导 + LLM 附加) | done(契约)/ partial(无持久化/RL) |
 | rsi | `rsi` | `RsiRuntime`(已实现:数据集生成 + 用例真实执行 + evolving 评估 + 报告 + 提示精化 + checkpoint 落盘) | done(契约)/ partial(无 LLM 数据生成/RL) |
 | telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约+JSONL+OTLP/JSON 导出)/ partial(semconv 留待后续) |
 | queue | `queue` | `MessageQueue`(已实现:文件后端,每 channel append-only JSONL + 消费游标 offset 语义,重启恢复;teams 消息消费方) | done(契约+消费,本地+Redis 外部后端)/ partial(外部 Pulsar/ZMQ) |
-| mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约)/ partial(stdio 真实,http 未实现) |
+| mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约+stdio+http 客户端) |
 | transport | `transport` | A2A 风格传输(JSON-RPC 2.0 + SSE 流式 over HTTP;ureq 客户端 + 本地 HTTP/1.1 服务端) | done(契约+客户端+服务端+流式)/ partial(加密传输) |
 | credentials | `credentials` | `CredentialProvider`(已实现:真实环境变量 provider,映射可配置,如 `openai.api_key` → `OPENAI_API_KEY`;`get`/`list` 真实读 `std::env`,`set`/`remove` 显式报错 env 只读) | done(契约)/ partial(env 只读,无密钥管理后端;ah-plugins-credentials:tests 覆盖 get/list/set/remove 真实 env 路径,openai 集成测试经 credentials 解析 key 后真实 HTTP 往返) |
 
@@ -105,7 +105,7 @@
 | checkpointing/experience/sharing(21/54/20) | ah-plugins-evolving | 持久化、评分、分享 | experience 持久化已落地(本回合:save/load/search JSONL + 跨重开恢复);评分/分享留待后续 |
 | optimizer/updater/signal(59/3/32) | `optimizer` seam + ah-plugins-optimizer | LLM 梯度优化、信号检测 | 已落地(本回合:文本梯度 backward(失败信号过滤 + 问题→参数路由)+ step 经 OperatorRegistry 应用(冻结/缺失显式记录));LLM 梯度与信号检测留待后续 |
 | agent_rl(216) | ah-plugins-rl | VERL/PPO、reward、LoRA、gateway | reward 函数已落地(本回合:确定性线性奖励,通过/失败/超时/工具错误/迭代项);VERL/PPO/LoRA/gateway 留待后续 |
-| trainer/prompts/tools(3/18/23) | ah-plugins-evolving | 训练循环、prompt、工具 | 现 0%
+| trainer/prompts/tools(3/18/23) | `trainer` seam + ah-plugins-trainer | 训练循环、prompt、工具 | 训练循环已落地(本回合:基线评估 → 每轮 train 前向 → Optimizer 文本梯度应用(经 OperatorRegistry)→ 验证门禁 → 改进推进 best → early stop);prompt/tools 组件留待后续 |
 
 ### 2.5 rsi(1695 符号) + auto_harness
 

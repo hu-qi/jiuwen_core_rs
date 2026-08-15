@@ -59,6 +59,7 @@ use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_tools::ToolsPlugin;
+use ah_plugins_trainer::TrainerPlugin;
 use ah_plugins_transport::TransportPlugin;
 use ah_plugins_tune::TunePlugin;
 use ah_plugins_web::WebPlugin;
@@ -242,6 +243,7 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-pregel", Arc::new(PregelPlugin) as DynPlugin),
         ("ah-plugins-tune", Arc::new(TunePlugin) as DynPlugin),
+        ("ah-plugins-trainer", Arc::new(TrainerPlugin) as DynPlugin),
         ("ah-plugins-oauth", Arc::new(OAuthPlugin) as DynPlugin),
         ("ah-plugins-operator", Arc::new(OperatorPlugin) as DynPlugin),
         (
