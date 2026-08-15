@@ -8,7 +8,10 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 31 回合,223 tests / clippy 0 / fmt clean):
+> **账目更新**(第 32 回合,225 tests / clippy 0 / fmt clean):
+> - 设备码 OAuth 7607726(真实 Device Authorization Grant 流)
+>
+> **账目更新**(第 31 回合,223 tests):
 > - OTLP/JSON 导出 53afa6a(telemetry 缺口)
 >
 > **账目更新**(第 30 回合,222 tests):
