@@ -129,6 +129,77 @@ impl TelemetryProvider for JsonlTelemetryProvider {
         self.total_exported.fetch_add(count, Ordering::SeqCst);
         Ok(count)
     }
+
+    async fn export_otlp(&self, collector_url: &str) -> Result<usize, TelemetryError> {
+        // 取尚未导出的 span,构建 OTLP/JSON 载荷(resourceSpans -> scopeSpans -> spans)。
+        let spans = self.spans.lock().unwrap();
+        let written = self.written.load(Ordering::SeqCst);
+        let count = spans.len().saturating_sub(written);
+        if count == 0 {
+            return Ok(0);
+        }
+        let otlp_spans: Vec<serde_json::Value> = spans
+            .iter()
+            .skip(written)
+            .map(|span| {
+                let start_ns = span.start_ms * 1_000_000;
+                let end_ns = (span.start_ms + span.duration_ms) * 1_000_000;
+                let mut attrs: Vec<serde_json::Value> = span
+                    .attributes
+                    .iter()
+                    .map(|(k, v)| {
+                        serde_json::json!({
+                            "key": k,
+                            "value": { "stringValue": v.to_string() },
+                        })
+                    })
+                    .collect();
+                if let Some(parent) = &span.parent {
+                    attrs.push(serde_json::json!({
+                        "key": "parent",
+                        "value": { "stringValue": parent },
+                    }));
+                }
+                serde_json::json!({
+                    "traceId": "00000000000000000000000000000000",
+                    "spanId": format!("{:016x}", span.start_ms),
+                    "name": span.name,
+                    "kind": 2,
+                    "startTimeUnixNano": start_ns.to_string(),
+                    "endTimeUnixNano": end_ns.to_string(),
+                    "attributes": attrs,
+                })
+            })
+            .collect();
+        let payload = serde_json::json!({
+            "resourceSpans": [{
+                "resource": { "attributes": [
+                    { "key": "service.name", "value": { "stringValue": "agent-harness" } }
+                ]},
+                "scopeSpans": [{
+                    "scope": { "name": "agent-harness" },
+                    "spans": otlp_spans,
+                }],
+            }]
+        });
+        let body = serde_json::to_string(&payload)
+            .map_err(|e| TelemetryError(format!("serialize otlp: {e}")))?;
+        let agent = ureq::AgentBuilder::new()
+            .timeout(std::time::Duration::from_secs(10))
+            .build();
+        let response = agent
+            .post(collector_url)
+            .set("Content-Type", "application/json")
+            .send_string(&body)
+            .map_err(|e| TelemetryError(format!("otlp post failed: {e}")))?;
+        let status = response.status();
+        if !(200..300).contains(&status) {
+            return Err(TelemetryError(format!("otlp collector returned {status}")));
+        }
+        self.written.store(spans.len(), Ordering::SeqCst);
+        self.total_exported.fetch_add(count, Ordering::SeqCst);
+        Ok(count)
+    }
 }
 
 /// telemetry 插件:注册 `telemetry` seam,并监听 agent/step 与 tools/post-execute
@@ -449,5 +520,79 @@ mod tests {
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn export_otlp_posts_valid_json_to_collector() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        // 真实本地 OTLP collector 端点(捕获 POST 体)。
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let url = format!("http://{addr}/v1/traces");
+        let handle = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 8192];
+                loop {
+                    match stream.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => {
+                            buf.extend_from_slice(&chunk[..n]);
+                            if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                                break;
+                            }
+                        }
+                    }
+                }
+                let text = String::from_utf8_lossy(&buf).into_owned();
+                let header_end = text.find("\r\n\r\n").map(|i| i + 4).unwrap_or(text.len());
+                let body = text[header_end..].to_string();
+                let len = body.len();
+                let response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{{}}", 2);
+                let _ = stream.write_all(response.as_bytes());
+                let _ = &len;
+                std::fs::write("/tmp/otlp_captured.json", body).expect("capture");
+            }
+        });
+
+        let dir = std::env::temp_dir().join(format!("ah-tel-otlp-{}", std::process::id()));
+        let provider = JsonlTelemetryProvider::open(dir.join("telemetry.jsonl")).expect("open");
+        provider
+            .record_span(Span::new("agent/step#1", 1000, 5))
+            .expect("record");
+        let mut attrs = serde_json::Map::new();
+        attrs.insert("tool".to_string(), serde_json::json!("echo"));
+        provider
+            .record_span(Span {
+                name: "tool/echo".to_string(),
+                parent: Some("agent/step#1".to_string()),
+                attributes: attrs,
+                start_ms: 2000,
+                duration_ms: 10,
+            })
+            .expect("record2");
+
+        let count = provider.export_otlp(&url).await.expect("otlp export");
+        assert_eq!(count, 2, "two spans exported");
+
+        handle.join().expect("collector");
+        let captured = std::fs::read_to_string("/tmp/otlp_captured.json").expect("read capture");
+        let payload: serde_json::Value = serde_json::from_str(&captured).expect("valid otlp json");
+        assert!(
+            payload.get("resourceSpans").is_some(),
+            "OTLP/JSON structure"
+        );
+        let spans = &payload["resourceSpans"][0]["scopeSpans"][0]["spans"];
+        assert_eq!(spans.as_array().map(|a| a.len()).unwrap_or(0), 2);
+        assert_eq!(spans[0]["name"], "agent/step#1");
+        assert!(
+            spans[1]["endTimeUnixNano"].as_str().unwrap().len() >= 10,
+            "nanos timestamp"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_file("/tmp/otlp_captured.json");
     }
 }

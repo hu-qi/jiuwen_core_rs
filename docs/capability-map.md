@@ -131,7 +131,7 @@
 | sys_operation(远程沙箱 9 provider) | `sandbox` seam + 进程插件 | AIO/jiuwenbox/yuanrong | 现 4 个白名单命令
 | external_provider(OpenAI OAuth) | `credentials` seam + ah-plugins-openai-auth | 设备码 OAuth、模型目录 | 现恒 unsupported
 | a2a | `transport` seam + ah-plugins-transport | HTTP server/client、流式 | server/client + SSE 流式已落地(本回合:stream_send 与 text/event-stream 端点) |
-| tracer_otel | `telemetry` seam + ah-plugins-telemetry | span 记录 + JSONL 导出(已落地);OTLP 导出、semconv 留待后续 | JSONL 真实(ah-plugins-telemetry:tests 覆盖 record/export/事件监听);OTLP 规划 |
+| tracer_otel | `telemetry` seam + ah-plugins-telemetry | span 记录 + JSONL 导出 + OTLP/JSON | JSONL 真实;OTLP/JSON 导出已落地(本回合:resourceSpans/scopeSpans/spans 编码 + POST collector);semconv 留待后续 |
 | context_evolver(58 文件) | `memory` seam + ah-plugins-context-evolver | LLM 记忆流水线、Milvus | 现 0%
 | mcp(stdio/http) | `mcp` seam + ah-plugins-mcp | stdio 子进程、newline-delimited JSON-RPC 2.0、initialize 握手、list_tools/call_tool/shutdown | stdio 真实 + http 客户端真实(本回合:McpHttpClient POST JSON-RPC,本地 HTTP 端点往返验证) |
 | vendor_specific | `llm` seam | 各厂商重排/嵌入 | 现词法 fallback

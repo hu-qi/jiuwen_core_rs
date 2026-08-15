@@ -65,4 +65,7 @@ pub trait TelemetryProvider: Seam {
 
     /// 导出尚未导出的 span(如追加写入 JSONL 文件)并返回条数。
     async fn export(&self) -> Result<usize, TelemetryError>;
+
+    /// 以 OTLP/JSON 编码把尚未导出的 span POST 到 OTLP collector,返回条数。
+    async fn export_otlp(&self, collector_url: &str) -> Result<usize, TelemetryError>;
 }

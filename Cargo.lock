@@ -442,6 +442,7 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+ "ureq",
 ]
 
 [[package]]
