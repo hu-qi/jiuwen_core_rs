@@ -38,6 +38,7 @@ pub mod queue;
 pub mod retrieval;
 pub mod reward;
 pub mod rsi;
+pub mod runner;
 pub mod sandbox;
 pub mod seam;
 pub mod security;
@@ -119,6 +120,10 @@ pub mod prelude {
     pub use crate::retrieval::{RetrievalError, RetrievalHit, RetrievalProvider};
     pub use crate::reward::{RewardCase, RewardConfig, RewardError, RewardFunction, RewardOutput};
     pub use crate::rsi::{RsiCase, RsiCheckpoint, RsiError, RsiReport, RsiRunOutcome, RsiRuntime};
+    pub use crate::runner::{
+        CallbackChain, CallbackMetrics, ChainAction, ChainCallback, ChainContext, ChainResult,
+        RunnerError,
+    };
     pub use crate::sandbox::{
         CommandDecision, FsDecision, SandboxError, SandboxPolicy, SandboxProvider,
     };

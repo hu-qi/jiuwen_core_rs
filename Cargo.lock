@@ -33,6 +33,7 @@ dependencies = [
  "ah-plugins-retrieval",
  "ah-plugins-rl",
  "ah-plugins-rsi",
+ "ah-plugins-runner",
  "ah-plugins-sandbox",
  "ah-plugins-security",
  "ah-plugins-session-log",
@@ -389,6 +390,17 @@ dependencies = [
  "ah-plugins-subagent",
  "ah-plugins-sysop",
  "ah-plugins-tools",
+ "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-runner"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
  "async-trait",
  "serde_json",
  "tokio",

@@ -40,6 +40,7 @@ use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rl::RlPlugin;
 use ah_plugins_rsi::RsiPlugin;
 use ah_plugins_rsi::analyzer::AnalyzerPlugin;
+use ah_plugins_runner::RunnerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
@@ -216,6 +217,7 @@ pub fn plugin_catalog(
             Arc::new(AutoHarnessPlugin) as DynPlugin,
         ),
         ("ah-plugins-rl", Arc::new(RlPlugin) as DynPlugin),
+        ("ah-plugins-runner", Arc::new(RunnerPlugin) as DynPlugin),
         (
             "ah-plugins-subagents",
             Arc::new(SubagentsPlugin) as DynPlugin,

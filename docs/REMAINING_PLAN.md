@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 41 回合,252 tests / clippy 0 / fmt clean):
+> - runner 回调链 ah-plugins-runner(优先级降序执行 + 链式传参;单回调 retry 上限/timeout 判错/BREAK 短路/ROLLBACK 与错误均逆序执行 rollback handler;CallbackMetrics 调用次数/耗时/错误率)
+>
 > **账目更新**(第 40 回合,248 tests / clippy 0 / fmt clean):
 > - operator 自进化算子 ah-plugins-operator(LLM/tool/memory/skill 四参数句柄:tunables 冻结过滤/set_parameter freeze 检查/on_parameter_updated 回调/检查点 load_state;注册表按 id 取回)
 >

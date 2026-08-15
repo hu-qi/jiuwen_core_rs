@@ -1,0 +1,13 @@
+[package]
+name = "ah-plugins-runner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real callback chain runner: priority-ordered execution with retry/timeout/break/rollback and metrics"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+async-trait = "0.1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros", "time"] }
