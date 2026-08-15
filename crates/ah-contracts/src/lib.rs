@@ -26,6 +26,7 @@ pub mod evolving;
 pub mod external;
 pub mod fs;
 pub mod git;
+pub mod graph_memory;
 pub mod keys;
 pub mod llm;
 pub mod mcp;
@@ -95,6 +96,9 @@ pub mod prelude {
     };
     pub use crate::fs::{FsError, FsProvider};
     pub use crate::git::{GitCommit, GitError, GitProvider, GitStatusEntry};
+    pub use crate::graph_memory::{
+        AddMemoryResult, Entity, Episode, GraphHit, GraphMemory, GraphMemoryError, Relation,
+    };
     pub use crate::keys::{
         AGENT_LOOP, CREDENTIALS, FS, LLM, MCP, MEMORY, RETRIEVAL, SESSION_MANAGER, SESSIONS, SHELL,
         TELEMETRY, TOOLS, WORKFLOW,

@@ -21,6 +21,7 @@ dependencies = [
  "ah-plugins-evolving",
  "ah-plugins-external",
  "ah-plugins-git",
+ "ah-plugins-graph-memory",
  "ah-plugins-mcp",
  "ah-plugins-memory",
  "ah-plugins-mock",
@@ -252,6 +253,21 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+]
+
+[[package]]
+name = "ah-plugins-graph-memory"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-mock",
+ "ah-plugins-session-log",
+ "ah-plugins-sysop",
+ "ah-plugins-tools",
+ "async-trait",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

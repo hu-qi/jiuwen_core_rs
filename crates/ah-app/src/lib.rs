@@ -24,6 +24,7 @@ use ah_plugins_credentials::CredentialsPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
 use ah_plugins_external::ExternalCliPlugin;
 use ah_plugins_git::GitPlugin;
+use ah_plugins_graph_memory::GraphMemoryPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
@@ -204,6 +205,10 @@ pub fn plugin_catalog(
             })) as DynPlugin,
         ),
         ("ah-plugins-git", Arc::new(GitPlugin) as DynPlugin),
+        (
+            "ah-plugins-graph-memory",
+            Arc::new(GraphMemoryPlugin::new(workspace_root.join("graph-memory"))) as DynPlugin,
+        ),
         ("ah-plugins-ci", Arc::new(CiPlugin) as DynPlugin),
         ("ah-plugins-cli", Arc::new(CliPlugin) as DynPlugin),
         (

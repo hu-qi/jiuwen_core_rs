@@ -133,3 +133,4 @@ pub const EXTERNAL_CLI: ServiceKey = ServiceKey::new("external-cli");
 pub const CONTROLLER: ServiceKey = ServiceKey::new("controller");
 pub const OPERATOR: ServiceKey = ServiceKey::new("operator");
 pub const RUNNER: ServiceKey = ServiceKey::new("runner");
+pub const GRAPH_MEMORY: ServiceKey = ServiceKey::new("graph-memory");
