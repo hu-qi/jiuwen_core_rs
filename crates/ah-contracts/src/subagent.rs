@@ -15,6 +15,10 @@ pub struct SubagentSpec {
     pub context: Option<String>,
     /// 预算:最大循环轮数;None 用默认。
     pub budget: Option<usize>,
+    /// 工具白名单:Some 时模型只见白名单工具,越权调用被拒(真实强制);
+    /// None = 全部注册工具。
+    #[serde(default)]
+    pub allowed_tools: Option<Vec<String>>,
 }
 
 /// 子代理结果。

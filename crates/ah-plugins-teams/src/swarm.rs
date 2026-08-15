@@ -79,6 +79,7 @@ impl SwarmflowEngine {
                 .clone()
                 .map(|m| format!("worker model hint: {m}")),
             budget: Some(8),
+            allowed_tools: None,
         };
         let ok = match self.subagent.run(spec).await {
             Ok(result) => {

@@ -16,6 +16,7 @@ members = [
     "crates/ah-plugins-ci",
     "crates/ah-plugins-autoharness",
     "crates/ah-plugins-rl",
+    "crates/ah-plugins-subagents",
     "crates/ah-plugins-mock",
     "crates/ah-plugins-tools",
     "crates/ah-plugins-sysop",
@@ -58,6 +59,7 @@ ah-plugins-git = { path = "crates/ah-plugins-git" }
 ah-plugins-ci = { path = "crates/ah-plugins-ci" }
 ah-plugins-autoharness = { path = "crates/ah-plugins-autoharness" }
 ah-plugins-rl = { path = "crates/ah-plugins-rl" }
+ah-plugins-subagents = { path = "crates/ah-plugins-subagents" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }
 ah-plugins-tools = { path = "crates/ah-plugins-tools" }
 ah-plugins-sysop = { path = "crates/ah-plugins-sysop" }

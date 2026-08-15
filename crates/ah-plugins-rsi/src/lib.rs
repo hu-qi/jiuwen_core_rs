@@ -126,6 +126,7 @@ impl RsiRuntime for RsiRuntimeImpl {
                 task: case.task.clone(),
                 context,
                 budget: Some(8),
+                allowed_tools: None,
             })
             .await;
         let result = match result {

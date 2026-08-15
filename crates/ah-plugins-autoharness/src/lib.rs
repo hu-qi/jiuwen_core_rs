@@ -108,6 +108,7 @@ impl AutoHarnessOrchestrator {
                             config.workspace.display()
                         )),
                         budget: Some(6),
+                        allowed_tools: None,
                     })
                     .await
                     .map_err(|e| AutoHarnessError(format!("implement failed: {e}")))?;

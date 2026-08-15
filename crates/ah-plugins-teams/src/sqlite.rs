@@ -472,6 +472,7 @@ impl TeamRuntime for SqliteTeamRuntime {
                     "You are a member of team {team_name} ({team}) working on task {task}."
                 )),
                 budget: Some(6),
+                allowed_tools: None,
             })
             .await
             .map_err(|e| TeamError(format!("subagent failed: {e}")))?;

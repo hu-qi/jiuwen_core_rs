@@ -104,3 +104,6 @@ pub const AUTO_HARNESS: ServiceKey = ServiceKey::new("auto-harness");
 
 /// `reward` seam 服务键(RL 奖励计算)。
 pub const REWARD: ServiceKey = ServiceKey::new("reward");
+
+/// `subagents` seam 服务键(类型化子代理)。
+pub const SUBAGENTS: ServiceKey = ServiceKey::new("subagents");

@@ -38,11 +38,12 @@ impl LocalSubagentRuntime {
         self
     }
 
-    fn tool_schemas(&self) -> Vec<ToolSchema> {
+    fn tool_schemas(&self, allowed: Option<&Vec<String>>) -> Vec<ToolSchema> {
         let mut names = self.tools.names();
         names.sort();
         names
             .iter()
+            .filter(|name| allowed.map(|allow| allow.contains(name)).unwrap_or(true))
             .filter_map(|name| {
                 self.tools.get(name).map(|tool| ToolSchema {
                     name: tool.name().to_string(),
@@ -92,7 +93,7 @@ impl SubagentRuntime for LocalSubagentRuntime {
                 .llm
                 .chat(ModelRequest {
                     messages,
-                    tools: self.tool_schemas(),
+                    tools: self.tool_schemas(spec.allowed_tools.as_ref()),
                     ..Default::default()
                 })
                 .await
@@ -134,9 +135,18 @@ impl SubagentRuntime for LocalSubagentRuntime {
                 .map_err(|e| SubagentError(format!("append failed: {e}")))?;
 
             for call in &response.tool_calls {
-                let output = match self.tools.invoke(&call.name, call.arguments.clone()).await {
-                    Ok(value) => value.to_string(),
-                    Err(error) => format!("tool error: {error}"),
+                let allowed = spec
+                    .allowed_tools
+                    .as_ref()
+                    .map(|allow| allow.contains(&call.name))
+                    .unwrap_or(true);
+                let output = if !allowed {
+                    format!("tool not allowed: {}", call.name)
+                } else {
+                    match self.tools.invoke(&call.name, call.arguments.clone()).await {
+                        Ok(value) => value.to_string(),
+                        Err(error) => format!("tool error: {error}"),
+                    }
                 };
                 session
                     .append(
@@ -220,6 +230,7 @@ impl Tool for DelegateTaskTool {
                 task: task.to_string(),
                 context,
                 budget: Some(6),
+                allowed_tools: None,
             })
             .await
             .map_err(|e| ToolError(format!("subagent failed: {e}")))?;
@@ -335,6 +346,7 @@ mod tests {
                 task: "explore".to_string(),
                 context: Some("You are a subagent. Be concise.".to_string()),
                 budget: Some(4),
+                allowed_tools: None,
             })
             .await
             .expect("subagent run");

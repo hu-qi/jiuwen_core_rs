@@ -35,6 +35,7 @@ use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_store::StorePlugin;
 use ah_plugins_subagent::SubagentPlugin;
+use ah_plugins_subagents::SubagentsPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
@@ -152,6 +153,10 @@ pub fn plugin_catalog(
             Arc::new(AutoHarnessPlugin) as DynPlugin,
         ),
         ("ah-plugins-rl", Arc::new(RlPlugin) as DynPlugin),
+        (
+            "ah-plugins-subagents",
+            Arc::new(SubagentsPlugin) as DynPlugin,
+        ),
         (
             "ah-plugins-sandbox-rail",
             Arc::new(SandboxRailPlugin) as DynPlugin,
