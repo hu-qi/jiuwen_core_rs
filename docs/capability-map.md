@@ -58,7 +58,7 @@
 | foundation/prompt | `prompt` seam | 模板渲染、结构化 prompt | 确定性渲染({{var}} + 版本化文件后端已落地) |
 | foundation/store(kv/db/vector/message/graph/object) | `store` seam + ah-plugins-store(本地文件后端);redis/gaussdb/elasticsearch/milvus/chroma 待后续 | 持久化(kv/message 已真实落盘) | 本地后端已测;外部后端集成测试留待后续 |
 | application(llm_agent/workflow_agent) | ah-plugins-core-application | 绑定配置/工作流/记忆/会话 | 真实模型循环
-| workflow(78 类) | ah-plugins-workflow-engine | 组件、分支、循环、子工作流、检查点、流式 | Http/Intent/Questioner + 检查点续跑已落地;llm 流式 seam 已落地(本回合:ModelChunk/ToolCallDelta + stream_chat 默认退化 + OpenAI SSE 真实解析);工作流节点流式消费留待后续;Pregel 见下 |
+| workflow(78 类) | ah-plugins-workflow-engine | 组件、分支、循环、子工作流、检查点、流式 | Http/Intent/Questioner + 检查点续跑已落地;llm 流式 seam + 工作流 LLM 节点流式消费已落地(本回合:run_llm 经 stream_chat 消费,SSE 增量累加 + 工具调用组装);Pregel 见下 |
 | graph/Pregel(53 类) | ah-plugins-pregel | 状态通道、中断、动态路由 | 已落地(本回合:超级步引擎 + missing/present/equals 条件 + halt 中断 + 上限) |
 | controller(57 类) | `controller` seam + ah-plugins-controller | 任务调度/执行器/意图识别 | 已落地(本回合:任务 CRUD/状态机/优先级/父子层级防环;执行器注册表 + 同会话冲突拒绝;确定性意图识别;LLM 意图留待后续) |
 | operator(8 类) | `operator` seam + ah-plugins-operator | LLM/Tool/Memory/Skill 算子 | 已落地(本回合:自进化参数句柄,LLM/tool/memory/skill 四算子 + freeze 检查 + 回调同步 + 检查点) |

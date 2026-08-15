@@ -293,6 +293,8 @@ impl WorkflowEngineImpl {
     }
 
     /// 执行 LLM 节点:config.prompt + 上一步输出 → 模型。
+    /// 经 stream_chat 消费流式 seam(provider 支持 SSE 时真实流式;
+    /// 默认实现退化为单块,语义等价于 chat)。
     async fn run_llm(&self, node: &NodeSpec, input: &Value) -> Result<Value, WorkflowError> {
         let prompt = node
             .config
@@ -304,15 +306,50 @@ impl WorkflowEngineImpl {
             .cloned()
             .unwrap_or_else(|| input.clone());
         let message = format!("{prompt}\nContext: {context}");
-        let response = self
-            .llm
-            .chat(ModelRequest {
-                messages: vec![ChatMessage::new(ChatRole::User, message)],
-                ..Default::default()
-            })
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        let request = ModelRequest {
+            messages: vec![ChatMessage::new(ChatRole::User, message)],
+            ..Default::default()
+        };
+        self.llm
+            .stream_chat(request, tx)
             .await
             .map_err(|e| WorkflowError(format!("llm node failed: {e}")))?;
-        Ok(json!({ "content": response.content }))
+        let mut content = String::new();
+        let mut tool_calls: Vec<ah_contracts::llm::ToolCall> = Vec::new();
+        while let Some(chunk) = rx.recv().await {
+            if !chunk.content_delta.is_empty() {
+                content.push_str(&chunk.content_delta);
+            }
+            for delta in chunk.tool_call_deltas {
+                while tool_calls.len() <= delta.index {
+                    tool_calls.push(ah_contracts::llm::ToolCall {
+                        id: String::new(),
+                        name: String::new(),
+                        arguments: serde_json::Value::Null,
+                    });
+                }
+                if let Some(id) = delta.id {
+                    tool_calls[delta.index].id = id;
+                }
+                if let Some(name) = delta.name {
+                    tool_calls[delta.index].name = name;
+                }
+                if !delta.arguments.is_empty() {
+                    let current = tool_calls[delta.index]
+                        .arguments
+                        .as_str()
+                        .unwrap_or_default();
+                    let joined = format!("{current}{}", delta.arguments);
+                    tool_calls[delta.index].arguments =
+                        serde_json::from_str(&joined).unwrap_or_else(|_| serde_json::json!(joined));
+                }
+            }
+        }
+        if !tool_calls.is_empty() {
+            return Ok(json!({ "content": content, "tool_calls": tool_calls }));
+        }
+        Ok(json!({ "content": content }))
     }
 
     /// 执行 Tool 节点:config.tool + args;上一步输出并入 args.output。

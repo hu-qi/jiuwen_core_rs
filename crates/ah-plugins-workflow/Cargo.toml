@@ -11,7 +11,7 @@ ah-hub = { workspace = true }
 async-trait = "0.1"
 futures-util = "0.3"
 serde_json = "1"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time", "sync"] }
 
 [dev-dependencies]
 ah-plugins-mock = { workspace = true }
