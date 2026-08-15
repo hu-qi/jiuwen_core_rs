@@ -8,6 +8,8 @@
 //! (插件 apply 只注册 seam,不拉起外部命令),所有调用都是真实协议往返。
 
 pub mod client;
+pub mod http;
+pub use http::McpHttpClient;
 
 use std::sync::Arc;
 

@@ -133,7 +133,7 @@
 | a2a | `transport` seam + ah-plugins-a2a | HTTP server/client、流式 | 现 local adapter
 | tracer_otel | `telemetry` seam + ah-plugins-telemetry | span 记录 + JSONL 导出(已落地);OTLP 导出、semconv 留待后续 | JSONL 真实(ah-plugins-telemetry:tests 覆盖 record/export/事件监听);OTLP 规划 |
 | context_evolver(58 文件) | `memory` seam + ah-plugins-context-evolver | LLM 记忆流水线、Milvus | 现 0%
-| mcp(stdio/http) | `mcp` seam + ah-plugins-mcp | stdio 子进程、newline-delimited JSON-RPC 2.0、initialize 握手、list_tools/call_tool/shutdown | stdio 真实(ah-plugins-mcp:tests/mcp_stdio.rs 真实子进程验证);http 规划 |
+| mcp(stdio/http) | `mcp` seam + ah-plugins-mcp | stdio 子进程、newline-delimited JSON-RPC 2.0、initialize 握手、list_tools/call_tool/shutdown | stdio 真实 + http 客户端真实(本回合:McpHttpClient POST JSON-RPC,本地 HTTP 端点往返验证) |
 | vendor_specific | `llm` seam | 各厂商重排/嵌入 | 现词法 fallback
 
 ### 2.7 dev_tools(141 符号) + symphony
