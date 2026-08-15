@@ -18,7 +18,8 @@ use ah_contracts::session::{SessionEventKind, SessionLog};
 use ah_contracts::tools::ToolRegistry;
 use ah_contracts::web::{WebFetchRequest, WebProvider};
 use ah_contracts::workflow::{
-    EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError, WorkflowOutput, WorkflowSpec,
+    CheckpointedOutput, EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError,
+    WorkflowOutput, WorkflowSpec,
 };
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
@@ -586,6 +587,89 @@ impl WorkflowEngine for WorkflowEngineImpl {
         Ok(WorkflowOutput {
             output: end_input,
             executed,
+        })
+    }
+
+    async fn run_checkpointed(
+        &self,
+        spec: &WorkflowSpec,
+        input: Value,
+        checkpoint_path: &std::path::Path,
+    ) -> Result<CheckpointedOutput, WorkflowError> {
+        // 加载检查点:{node_id: output}。
+        let mut checkpoint: HashMap<String, Value> = HashMap::new();
+        if let Ok(text) = std::fs::read_to_string(checkpoint_path) {
+            for line in text.lines() {
+                if let Ok(entry) = serde_json::from_str::<serde_json::Map<String, Value>>(line)
+                    && let Some(node_id) = entry.get("node_id").and_then(Value::as_str)
+                    && let Some(output) = entry.get("output")
+                {
+                    checkpoint.insert(node_id.to_string(), output.clone());
+                }
+            }
+        }
+        // 追加模式打开(真实续写)。
+        if let Some(parent) = checkpoint_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| WorkflowError(format!("create checkpoint dir: {e}")))?;
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(checkpoint_path)
+            .map_err(|e| WorkflowError(format!("open checkpoint: {e}")))?;
+        use std::io::Write;
+
+        let order = self.topo_order(spec)?;
+        let mut state: HashMap<String, Value> = HashMap::new();
+        let mut executed: Vec<String> = Vec::new();
+        let mut resumed: Vec<String> = Vec::new();
+        for node_id in order {
+            let node = self.node(spec, &node_id)?;
+            if node.kind == NodeKind::End {
+                continue;
+            }
+            let incoming: Vec<&EdgeSpec> = spec.edges.iter().filter(|e| e.to == node_id).collect();
+            if !incoming.is_empty() && !incoming.iter().all(|e| Self::edge_allows(e, &state)) {
+                continue;
+            }
+            // 检查点命中:复用输出,不重执行。
+            if let Some(output) = checkpoint.get(&node_id) {
+                state.insert(node_id.clone(), output.clone());
+                resumed.push(node_id.clone());
+                continue;
+            }
+            let input_for_node = if node.kind == NodeKind::Start {
+                input.clone()
+            } else {
+                incoming
+                    .iter()
+                    .find_map(|e| state.get(&e.from).cloned())
+                    .unwrap_or_else(|| json!({}))
+            };
+            let output = self.execute_node(spec, node, &input_for_node).await?;
+            // 真实落盘(每节点一行)。
+            let line = serde_json::json!({ "node_id": node_id, "output": output.clone() });
+            writeln!(file, "{line}")
+                .map_err(|e| WorkflowError(format!("write checkpoint: {e}")))?;
+            state.insert(node_id.clone(), output);
+            executed.push(node_id.clone());
+        }
+        let end_id = spec
+            .nodes
+            .iter()
+            .find(|n| n.kind == NodeKind::End)
+            .ok_or_else(|| WorkflowError("workflow missing End node".to_string()))?;
+        let end_input = spec
+            .edges
+            .iter()
+            .filter(|e| e.to == end_id.id)
+            .find_map(|e| state.get(&e.from).cloned())
+            .unwrap_or_else(|| json!({}));
+        Ok(CheckpointedOutput {
+            executed,
+            resumed,
+            output: end_input,
         })
     }
 }
@@ -1435,6 +1519,73 @@ mod tests {
         };
         let err = engine.run(&spec, json!({})).await.expect_err("no answer");
         assert!(err.0.contains("no answer within"));
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn checkpoint_persists_and_resumes() {
+        let root = std::env::temp_dir().join(format!("ah-wf-cp-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("engine");
+        let cp_path = root.join("wf.jsonl");
+        let spec = WorkflowSpec {
+            id: "wf-cp".to_string(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".to_string(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "tool".to_string(),
+                    kind: NodeKind::Tool,
+                    config: json!({ "tool": "list_dir", "args": { "path": "." } }),
+                },
+                NodeSpec {
+                    id: "end".to_string(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".to_string(),
+                    to: "tool".to_string(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "tool".to_string(),
+                    to: "end".to_string(),
+                    condition: None,
+                },
+            ],
+        };
+
+        // 首次:真实执行并落盘检查点。
+        let first = engine
+            .run_checkpointed(&spec, json!({}), &cp_path)
+            .await
+            .expect("first");
+        assert!(!first.executed.is_empty(), "nodes executed");
+        assert!(first.resumed.is_empty());
+        assert!(cp_path.exists(), "checkpoint written");
+
+        // 二次:全部节点从检查点复用,不重执行。
+        let second = engine
+            .run_checkpointed(&spec, json!({}), &cp_path)
+            .await
+            .expect("second");
+        assert!(second.executed.is_empty(), "no re-execution on resume");
+        assert_eq!(
+            second.resumed.len(),
+            first.executed.len(),
+            "all nodes resumed"
+        );
+        assert_eq!(second.output, first.output, "output preserved");
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);

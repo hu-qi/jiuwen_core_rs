@@ -58,7 +58,7 @@
 | foundation/prompt | `prompt` seam | 模板渲染、结构化 prompt | 确定性渲染({{var}} + 版本化文件后端已落地) |
 | foundation/store(kv/db/vector/message/graph/object) | `store` seam + ah-plugins-store(本地文件后端);redis/gaussdb/elasticsearch/milvus/chroma 待后续 | 持久化(kv/message 已真实落盘) | 本地后端已测;外部后端集成测试留待后续 |
 | application(llm_agent/workflow_agent) | ah-plugins-core-application | 绑定配置/工作流/记忆/会话 | 真实模型循环
-| workflow(78 类) | ah-plugins-workflow-engine | 组件、分支、循环、子工作流、检查点、流式 | Http/Intent/Questioner(经 queue 问答)节点已落地(本回合);检查点/流式/Pregel 留待后续 |
+| workflow(78 类) | ah-plugins-workflow-engine | 组件、分支、循环、子工作流、检查点、流式 | Http/Intent/Questioner + 检查点续跑已落地(本回合);流式/Pregel 留待后续 |
 | graph/Pregel(53 类) | 同上 | 状态通道、中断、动态路由 | Pregel 语义完整
 | controller(57 类) | 同上 | 任务调度/执行器/意图识别 | 真实调度与冲突处理
 | operator(8 类) | 同上 | LLM/Tool/Memory/Skill 算子 | 算子真实调用(现为回显)

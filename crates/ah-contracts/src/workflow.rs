@@ -71,6 +71,17 @@ pub struct WorkflowOutput {
     pub executed: Vec<String>,
 }
 
+/// 检查点续跑的完整结果。
+#[derive(Debug, Clone, PartialEq)]
+pub struct CheckpointedOutput {
+    /// 本次新执行节点。
+    pub executed: Vec<String>,
+    /// 从检查点复用输出的节点。
+    pub resumed: Vec<String>,
+    /// 最终输出。
+    pub output: Value,
+}
+
 /// 工作流错误。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowError(pub String);
@@ -89,4 +100,13 @@ pub trait WorkflowEngine: Seam {
     /// 执行工作流;组件真实调用 llm/tools seam,执行轨迹通过事件发布。
     async fn run(&self, spec: &WorkflowSpec, input: Value)
     -> Result<WorkflowOutput, WorkflowError>;
+
+    /// 带检查点执行:每节点输出追加到 JSONL(checkpoint_path),已有记录直接复用;
+    /// 返回新执行与复用的节点序列。
+    async fn run_checkpointed(
+        &self,
+        spec: &WorkflowSpec,
+        input: Value,
+        checkpoint_path: &std::path::Path,
+    ) -> Result<CheckpointedOutput, WorkflowError>;
 }
