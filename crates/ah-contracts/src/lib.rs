@@ -60,6 +60,7 @@ pub mod team_monitor;
 pub mod team_skill;
 pub mod teams;
 pub mod telemetry;
+pub mod tokenizer;
 pub mod tool_approval;
 pub mod tools;
 pub mod trainer;
@@ -186,6 +187,7 @@ pub mod prelude {
         TeamTaskEvent, TeamTaskStatus,
     };
     pub use crate::telemetry::{Span, TelemetryError, TelemetryProvider};
+    pub use crate::tokenizer::{Token, Tokenizer, TokenizerError};
     pub use crate::tool_approval::{ToolApproval, ToolApprovalError};
     pub use crate::tools::{Tool, ToolError, ToolRegistry};
     pub use crate::trainer::{TrainEpoch, TrainRequest, TrainResult, Trainer, TrainerError};

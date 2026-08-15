@@ -17,6 +17,7 @@
 # - ah-plugins-rsi-single-harness: 真实单 harness 迭代编排 + 候选门禁(holdout 门禁/续跑)
 # - ah-plugins-context: 真实上下文引擎(预算组装/压缩/offload)
 # - ah-plugins-context-evolver: 真实任务记忆服务(保存/检索/轨迹凝练摘要/注入)
+# - ah-plugins-tokenizer: 真实确定性 tokenizer(BPE-lite + CJK 感知,上下文预算精确化)
 # - ah-plugins-store-redis: 真实 Redis 后端 store(需本地 Redis 容器)
 # - ah-plugins-prompt: 真实版本化 prompt 注册表
 # - ah-plugins-queue: 真实文件后端消息队列(日志+游标)

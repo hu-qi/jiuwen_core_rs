@@ -62,6 +62,7 @@ use ah_plugins_team_monitor::TeamMonitorPlugin;
 use ah_plugins_team_skill::TeamSkillPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
+use ah_plugins_tokenizer::TokenizerPlugin;
 use ah_plugins_tools::ToolsPlugin;
 use ah_plugins_trainer::TrainerPlugin;
 use ah_plugins_transport::TransportPlugin;
@@ -91,6 +92,10 @@ pub fn plugin_catalog(
             Arc::new(CredentialsPlugin::default()) as DynPlugin,
         ),
         ("ah-plugins-tools", Arc::new(ToolsPlugin) as DynPlugin),
+        (
+            "ah-plugins-tokenizer",
+            Arc::new(TokenizerPlugin) as DynPlugin,
+        ),
         (
             "ah-plugins-sysop",
             Arc::new(SysopPlugin::new(workspace_root)) as DynPlugin,

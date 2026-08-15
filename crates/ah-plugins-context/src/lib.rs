@@ -13,12 +13,13 @@ use std::sync::Arc;
 use ah_contracts::context::{
     AssembledContext, ContextEngine, ContextError, ContextSummary, SummarySource,
 };
-use ah_contracts::keys::{CONTEXT, LLM};
+use ah_contracts::keys::{CONTEXT, LLM, TOKENIZER};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::session::SessionLog;
+use ah_contracts::tokenizer::Tokenizer;
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
@@ -28,6 +29,8 @@ use serde_json::json;
 pub struct ContextEngineImpl {
     /// 可选 LLM(真实 provider 用于总结;mock 桩被排除,文档策略)。
     llm: Option<Arc<dyn ModelProvider>>,
+    /// 可选精确 tokenizer(注册时用于 estimate_tokens,否则启发式)。
+    tokenizer: Option<Arc<dyn Tokenizer>>,
     /// offload 文件目录。
     offload_dir: PathBuf,
 }
@@ -37,8 +40,15 @@ impl ContextEngineImpl {
     pub fn new(llm: Option<Arc<dyn ModelProvider>>, offload_dir: impl Into<PathBuf>) -> Self {
         Self {
             llm,
+            tokenizer: None,
             offload_dir: offload_dir.into(),
         }
+    }
+
+    /// 挂载精确 tokenizer(上下文预算更精确)。
+    pub fn with_tokenizer(mut self, tokenizer: Arc<dyn Tokenizer>) -> Self {
+        self.tokenizer = Some(tokenizer);
+        self
     }
 
     fn message_tokens(&self, message: &ChatMessage) -> usize {
@@ -157,6 +167,12 @@ impl Seam for ContextEngineImpl {}
 #[async_trait]
 impl ContextEngine for ContextEngineImpl {
     fn estimate_tokens(&self, text: &str) -> usize {
+        // 注册了精确 tokenizer 时使用它;否则启发式(字符/4 + 词数)。
+        if let Some(tokenizer) = &self.tokenizer
+            && let Ok(count) = tokenizer.count(text)
+        {
+            return count.max(1);
+        }
         let chars = text.chars().count();
         let words = text.split_whitespace().count();
         (chars / 4 + words).max(1)
@@ -282,9 +298,15 @@ impl Plugin for ContextPlugin {
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
         // LLM 可选:未注册或为 mock 桩时仅用确定性摘录(文档策略)。
         let llm = ctx.service::<dyn ModelProvider>(&LLM);
-        let engine: Arc<dyn ContextEngine> =
-            Arc::new(ContextEngineImpl::new(llm, self.offload_dir.clone()));
-        Ok(vec![ctx.register(CONTEXT, engine)])
+        let mut engine = ContextEngineImpl::new(llm, self.offload_dir.clone());
+        // 精确 tokenizer 可选:注册时用于更精确的预算估计。
+        if let Some(tokenizer) = ctx.service::<dyn Tokenizer>(&TOKENIZER) {
+            engine = engine.with_tokenizer(tokenizer);
+        }
+        Ok(vec![ctx.register(
+            CONTEXT,
+            Arc::new(engine) as Arc<dyn ContextEngine>,
+        )])
     }
 }
 
@@ -344,6 +366,42 @@ mod tests {
             "chars/4 + words"
         );
         assert_eq!(engine.estimate_tokens(""), 1, "empty is at least one");
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn estimate_uses_tokenizer_when_registered() {
+        let root = std::env::temp_dir().join(format!("ah-ctx-tok-{}", std::process::id()));
+        let ctx = Context::new();
+        let session_dir = root.join("sessions");
+        let default_path = session_dir.join("default.jsonl");
+        let plugins: Vec<DynPlugin> = vec![
+            StdArc::new(ah_plugins_mock::MockPlugin),
+            StdArc::new(ah_plugins_tools::ToolsPlugin),
+            StdArc::new(ah_plugins_sysop::SysopPlugin::new(&root)),
+            StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                &default_path,
+                &session_dir,
+            )),
+            StdArc::new(ah_plugins_tokenizer::TokenizerPlugin),
+            StdArc::new(ContextPlugin::new(root.join("offload"))),
+        ];
+        let effects = ctx.mount_all(plugins).expect("mount");
+        let engine = ctx.service::<dyn ContextEngine>(&CONTEXT).expect("context");
+        let tokenizer = ctx
+            .service::<dyn ah_contracts::tokenizer::Tokenizer>(&TOKENIZER)
+            .expect("tokenizer");
+
+        let text = "你好世界 working";
+        // 精确 tokenizer 参与估计(与启发式不同,CJK 每字 1 token + 子词合并)。
+        let expected = tokenizer.count(text).expect("count").max(1);
+        assert_eq!(
+            engine.estimate_tokens(text),
+            expected,
+            "tokenizer-backed estimate"
+        );
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);

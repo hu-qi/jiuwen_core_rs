@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-tokenizer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real deterministic tokenizer: BPE-lite char-pair merges with a built vocabulary, CJK-per-char, byte offsets for context budget"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"

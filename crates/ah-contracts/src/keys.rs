@@ -141,3 +141,4 @@ pub const TEAM_SKILL: ServiceKey = ServiceKey::new("team-skill");
 pub const MEMBER_OPTIMIZER: ServiceKey = ServiceKey::new("member-optimizer");
 pub const TEAM_MONITOR: ServiceKey = ServiceKey::new("team-monitor");
 pub const MEMORY_EVOLVER: ServiceKey = ServiceKey::new("memory-evolver");
+pub const TOKENIZER: ServiceKey = ServiceKey::new("tokenizer");

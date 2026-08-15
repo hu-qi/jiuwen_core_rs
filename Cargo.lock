@@ -52,6 +52,7 @@ dependencies = [
  "ah-plugins-team-skill",
  "ah-plugins-teams",
  "ah-plugins-telemetry",
+ "ah-plugins-tokenizer",
  "ah-plugins-tools",
  "ah-plugins-trainer",
  "ah-plugins-transport",
@@ -197,6 +198,7 @@ dependencies = [
  "ah-plugins-mock",
  "ah-plugins-session-log",
  "ah-plugins-sysop",
+ "ah-plugins-tokenizer",
  "ah-plugins-tools",
  "async-trait",
  "serde_json",
@@ -674,6 +676,15 @@ dependencies = [
  "serde_json",
  "tokio",
  "ureq",
+]
+
+[[package]]
+name = "ah-plugins-tokenizer"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]
