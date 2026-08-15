@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 54 回合,281 tests / clippy 0 / fmt clean):
+> - 任务记忆服务 ah-plugins-context-evolver(保存 JSONL 持久化/重启恢复;关键词+标签检索打分;轨迹确定性凝练摘要(成功/失败/关键点);检索记忆 + 摘要注入文本可并入 system prompt;Milvus 留待后续)
+>
 > **账目更新**(第 53 回合,279 tests / clippy 0 / fmt clean):
 > - 团队监控 ah-plugins-team-monitor(只读团队/任务/消息视图(经 TeamRuntime)+ 订阅 teams/task 事件记录 seq 单调监控日志;teams 侧 monitor 落地)
 >

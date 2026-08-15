@@ -4,6 +4,7 @@ members = [
     "crates/ah-contracts",
     "crates/ah-hub",
     "crates/ah-plugins-context",
+    "crates/ah-plugins-context-evolver",
     "crates/ah-plugins-controller",
     "crates/ah-plugins-store",
     "crates/ah-plugins-prompt",
@@ -65,6 +66,7 @@ license = "Apache-2.0"
 ah-contracts = { path = "crates/ah-contracts" }
 ah-hub = { path = "crates/ah-hub" }
 ah-plugins-context = { path = "crates/ah-plugins-context" }
+ah-plugins-context-evolver = { path = "crates/ah-plugins-context-evolver" }
 ah-plugins-controller = { path = "crates/ah-plugins-controller" }
 ah-plugins-store = { path = "crates/ah-plugins-store" }
 ah-plugins-prompt = { path = "crates/ah-plugins-prompt" }

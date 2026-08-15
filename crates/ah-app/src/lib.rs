@@ -19,6 +19,7 @@ use ah_plugins_ci::CiPlugin;
 use ah_plugins_cli::CliPlugin;
 use ah_plugins_code::CodePlugin;
 use ah_plugins_context::ContextPlugin;
+use ah_plugins_context_evolver::ContextEvolverPlugin;
 use ah_plugins_controller::ControllerPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
@@ -167,6 +168,12 @@ pub fn plugin_catalog(
         (
             "ah-plugins-context",
             Arc::new(ContextPlugin::new(workspace_root.join("context"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-context-evolver",
+            Arc::new(ContextEvolverPlugin::new(
+                workspace_root.join("context-evolver"),
+            )) as DynPlugin,
         ),
         (
             "ah-plugins-controller",

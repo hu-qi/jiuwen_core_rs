@@ -18,6 +18,7 @@ pub mod ci;
 pub mod cli;
 pub mod code;
 pub mod context;
+pub mod context_evolver;
 pub mod controller;
 pub mod credentials;
 pub mod effect;
@@ -85,6 +86,9 @@ pub mod prelude {
     pub use crate::code::{CodeError, CodeExecRequest, CodeExecResult, CodeProvider};
     pub use crate::context::{
         AssembledContext, ContextEngine, ContextError, ContextSummary, SummarySource,
+    };
+    pub use crate::context_evolver::{
+        MemoryEvolver, MemoryEvolverError, MemoryInjection, TaskMemory, TrajectorySummary,
     };
     pub use crate::controller::{
         Controller, ControllerError, Intent, IntentType, Task, TaskExecutor, TaskFilter, TaskStatus,

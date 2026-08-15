@@ -37,6 +37,7 @@ ah-plugins-evolving = { workspace = true }
 ah-plugins-external = { workspace = true }
 ah-plugins-rsi = { workspace = true }
 ah-plugins-context = { workspace = true }
+ah-plugins-context-evolver = { workspace = true }
 ah-plugins-controller = { workspace = true }
 ah-plugins-store = { workspace = true }
 ah-plugins-prompt = { workspace = true }
