@@ -26,7 +26,9 @@ use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_pregel::PregelPlugin;
 use ah_plugins_prompt::PromptPlugin;
 use ah_plugins_queue::QueuePlugin;
-use ah_plugins_rails::{PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin};
+use ah_plugins_rails::{
+    ApprovalRailPlugin, PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin,
+};
 use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rl::RlPlugin;
 use ah_plugins_rsi::RsiPlugin;
@@ -85,6 +87,28 @@ pub fn plugin_catalog(
         (
             "ah-plugins-rails-budget",
             Arc::new(ToolBudgetRailPlugin::new(100)) as DynPlugin,
+        ),
+        (
+            "ah-plugins-rails-approval",
+            Arc::new(ApprovalRailPlugin::new(
+                workspace_root.join("approvals"),
+                &[
+                    "list_dir",
+                    "read_file",
+                    "write_file",
+                    "remove_file",
+                    "run_shell",
+                    "web_fetch",
+                    "run_code",
+                    "ingest_knowledge",
+                    "search_knowledge",
+                    "delegate_task",
+                    "remember",
+                    "recall",
+                    "forget",
+                    "mcp_call_tool",
+                ],
+            )) as DynPlugin,
         ),
         (
             "ah-plugins-security",

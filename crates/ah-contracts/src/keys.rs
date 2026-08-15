@@ -116,3 +116,6 @@ pub const PREGEL: ServiceKey = ServiceKey::new("pregel");
 
 /// `tune` seam 服务键(训练流水线)。
 pub const TUNE: ServiceKey = ServiceKey::new("tune");
+
+/// `tool-approval` seam 服务键(渐进工具披露)。
+pub const TOOL_APPROVAL: ServiceKey = ServiceKey::new("tool-approval");

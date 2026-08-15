@@ -4,9 +4,17 @@
 //! 当前实现:
 //! - ShellGuardRail:拒绝 run_shell 工具执行危险命令模式(rm -rf / mkfs / dd if= / fork bomb);
 //! - PathGuardRail:拒绝 fs 工具(path 参数)使用绝对路径或 .. 逃逸;
-//! - ToolBudgetRail:限制工具调用总次数,超限拒绝。
+//! - ToolBudgetRail:限制工具调用总次数,超限拒绝;
+//! - ApprovalRail(渐进披露):未批准工具被拒,批准集持久化(tool-approval seam)。
 
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use ah_contracts::keys::TOOL_APPROVAL;
 use ah_contracts::prelude::Effect;
+use ah_contracts::seam::Seam;
+use ah_contracts::service::ServiceKey;
+use ah_contracts::tool_approval::{ToolApproval, ToolApprovalError};
 use ah_contracts::tools::{ToolDecision, ToolInvocation};
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
@@ -145,6 +153,125 @@ impl Plugin for ToolBudgetRailPlugin {
                 }
             });
         Ok(vec![effect])
+    }
+}
+
+/// 真实文件后端工具批准集(dir/approved.json)。
+pub struct FileToolApproval {
+    dir: PathBuf,
+    approved: Mutex<std::collections::HashSet<String>>,
+}
+
+impl FileToolApproval {
+    /// 打开(或创建)批准集;可预置基线工具。
+    pub fn open(dir: impl Into<PathBuf>, baseline: &[&str]) -> Result<Self, ToolApprovalError> {
+        let dir = dir.into();
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| ToolApprovalError(format!("create approval dir: {e}")))?;
+        let path = dir.join("approved.json");
+        let approved = if path.exists() {
+            let text = std::fs::read_to_string(&path)
+                .map_err(|e| ToolApprovalError(format!("read approvals: {e}")))?;
+            serde_json::from_str(&text).unwrap_or_else(|_| std::collections::HashSet::new())
+        } else {
+            let set: std::collections::HashSet<String> =
+                baseline.iter().map(|s| s.to_string()).collect();
+            let text = serde_json::to_string(&set).expect("serialize");
+            std::fs::write(&path, text)
+                .map_err(|e| ToolApprovalError(format!("write approvals: {e}")))?;
+            set
+        };
+        Ok(Self {
+            dir,
+            approved: Mutex::new(approved),
+        })
+    }
+
+    fn persist(&self, set: &std::collections::HashSet<String>) -> Result<(), ToolApprovalError> {
+        let text = serde_json::to_string(set)
+            .map_err(|e| ToolApprovalError(format!("serialize approvals: {e}")))?;
+        std::fs::write(self.dir.join("approved.json"), text)
+            .map_err(|e| ToolApprovalError(format!("write approvals: {e}")))
+    }
+}
+
+impl Seam for FileToolApproval {}
+
+impl ToolApproval for FileToolApproval {
+    fn approve(&self, name: &str) -> Result<(), ToolApprovalError> {
+        let mut set = self.approved.lock().unwrap();
+        set.insert(name.to_string());
+        self.persist(&set)
+    }
+
+    fn revoke(&self, name: &str) -> Result<(), ToolApprovalError> {
+        let mut set = self.approved.lock().unwrap();
+        set.remove(name);
+        self.persist(&set)
+    }
+
+    fn is_approved(&self, name: &str) -> bool {
+        self.approved.lock().unwrap().contains(name)
+    }
+
+    fn approved(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.approved.lock().unwrap().iter().cloned().collect();
+        names.sort();
+        names
+    }
+}
+
+/// 渐进披露 rail:未批准工具在 pre-execute 被拒;消费 tool-approval seam。
+pub struct ApprovalRailPlugin {
+    dir: PathBuf,
+    baseline: Vec<&'static str>,
+}
+
+impl ApprovalRailPlugin {
+    /// 以批准集目录与基线工具创建。
+    pub fn new(dir: impl Into<PathBuf>, baseline: &[&'static str]) -> Self {
+        Self {
+            dir: dir.into(),
+            baseline: baseline.to_vec(),
+        }
+    }
+}
+
+impl Plugin for ApprovalRailPlugin {
+    fn name(&self) -> &'static str {
+        "ah-plugins-rails-approval"
+    }
+
+    fn provides(&self) -> Vec<ServiceKey> {
+        vec![TOOL_APPROVAL]
+    }
+
+    fn inject(&self) -> Vec<ServiceKey> {
+        vec![]
+    }
+
+    fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
+        let approval =
+            FileToolApproval::open(&self.dir, &self.baseline).map_err(|e| PluginError::Apply {
+                plugin: self.name(),
+                message: e.0,
+            })?;
+        let approval: Arc<dyn ToolApproval> = Arc::new(approval);
+        let approval_clone = approval.clone();
+        let effect =
+            ctx.on_waterfall::<ToolInvocation, ToolDecision, _, _>(move |event, decision, next| {
+                let approval = approval_clone.clone();
+                async move {
+                    if !approval.is_approved(&event.name) {
+                        return ToolDecision::deny(
+                            decision.arguments,
+                            format!("tool not approved: {}", event.name),
+                        );
+                    }
+                    next.next(decision).await
+                }
+            });
+        Ok(vec![ctx.register(TOOL_APPROVAL, approval), effect])
     }
 }
 
@@ -315,6 +442,71 @@ mod tests {
         assert!(err.0.contains("tool budget exceeded"));
 
         drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn approval_rail_denies_unapproved_and_allows_after_approve() {
+        let root = std::env::temp_dir().join(format!("ah-rails-appr-{}", std::process::id()));
+        let ctx = Context::new();
+        let plugins: Vec<DynPlugin> = vec![
+            Arc::new(ah_plugins_tools::ToolsPlugin),
+            Arc::new(ah_plugins_sysop::SysopPlugin::new(&root)),
+            Arc::new(ApprovalRailPlugin::new(root.join("approvals"), &[])),
+        ];
+        let effects = ctx.mount_all(plugins).expect("mount");
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+
+        // 未批准:拒绝(真实 pre-execute)。
+        let err = registry
+            .invoke("list_dir", json!({ "path": "." }))
+            .await
+            .expect_err("unapproved tool denied");
+        assert!(err.0.contains("tool not approved"));
+
+        // 批准后:放行;批准集真实落盘。
+        let approval = ctx
+            .service::<dyn ToolApproval>(&TOOL_APPROVAL)
+            .expect("approval");
+        assert!(!approval.is_approved("list_dir"));
+        approval.approve("list_dir").expect("approve");
+        assert!(approval.is_approved("list_dir"));
+        assert!(
+            root.join("approvals").join("approved.json").exists(),
+            "persisted"
+        );
+
+        registry
+            .invoke("list_dir", json!({ "path": "." }))
+            .await
+            .expect("approved tool allowed");
+
+        // 撤销后再次拒绝。
+        approval.revoke("list_dir").expect("revoke");
+        assert!(
+            registry
+                .invoke("list_dir", json!({ "path": "." }))
+                .await
+                .is_err(),
+            "revoked tool denied again"
+        );
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn approval_persists_across_reopen() {
+        let root = std::env::temp_dir().join(format!("ah-rails-appr2-{}", std::process::id()));
+        let (provider, _) = {
+            let p = FileToolApproval::open(root.join("approvals"), &["list_dir"]).expect("open");
+            p.approve("run_shell").expect("approve");
+            (p, ())
+        };
+        let _ = provider;
+        let reopened = FileToolApproval::open(root.join("approvals"), &[]).expect("reopen");
+        assert!(reopened.is_approved("list_dir"), "baseline persisted");
+        assert!(reopened.is_approved("run_shell"), "approval persisted");
         let _ = std::fs::remove_dir_all(&root);
     }
 }
