@@ -4,6 +4,7 @@
 //! 每 channel 一个 append-only JSONL(日志为真相)+ 消费游标文件,
 //! 与 Kafka 的 log+offset 模型同构(小规模)。外部传输
 //! (Pulsar/ZMQ ROUTER-DEALER)留待后续,文档注明。
+//! Redis 后端见 redis_queue 模块(同一 seam 可互换)。
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -17,6 +18,8 @@ use ah_contracts::service::ServiceKey;
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use serde_json::Value;
+
+pub mod redis_queue;
 
 fn now_ms() -> u64 {
     SystemTime::now()

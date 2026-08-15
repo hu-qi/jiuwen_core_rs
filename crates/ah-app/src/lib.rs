@@ -29,6 +29,7 @@ use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_pregel::PregelPlugin;
 use ah_plugins_prompt::PromptPlugin;
 use ah_plugins_queue::QueuePlugin;
+use ah_plugins_queue::redis_queue::RedisQueuePlugin;
 use ah_plugins_rails::{
     ApprovalRailPlugin, PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin,
 };
@@ -159,6 +160,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-queue",
             Arc::new(QueuePlugin::new(workspace_root.join("queue"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-queue-redis",
+            Arc::new(RedisQueuePlugin::new("redis://127.0.0.1:6379/")) as DynPlugin,
         ),
         (
             "ah-plugins-workspace",

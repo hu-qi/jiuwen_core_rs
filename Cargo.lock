@@ -300,6 +300,7 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "redis",
  "serde_json",
 ]
 

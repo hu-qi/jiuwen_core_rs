@@ -41,7 +41,7 @@
 | evolving | `evolving` | `EvolvingRuntime`(已实现:轨迹从会话日志真实抽取;本地判据评估 + LLM judge 附加;优化建议规则推导 + LLM 附加) | done(契约)/ partial(无持久化/RL) |
 | rsi | `rsi` | `RsiRuntime`(已实现:数据集生成 + 用例真实执行 + evolving 评估 + 报告 + 提示精化 + checkpoint 落盘) | done(契约)/ partial(无 LLM 数据生成/RL) |
 | telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约)/ partial(JSONL 导出真实;OTLP 导出留待后续)
-| queue | `queue` | `MessageQueue`(已实现:文件后端,每 channel append-only JSONL + 消费游标 offset 语义,重启恢复;teams 消息消费方) | done(契约+消费,本地)/ partial(外部 Pulsar/ZMQ) |
+| queue | `queue` | `MessageQueue`(已实现:文件后端,每 channel append-only JSONL + 消费游标 offset 语义,重启恢复;teams 消息消费方) | done(契约+消费,本地+Redis 外部后端)/ partial(外部 Pulsar/ZMQ) |
 | mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约)/ partial(stdio 真实,http 未实现) |
 | transport | `transport` | A2A 风格传输(JSON-RPC 2.0 + SSE 流式 over HTTP;ureq 客户端 + 本地 HTTP/1.1 服务端) | done(契约+客户端+服务端+流式)/ partial(加密传输) |
 | credentials | `credentials` | `CredentialProvider`(已实现:真实环境变量 provider,映射可配置,如 `openai.api_key` → `OPENAI_API_KEY`;`get`/`list` 真实读 `std::env`,`set`/`remove` 显式报错 env 只读) | done(契约)/ partial(env 只读,无密钥管理后端;ah-plugins-credentials:tests 覆盖 get/list/set/remove 真实 env 路径,openai 集成测试经 credentials 解析 key 后真实 HTTP 往返) |
@@ -126,7 +126,7 @@
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
 | checkpointer(Redis) | `store` seam + ah-plugins-store-redis | TTL/集群/pipeline | Redis 后端已落地(本回合:真实 SET/GET/DEL/KEYS,与文件后端同 seam 互换) |
-| message_queue(Pulsar) | `queue` seam + ah-plugins-pulsar | producer/consumer/replay | 现 broadcast 兜底
+| message_queue(Pulsar) | `queue` seam + ah-plugins-queue-redis | producer/consumer/replay | 已落地(本回合:Redis LIST 日志 + INCR 序号 + 游标,真实外部 provider 可互换后端;Pulsar 留待后续) |
 | store(GaussDB/ES) | `store` seam + ah-plugins-gaussdb/elasticsearch | SQL/向量检索 | 现执行日志/内存余弦
 | sys_operation(远程沙箱 9 provider) | `sandbox` seam + 进程插件 | AIO/jiuwenbox/yuanrong | 现 4 个白名单命令
 | external_provider(OpenAI OAuth) | `oauth` seam + ah-plugins-oauth | 设备码 OAuth、模型目录 | 设备码流已落地(本回合:start/poll,pending/expired 映射);模型目录留待后续 |
