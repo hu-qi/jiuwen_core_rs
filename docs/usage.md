@@ -8,16 +8,16 @@
 cargo run -p ah-app
 ```
 
-输出:
+输出(dev profile,共 52 个插件):
 
 ```text
-[boot] profile: dev (ah-plugins-mock)
-[boot] mounted services: [ServiceKey("llm")]
-[llm] mock: mock reply to: hello from ah-app
+[boot] mounted services: [ServiceKey("llm"), ServiceKey("tools"), ... 50+ 个]
+[llm] mock: mock final answer; last tool result: ...
 ```
 
-启动流程:读取 profiles/dev.toml → 在插件目录中解析插件名 → mount_all(依赖拓扑排序)
-→ 通过 ctx.service::<dyn ModelProvider>(&LLM_KEY) 解析 seam → 调用。
+启动流程:读取 profiles/dev.toml → 在插件目录(crates/ah-app/src/lib.rs 的 plugin_catalog)
+中解析插件名 → mount_all(依赖拓扑排序)→ 通过 ctx.service::<dyn ModelProvider>(&ah_contracts::keys::LLM)
+解析 seam → 调用。完整服务键见 ah-contracts/src/keys.rs(58 个)。
 
 ## 2. 编写一个插件
 
@@ -40,11 +40,11 @@ impl ModelProvider for MyProvider {
 ```rust
 impl Plugin for MyPlugin {
     fn name(&self) -> &'static str { "ah-plugins-my" }
-    fn provides(&self) -> Vec<ServiceKey> { vec![LLM_KEY] }
+    fn provides(&self) -> Vec<ServiceKey> { vec![ah_contracts::keys::LLM] }
     fn inject(&self) -> Vec<ServiceKey> { vec![] }   // 依赖的服务键
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
         let provider: Arc<dyn ModelProvider> = Arc::new(MyProvider);
-        Ok(vec![ctx.register(LLM_KEY, provider)])
+        Ok(vec![ctx.register(ah_contracts::keys::LLM, provider)])
     }
 }
 ```
@@ -117,22 +117,27 @@ let final_decision = ctx.waterfall(Decision::new(), Decision::Allow).await;
 - profile = 有序 bundle + 插件清单;插件名去重展开;
 - 挂载顺序由依赖拓扑决定,不是文件顺序;
 - 环境选择通过 profile 表达,不改代码:
-  - dev.toml:全 mock(开发/测试);
-  - prod.toml(规划):全真实 provider,mock 门禁校验;
-  - hybrid:按需混合。
+  - dev.toml:51 个真实插件 + ah-plugins-mock(llm boot 桩,共 52 条);
+  - prod.toml:51 个真实插件,无 mock(CI mock 门禁强制);
+  - hybrid:按需混合(未创建,按需加)。
 
 ## 6. 扩展点速查(规划中逐步开放)
 
 | 想做什么 | 挂在哪里 |
 | --- | --- |
-| 加模型 provider | llm seam |
+| 加模型 provider | llm seam(openai-compatible / anthropic,流式 stream_chat 可选) |
 | 加模型可见能力 | tools seam,其 schema 进入 prompt 组装 |
 | 加 shell 执行 | shell seam |
-| 加文件系统策略 | fs seam 或 fs/* 事件 |
-| 加人类命令 | 命令注册表(规划) |
-| 拦截请求/工具/回合 | agent/*、tools/* 事件(waterfall) |
-| 加后台任务 | jobs 服务(规划) |
-| 加会话持久状态 | 会话事件日志(规划) |
+| 加文件系统策略 | fs seam 或 tools/pre-execute waterfall |
+| 拦截/审核工具调用 | tools/pre-execute waterfall(rails:ShellGuard/PathGuard/ToolBudget/ApprovalRail/Security) |
+| 观察工具执行 | tools/post-execute serial(遥测/审计) |
+| 观察 agent 回合 | agent/step emit |
+| 加会话持久状态 | session/event emit(session-log JSONL) |
+| 编排任务 | workflow seam(Start/End/LLM/Tool/Loop/SubWorkflow/Parallel/Http/Intent/Questioner) |
+| 任务调度 | controller seam(生命周期/优先级/冲突) |
+| 回调链 | runner seam(priority/retry/timeout/rollback) |
+| 自进化 | evolving/operator/optimizer/trainer seam |
+| 知识图谱记忆 | graph-memory seam + graph_* 工具 |
 
 ## 7. 常见问题
 

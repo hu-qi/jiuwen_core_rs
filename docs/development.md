@@ -39,8 +39,8 @@ cargo run -p ah-app        # 从 profiles/dev.toml 启动(全 mock)
 | 层 | 内容 | 命令 |
 | --- | --- | --- |
 | 单元 | 内核机制、插件内部逻辑 | cargo test -p <crate> |
-| 契约 | 每个 seam 的 golden fixtures(成功/非法输入/超时/取消/恢复/序列化) | cargo test -p ah-contracts --test fixtures(规划) |
-| 差分 | 与 agent-core 行为对等(语言中立 fixtures,不 import Python) | 每 seam 一个契约套件(规划) |
+| 契约 | 每个 seam 的 golden fixtures(成功/非法输入/序列化/恢复) | fixtures/ 9 个 seam golden + ah-app/tests/golden.rs(已落地) |
+| 差分 | 与 agent-core 行为对等(语言中立 fixtures,不 import Python) | references/ 输出快照 + ah-app/tests/differential.rs(已落地) |
 | e2e | 真实 provider/传输/子进程;缺凭据自动跳过 | cargo test --workspace 中的 integration 标记 |
 
 ### 3.2 覆盖要求

@@ -67,7 +67,7 @@ agent-harness/
 | `emit` | 同步、按注册顺序通知 | 日志、遥测观察
 | `serial` | 异步、按注册顺序逐个 await | 顺序副作用(审计链)
 | `parallel` | 异步、并发执行全部 | 并行工具执行
-| `waterfall` | 异步、`next()` 委托链,可短路 | `agent/pre-step`、rails 决策链
+| `waterfall` | 异步、`next()` 委托链,可短路 | `tools/pre-execute`(rails 决策链)、`tools/post-execute`
 
 规则:
 - 事件实现 `Event` trait(要求 `Clone`,`ID` 为稳定标识);
@@ -88,9 +88,9 @@ agent-harness/
 
 ### 3.6 日志即真相(session log)
 
-规划中的会话子系统采用 DSH 原则:**模型可见即已记录**。
-任何到达模型请求的输入都必须能从 append-only 会话事件日志重建;
-新的模型可见输入必须对应一个新的会话事件类型。
+会话子系统(ah-plugins-session-log)已实现,采用 DSH 原则:**模型可见即已记录**。
+任何到达模型请求的输入都必须能从 append-only 会话事件日志(JSONL)重建;
+新的模型可见输入必须对应一个新的会话事件类型(session/event)。
 
 ## 4. 硬性规则(可执行约束)
 
@@ -107,14 +107,14 @@ agent-harness/
 
 ## 5. 迁移资产(来自 agent-core_rs 的现成实现)
 
-| 资产 | 位置(agent-core_rs) | 迁移为 | 状态
-| --- | --- | --- | --- |
-| sys_operation(4306 行,fd 级受限工作区) | crates/openjiuwen-core/src/sys_operation.rs | ah-plugins-sysop-local | 现成,直接搬
-| workflow/controller 状态机 | crates/openjiuwen-runtime/src/rp301.rs | ah-plugins-workflow-engine | 现成,直接搬
-| session/state/persist | crates/openjiuwen-runtime/src/state.rs、persist.rs | ah-plugins-session-log | 现成,需日志化改造
-| 团队任务板/日志/预算(未接线) | crates/openjiuwen-agent-teams/src/residual.rs | ah-plugins-teams | 现成,接入运行路径
-| OpenAI 兼容 HTTP 客户端(零调用方) | crates/openjiuwen-providers/src/lib.rs | ah-plugins-openai | 现成,接入 ModelProvider
-| 本地受限 shell 执行 | crates/openjiuwen-core/src/sys_operation.rs | ah-plugins-shell-local | 现成
+| 资产 | 迁移为 | 状态
+| --- | --- | --- |
+| sys_operation(fd 级受限工作区) | ah-plugins-sysop(本地 fs/shell 执行) | ✅ 已迁移
+| workflow/controller 状态机 | ah-plugins-workflow(引擎) + ah-plugins-controller | ✅ 已迁移
+| session/state/persist | ah-plugins-session-log(JSONL 日志 + 多会话) | ✅ 已迁移
+| 团队任务板/日志/预算 | ah-plugins-teams(SQLite 持久化 + swarmflow) | ✅ 已迁移
+| OpenAI 兼容 HTTP 客户端 | ah-plugins-openai + ah-plugins-anthropic(真实协议) | ✅ 已迁移
+| 本地受限 shell 执行 | ah-plugins-sysop | ✅ 已迁移
 
 ## 6. 实现状态标注规则
 

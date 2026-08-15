@@ -8,12 +8,12 @@ Rust 原生 agent harness,以高解耦插件架构为目标,设计思路参考 D
 ```text
 agent-harness/
   crates/
-    ah-contracts/     契约层: Seam trait + 事件契约 + 纯类型,零实现
+    ah-contracts/     契约层: Seam trait + 事件契约 + 纯类型,零实现(47 seam)
     ah-hub/           插件内核: ServiceRegistry + EventBus + Plugin + Profile
-    ah-plugins-mock/  Mock 插件集(仅 dev/test profile)
-    ah-app/           boot 入口: 读取 profile → 组装插件 → 解析 seam
-    (规划) ah-plugins-*/  各域插件(provider / 引擎 / 工具)
-  profiles/           组合配置: dev(mock) / prod(真实)
+    ah-plugins-*/     50 个 crate:47 个插件 + 内核/契约/boot
+    ah-app/           boot 入口: 读取 profile → 组装插件 → 解析 seam + ah-cli
+  profiles/           组合配置: dev(mock,52 条) / prod(真实,51 条)
+  docs/               文档集(架构/能力地图/目录/账本)
 ```
 
 核心原则(对齐 DSH/Cordis):
@@ -23,23 +23,32 @@ agent-harness/
   实现者依赖契约而非彼此。
 - **类型化事件**:emit / serial / parallel / waterfall 四种分发。
 - **可逆注册**:插件注册以 RAII guard(Effect)表达,卸载自动回滚。
-- **日志即真相**:会话以 append-only 事件日志为唯一事实来源(规划)。
+- **日志即真相**:会话以 append-only 事件日志(JSONL)为唯一事实来源(已实现)。
 - **Profile 门禁**:生产 profile 不允许出现 mock 插件,CI 校验展开后的插件清单。
 
-## 当前框架能力(已实现)
+## 当前框架能力(已实现,50 crates / 273 tests / clippy 0 / fmt clean)
 
-- ah-hub:
-  - ServiceRegistry:按键注册/查找 Seam trait 对象,注册返回 Effect,drop 自动反注册;
-  - EventBus:emit(同步)/ serial(串行 await)/ parallel(并发)/ waterfall(next 链 + 短路);
-  - Plugin trait + mount_all:依赖注入、拓扑排序挂载、循环依赖与重复 provider 检测;
-  - Profile:TOML 组合配置(bundle 顺序 + 插件清单,去重展开)。
-- ah-contracts:ServiceKey、Event、Seam 标记,以及 llm/tools/fs/shell/session/workflow/memory/retrieval/security/subagent/mcp/telemetry/credentials 等 seam 契约。
-- ah-plugins-mock:MockModelProvider + 示例插件 MockPlugin。
-- ah-plugins-mcp:真实 MCP stdio transport —— tokio 子进程 + newline-delimited JSON-RPC 2.0,真实 initialize 握手 / list_tools / call_tool / shutdown,并提供 mcp_call_tool 工具(集成测试用真实 fake server 子进程验证)。
-- ah-plugins-telemetry:真实 telemetry 基础 —— 内存 span 记录 + JSONL 文件导出(export 追加写入并 flush,启动时读回已导出条数),挂 agent/step 与 tools/post-execute 监听生成真实 span;OTLP 导出留待后续。
-- ah-plugins-credentials:真实凭据引用 —— 环境变量 provider(get/list 真实读 std::env,映射可配置:openai.api_key → OPENAI_API_KEY 等;set/remove 显式报错 env 只读),注册 credentials seam。
-- ah-plugins-openai:真实 OpenAI 兼容 HTTP provider —— 配置可经 credentials seam 解析(openai.api_key/base_url/model 优先,再 fallback OPENAI_API_KEY/OPENAI_BASE_URL/OPENAI_MODEL 环境变量;两种来源都无 key 时挂载显式失败,不静默降级)。
-- ah-app:cargo run -p ah-app 从 profiles/dev.toml 启动,挂载插件并调用 llm seam。
+- **内核与契约**:ah-hub(ServiceRegistry + EventBus + Plugin/mount_all 拓扑挂载 + Profile)与
+  ah-contracts(47 个 seam 契约 + 6 个事件 + 58 个服务键,零实现)。
+- **模型 provider**:ah-plugins-openai(OpenAI 兼容,credentials 解析 + SSE 流式)、
+  ah-plugins-anthropic(Messages API,system 顶层 + tool_use/tool_result)。
+- **核心 seam**:agent-loop(ReAct)、workflow(Start/End/LLM/Tool/Loop/SubWorkflow/Parallel +
+  Http/Intent/Questioner + 检查点续跑 + LLM 节点流式消费)、pregel(超级步图)、
+  subagent(隔离委派)、subagents(类型化 code/research/plan/verify)、session-log(JSONL 日志 +
+  多会话)、context(预算组装/压缩/offload)、memory(JSON 记忆 + 工具)、graph-memory(知识图谱
+  实体/关系/episode)、retrieval(BM25 + 确定性向量)、prompt(版本化模板)、queue(文件 + Redis 后端)、
+  store(文件 + Redis + PostgreSQL 后端)、sandbox(策略沙箱)、code(python3 子进程)、web(HTTP)、
+  transport(A2A JSON-RPC + SSE)、shell/fs/sysop(本地执行)。
+- **harness**:tools(真实工具注册表 + pre/post-execute 管线)、rails(ShellGuard/PathGuard/
+  ToolBudget/ApprovalRail/Security)、cli(Claude Code 风格渲染 + ah-cli 交互)、workspace(清单/目标)、
+  credentials(env provider)、telemetry(span + JSONL + OTLP/JSON 导出)。
+- **teams / evolving / rsi / dev_tools**:teams(SQLite 持久化 + swarmflow)、evolving(轨迹/评估/优化 +
+  trajectory OTLP codec)、rsi(数据集生成(确定性 + LLM)+ 评测/精化/checkpoint + single_harness 候选门禁)、
+  autoharness(六阶段)、rl(reward)、skill、tune、agentbuilder、symphony、controller、runner、
+  operator(参数句柄)、optimizer(文本梯度)、trainer(训练循环)、external(外部 CLI agent)、
+  oauth(设备码)、git、ci、mcp(stdio + http)。
+- **mock 门禁**:dev profile 含 ah-plugins-mock(llm boot 桩);prod profile 51 个真实插件无 mock,CI 强制。
+- ah-app:cargo run -p ah-app 从 profiles/dev.toml 启动;ah-cli 交互入口(/new /teams /rsi /queue 等子命令)。
 
 ## 构建与运行
 
