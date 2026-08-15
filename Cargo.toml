@@ -25,6 +25,7 @@ members = [
     "crates/ah-plugins-anthropic",
     "crates/ah-plugins-oauth",
     "crates/ah-plugins-operator",
+    "crates/ah-plugins-optimizer",
     "crates/ah-plugins-agentbuilder",
     "crates/ah-plugins-cli",
     "crates/ah-plugins-mock",
@@ -81,6 +82,7 @@ ah-plugins-tune = { path = "crates/ah-plugins-tune" }
 ah-plugins-anthropic = { path = "crates/ah-plugins-anthropic" }
 ah-plugins-oauth = { path = "crates/ah-plugins-oauth" }
 ah-plugins-operator = { path = "crates/ah-plugins-operator" }
+ah-plugins-optimizer = { path = "crates/ah-plugins-optimizer" }
 ah-plugins-agentbuilder = { path = "crates/ah-plugins-agentbuilder" }
 ah-plugins-cli = { path = "crates/ah-plugins-cli" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }

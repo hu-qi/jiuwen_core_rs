@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 48 回合,270 tests / clippy 0 / fmt clean):
+> - 文本梯度优化器 ah-plugins-optimizer(backward:失败/待改进评估 → 问题→参数路由(工具/记忆/技能/llm)+ 修正指令;step:经 OperatorRegistry.set_parameter 应用,冻结/缺失算子显式记录;与 operator seam 打通)
+>
 > **账目更新**(第 47 回合,268 tests / clippy 0 / fmt clean):
 > - workflow LLM 节点流式消费(run_llm 经 stream_chat:provider 支持 SSE 时真实流式,默认退化单块;content delta 累加 + tool_call delta 按 index 组装)
 >

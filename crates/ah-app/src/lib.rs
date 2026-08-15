@@ -31,6 +31,7 @@ use ah_plugins_mock::MockPlugin;
 use ah_plugins_oauth::OAuthPlugin;
 use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_operator::OperatorPlugin;
+use ah_plugins_optimizer::OptimizerPlugin;
 use ah_plugins_pregel::PregelPlugin;
 use ah_plugins_prompt::PromptPlugin;
 use ah_plugins_queue::QueuePlugin;
@@ -243,6 +244,10 @@ pub fn plugin_catalog(
         ("ah-plugins-tune", Arc::new(TunePlugin) as DynPlugin),
         ("ah-plugins-oauth", Arc::new(OAuthPlugin) as DynPlugin),
         ("ah-plugins-operator", Arc::new(OperatorPlugin) as DynPlugin),
+        (
+            "ah-plugins-optimizer",
+            Arc::new(OptimizerPlugin) as DynPlugin,
+        ),
         (
             "ah-plugins-agentbuilder",
             Arc::new(AgentBuilderPlugin) as DynPlugin,

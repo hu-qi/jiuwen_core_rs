@@ -28,6 +28,7 @@ dependencies = [
  "ah-plugins-oauth",
  "ah-plugins-openai",
  "ah-plugins-operator",
+ "ah-plugins-optimizer",
  "ah-plugins-pregel",
  "ah-plugins-prompt",
  "ah-plugins-queue",
@@ -340,6 +341,16 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-optimizer"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-operator",
  "serde_json",
 ]
 

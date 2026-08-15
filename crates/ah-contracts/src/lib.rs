@@ -33,6 +33,7 @@ pub mod mcp;
 pub mod memory;
 pub mod oauth;
 pub mod operator;
+pub mod optimizer;
 pub mod pregel;
 pub mod prompt;
 pub mod queue;
@@ -116,6 +117,7 @@ pub mod prelude {
     pub use crate::operator::{
         Operator, OperatorError, OperatorRegistry, ParameterUpdated, TunableKind, TunableSpec,
     };
+    pub use crate::optimizer::{Optimizer, OptimizerError, TextualGradient, UpdateResult};
     pub use crate::pregel::{
         PregelEdge, PregelEngine, PregelError, PregelGraph, PregelNodeKind, PregelNodeSpec,
         PregelResult,
