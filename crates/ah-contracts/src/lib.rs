@@ -30,6 +30,7 @@ pub mod graph_memory;
 pub mod keys;
 pub mod llm;
 pub mod mcp;
+pub mod member_optimizer;
 pub mod memory;
 pub mod oauth;
 pub mod operator;
@@ -112,6 +113,10 @@ pub mod prelude {
         ToolCall, ToolCallDelta, ToolSchema,
     };
     pub use crate::mcp::{McpClient, McpContent, McpError, McpInfo, McpTool, McpToolResult};
+    pub use crate::member_optimizer::{
+        Attribution, Lever, MechanismType, MemberOptimizationResult, MemberOptimizer,
+        MemberOptimizerError, OptimizationPlan, PublishResult, Verification,
+    };
     pub use crate::memory::{MemoryError, MemoryProvider, MemoryRecord};
     pub use crate::oauth::{
         DeviceAuthRequest, DeviceCode, OAuthClient, OAuthError, PollResult, TokenResponse,

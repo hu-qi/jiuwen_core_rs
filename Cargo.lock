@@ -23,6 +23,7 @@ dependencies = [
  "ah-plugins-git",
  "ah-plugins-graph-memory",
  "ah-plugins-mcp",
+ "ah-plugins-member-optimizer",
  "ah-plugins-memory",
  "ah-plugins-mock",
  "ah-plugins-oauth",
@@ -285,6 +286,26 @@ dependencies = [
  "serde_json",
  "tokio",
  "ureq",
+]
+
+[[package]]
+name = "ah-plugins-member-optimizer"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-evolving",
+ "ah-plugins-mock",
+ "ah-plugins-operator",
+ "ah-plugins-optimizer",
+ "ah-plugins-rsi",
+ "ah-plugins-session-log",
+ "ah-plugins-subagent",
+ "ah-plugins-sysop",
+ "ah-plugins-tools",
+ "async-trait",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

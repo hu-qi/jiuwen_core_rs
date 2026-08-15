@@ -26,6 +26,7 @@ use ah_plugins_external::ExternalCliPlugin;
 use ah_plugins_git::GitPlugin;
 use ah_plugins_graph_memory::GraphMemoryPlugin;
 use ah_plugins_mcp::McpPlugin;
+use ah_plugins_member_optimizer::MemberOptimizerPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_oauth::OAuthPlugin;
@@ -289,6 +290,14 @@ pub fn plugin_catalog(
                     "-y".to_string(),
                     "@modelcontextprotocol/server-everything".to_string(),
                 ],
+            )) as DynPlugin,
+        ),
+        (
+            "ah-plugins-member-optimizer",
+            Arc::new(MemberOptimizerPlugin::new(
+                vec![],
+                String::new(),
+                workspace_root.join("member-optimizer"),
             )) as DynPlugin,
         ),
         (
