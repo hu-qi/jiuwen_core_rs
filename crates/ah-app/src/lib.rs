@@ -57,6 +57,7 @@ use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_subagents::SubagentsPlugin;
 use ah_plugins_symphony::SymphonyPlugin;
 use ah_plugins_sysop::SysopPlugin;
+use ah_plugins_team_monitor::TeamMonitorPlugin;
 use ah_plugins_team_skill::TeamSkillPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
@@ -140,6 +141,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-teams-workflow",
             Arc::new(SwarmflowPlugin::new(workspace_root.join("swarm-journals"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-monitor",
+            Arc::new(TeamMonitorPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-evolving",

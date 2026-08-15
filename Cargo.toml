@@ -46,6 +46,7 @@ members = [
     "crates/ah-plugins-security",
     "crates/ah-plugins-subagent",
     "crates/ah-plugins-teams",
+    "crates/ah-plugins-team-monitor",
     "crates/ah-plugins-evolving",
     "crates/ah-plugins-external",
     "crates/ah-plugins-rsi",
@@ -106,6 +107,7 @@ ah-plugins-runner = { path = "crates/ah-plugins-runner" }
 ah-plugins-security = { path = "crates/ah-plugins-security" }
 ah-plugins-subagent = { path = "crates/ah-plugins-subagent" }
 ah-plugins-teams = { path = "crates/ah-plugins-teams" }
+ah-plugins-team-monitor = { path = "crates/ah-plugins-team-monitor" }
 ah-plugins-telemetry = { path = "crates/ah-plugins-telemetry" }
 ah-plugins-evolving = { path = "crates/ah-plugins-evolving" }
 ah-plugins-external = { path = "crates/ah-plugins-external" }

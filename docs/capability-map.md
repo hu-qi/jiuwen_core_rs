@@ -93,7 +93,7 @@
 | external(95) | `external` seam + ah-plugins-external | 外部 CLI agent、SSH | 已落地(本回合:真实子进程运行时,流式 stdin + 单发 argv 两风味,adapter 启动知识/完成标记/steer/abort;SSH 留待后续) |
 | workflow(148) | ah-plugins-teams-workflow | swarmflow 引擎(phase/agent 并行 barrier/预算/事件流/journal 续跑) | 已落地(本回合,SwarmflowEngine,worker=SubagentRuntime) |
 | residual.rs 资产 | ah-plugins-teams | NativeTaskBoard/Journal/BudgetLedger/检测器 | 接入运行路径(现仅测试引用)
-| kv_cache/memory/monitor/models/rails/skill/prompts/cli/harness | 各插件 | 对应功能 | 现 0%
+| kv_cache/memory/monitor/models/rails/skill/prompts/cli/harness | 各插件 | 对应功能 | monitor 已落地(本回合:ah-plugins-team-monitor 只读团队/任务/消息视图 + teams/task 事件日志);kv_cache/memory/models 等留待后续 |
 
 ### 2.4 agent_evolving(602 符号)
 

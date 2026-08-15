@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 53 回合,279 tests / clippy 0 / fmt clean):
+> - 团队监控 ah-plugins-team-monitor(只读团队/任务/消息视图(经 TeamRuntime)+ 订阅 teams/task 事件记录 seq 单调监控日志;teams 侧 monitor 落地)
+>
 > **账目更新**(第 52 回合,277 tests / clippy 0 / fmt clean):
 > - 成员优化管线 ah-plugins-member-optimizer(attribution:问题→机制(prompt/tool/skill/memory/workflow/context)→lever/目标面;plan:文本梯度;execute:经 Optimizer+OperatorRegistry;verify:val 集得分严格优于基线;publish:best 引用 JSON 落盘)
 >

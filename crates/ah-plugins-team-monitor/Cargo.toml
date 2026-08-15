@@ -1,0 +1,20 @@
+[package]
+name = "ah-plugins-team-monitor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real team monitor: read-only team/member/task/message views plus a recordable teams/task event stream"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"
+
+[dev-dependencies]
+ah-plugins-mock = { workspace = true }
+ah-plugins-tools = { workspace = true }
+ah-plugins-sysop = { workspace = true }
+ah-plugins-session-log = { workspace = true }
+ah-plugins-subagent = { workspace = true }
+ah-plugins-queue = { workspace = true }
+ah-plugins-teams = { workspace = true }

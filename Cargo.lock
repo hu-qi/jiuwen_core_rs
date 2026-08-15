@@ -47,6 +47,7 @@ dependencies = [
  "ah-plugins-subagents",
  "ah-plugins-symphony",
  "ah-plugins-sysop",
+ "ah-plugins-team-monitor",
  "ah-plugins-team-skill",
  "ah-plugins-teams",
  "ah-plugins-telemetry",
@@ -594,6 +595,22 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-team-monitor"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-mock",
+ "ah-plugins-queue",
+ "ah-plugins-session-log",
+ "ah-plugins-subagent",
+ "ah-plugins-sysop",
+ "ah-plugins-teams",
+ "ah-plugins-tools",
+ "serde_json",
 ]
 
 [[package]]

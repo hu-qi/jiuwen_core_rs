@@ -139,3 +139,4 @@ pub const OPTIMIZER: ServiceKey = ServiceKey::new("optimizer");
 pub const TRAINER: ServiceKey = ServiceKey::new("trainer");
 pub const TEAM_SKILL: ServiceKey = ServiceKey::new("team-skill");
 pub const MEMBER_OPTIMIZER: ServiceKey = ServiceKey::new("member-optimizer");
+pub const TEAM_MONITOR: ServiceKey = ServiceKey::new("team-monitor");

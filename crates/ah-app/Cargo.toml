@@ -32,6 +32,7 @@ ah-plugins-retrieval = { workspace = true }
 ah-plugins-security = { workspace = true }
 ah-plugins-subagent = { workspace = true }
 ah-plugins-teams = { workspace = true }
+ah-plugins-team-monitor = { workspace = true }
 ah-plugins-evolving = { workspace = true }
 ah-plugins-external = { workspace = true }
 ah-plugins-rsi = { workspace = true }
