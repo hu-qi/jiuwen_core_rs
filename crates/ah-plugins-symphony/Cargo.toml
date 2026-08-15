@@ -1,0 +1,20 @@
+[package]
+name = "ah-plugins-symphony"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real symphony: capability registration/fingerprint, task retrieval, orchestration planning, execution via tools or subagents"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+async-trait = "0.1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[dev-dependencies]
+ah-plugins-mock = { workspace = true }
+ah-plugins-tools = { workspace = true }
+ah-plugins-sysop = { workspace = true }
+ah-plugins-session-log = { workspace = true }
+ah-plugins-subagent = { workspace = true }

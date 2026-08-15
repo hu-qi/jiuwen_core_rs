@@ -2,9 +2,10 @@
 
 use ah_contracts::agent::AgentStep;
 use ah_contracts::fs::FsProvider;
-use ah_contracts::keys::{FS, LLM, SHELL, TELEMETRY, TOOLS, WORKFLOW};
+use ah_contracts::keys::{FS, LLM, SHELL, SYMPHONY, TELEMETRY, TOOLS, WORKFLOW};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::shell::ShellProvider;
+use ah_contracts::symphony::{Capability, Symphony};
 use ah_contracts::telemetry::TelemetryProvider;
 use ah_contracts::tools::ToolRegistry;
 use ah_contracts::workflow::{EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowSpec};
@@ -210,6 +211,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         telemetry_dir.display()
     );
     println!("[telemetry] in-memory spans: {}", telemetry.spans().len());
+
+    // symphony:能力注册 → 指纹 → 编排 → 真实执行。
+    let symphony = ctx
+        .service::<dyn Symphony>(&SYMPHONY)
+        .ok_or("symphony seam missing")?;
+    symphony
+        .register_capability(Capability {
+            id: "explore".to_string(),
+            name: "explore workspace".to_string(),
+            description: "list and read files in the workspace".to_string(),
+            tags: vec!["workspace".to_string(), "files".to_string()],
+            tool: Some("list_dir".to_string()),
+        })
+        .expect("register capability");
+    let fp = symphony.fingerprint("explore").expect("fingerprint");
+    println!("[symphony] fingerprint: {} ({})", fp.name, fp.input_hint);
+    let plan = symphony
+        .plan("list workspace files")
+        .expect("orchestration plan");
+    println!(
+        "[symphony] plan: {} steps ({})",
+        plan.steps.len(),
+        plan.rationale
+    );
+    let executed = symphony.execute(&plan, "list workspace files").await?;
+    println!(
+        "[symphony] executed steps: {:?}",
+        executed["steps"].as_array().map(|a| a.len()).unwrap_or(0)
+    );
 
     Ok(())
 }

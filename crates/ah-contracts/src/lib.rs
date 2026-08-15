@@ -45,6 +45,7 @@ pub mod store;
 pub mod subagent;
 pub mod subagents;
 pub mod swarm;
+pub mod symphony;
 pub mod teams;
 pub mod telemetry;
 pub mod tool_approval;
@@ -123,6 +124,10 @@ pub mod prelude {
         SwarmAgentActivity, SwarmAgentRecord, SwarmAgentStatus, SwarmError, SwarmEvent,
         SwarmEventKind, SwarmFlowScript, SwarmPhase, SwarmPhaseRecord, SwarmRun, SwarmRunStatus,
         SwarmflowRunner,
+    };
+    pub use crate::symphony::{
+        Capability, CapabilityFingerprint, ExecutionStep, OrchestrationPlan, Symphony,
+        SymphonyError,
     };
     pub use crate::teams::{
         TeamError, TeamMemberSpec, TeamMessage, TeamRunResult, TeamRuntime, TeamSpec, TeamTask,

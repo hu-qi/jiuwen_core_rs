@@ -40,6 +40,7 @@ members = [
     "crates/ah-plugins-evolving",
     "crates/ah-plugins-rsi",
     "crates/ah-plugins-telemetry",
+    "crates/ah-plugins-symphony",
     "crates/ah-app",
 ]
 
@@ -88,4 +89,5 @@ ah-plugins-teams = { path = "crates/ah-plugins-teams" }
 ah-plugins-telemetry = { path = "crates/ah-plugins-telemetry" }
 ah-plugins-evolving = { path = "crates/ah-plugins-evolving" }
 ah-plugins-rsi = { path = "crates/ah-plugins-rsi" }
+ah-plugins-symphony = { path = "crates/ah-plugins-symphony" }
 ah-app = { path = "crates/ah-app" }

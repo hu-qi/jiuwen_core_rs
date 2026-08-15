@@ -169,7 +169,6 @@ mod tests {
     use super::*;
     use ah_contracts::keys::AGENT_BUILDER;
     use ah_hub::plugin::DynPlugin;
-    use serde_json::json;
     use std::sync::Arc as StdArc;
 
     fn build_ctx(root: &std::path::Path) -> (Context, Vec<Effect>) {

@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 34 回合,230 tests / clippy 0 / fmt clean):
+> - symphony 插件(能力注册/指纹/检索/计划/执行,JSONL 持久化 + 工具/subagent 真实执行;已接线 profiles + catalog)
+>
 > **账目更新**(第 33 回合,228 tests / clippy 0 / fmt clean):
 > - agent_builder 790748c(NL→设计→DSL→工作流真实执行)
 >

@@ -15,7 +15,7 @@
 | openjiuwen/rsi | 180 | 1695 | ah-plugins-rsi
 | openjiuwen/extensions | 102 | 340 | ah-plugins-store/queue/transport/otel 等
 | openjiuwen/dev_tools | 94 | 141 | ah-plugins-devtools
-| openjiuwen/symphony | 0(仅 README) | 0 | ah-plugins-symphony(新实现)
+| openjiuwen/symphony | 0(仅 README) | 0 | ah-plugins-symphony(已落地:注册/指纹/检索/编排/执行)
 
 ## 1. Seam 清单(ah-contracts 目标)
 
@@ -144,7 +144,7 @@
 | agent_builder | ah-plugins-agentbuilder | NL→设计→DSL→执行 | 已落地(本回合:确定性意图解析 → WorkflowSpec DSL → WorkflowEngine 真实执行) |
 | tune | ah-plugins-tune | optimizer/evaluator/trainer 流水线 | 已落地(本回合:subagent 执行 + evolving 评估/优化精化 prompt + 最优跟踪) |
 | skill_creator/evaluator | ah-plugins-skill | 技能注册/持久化/评估 | 已落地(本回合:文件后端 + subagent 委派 + evolving 轨迹评估) |
-| symphony | ah-plugins-symphony | 能力检索/编排/legacy runtime | Python 侧无代码,按 README 语义实现
+| symphony | ah-plugins-symphony | 能力检索/编排/legacy runtime | 已落地(本回合:能力注册 + 语义指纹 + 任务检索 + 可解释计划 + 工具/subagent 真实执行,JSONL 持久化)
 
 ## 3. 工作包生命周期与验收标准
 

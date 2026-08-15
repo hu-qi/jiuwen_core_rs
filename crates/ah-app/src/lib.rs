@@ -43,6 +43,7 @@ use ah_plugins_store::StorePlugin;
 use ah_plugins_store::redis_store::RedisStorePlugin;
 use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_subagents::SubagentsPlugin;
+use ah_plugins_symphony::SymphonyPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
@@ -201,6 +202,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-agentbuilder",
             Arc::new(AgentBuilderPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-symphony",
+            Arc::new(SymphonyPlugin::new(workspace_root.join("symphony"))) as DynPlugin,
         ),
         (
             "ah-plugins-sandbox-rail",
