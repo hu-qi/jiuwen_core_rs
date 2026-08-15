@@ -27,6 +27,7 @@ use ah_plugins_prompt::PromptPlugin;
 use ah_plugins_queue::QueuePlugin;
 use ah_plugins_rails::{PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin};
 use ah_plugins_retrieval::RetrievalPlugin;
+use ah_plugins_rl::RlPlugin;
 use ah_plugins_rsi::RsiPlugin;
 use ah_plugins_rsi::analyzer::AnalyzerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
@@ -150,6 +151,7 @@ pub fn plugin_catalog(
             "ah-plugins-autoharness",
             Arc::new(AutoHarnessPlugin) as DynPlugin,
         ),
+        ("ah-plugins-rl", Arc::new(RlPlugin) as DynPlugin),
         (
             "ah-plugins-sandbox-rail",
             Arc::new(SandboxRailPlugin) as DynPlugin,

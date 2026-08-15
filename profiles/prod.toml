@@ -25,6 +25,7 @@
 # - ah-plugins-git: 真实本地 git 操作(auto_harness 基建)
 # - ah-plugins-ci: 真实 CI gate 运行器(子进程门禁)
 # - ah-plugins-autoharness: 真实自动改进周期(assess→publish)
+# - ah-plugins-rl: 真实 RL 奖励函数(agent_rl reward 部分)
 # - ah-plugins-mcp: 真实 MCP stdio 客户端(懒 spawn,首次调用时拉起子进程)
 # - ah-plugins-credentials: 真实凭据引用(环境变量 provider,只读)
 # - ah-plugins-telemetry: 真实 telemetry(span 记录 + JSONL 导出,OTLP 留待后续)
@@ -36,4 +37,4 @@ name = "prod"
 
 [[bundles]]
 id = "real"
-plugins = ["ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-teams-workflow", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-rsi-analyzer", "ah-plugins-context", "ah-plugins-store", "ah-plugins-prompt", "ah-plugins-queue", "ah-plugins-workspace", "ah-plugins-sandbox", "ah-plugins-sandbox-rail", "ah-plugins-code", "ah-plugins-web", "ah-plugins-transport", "ah-plugins-git", "ah-plugins-ci", "ah-plugins-autoharness", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-teams-workflow", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-rsi-analyzer", "ah-plugins-context", "ah-plugins-store", "ah-plugins-prompt", "ah-plugins-queue", "ah-plugins-workspace", "ah-plugins-sandbox", "ah-plugins-sandbox-rail", "ah-plugins-code", "ah-plugins-web", "ah-plugins-transport", "ah-plugins-git", "ah-plugins-ci", "ah-plugins-autoharness", "ah-plugins-rl", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-agent-loop"]

@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-rl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real RL reward function (agent_rl reward part): deterministic per-case rewards with pass/fail/timeout/tool-error/iteration terms"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

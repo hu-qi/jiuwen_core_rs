@@ -101,3 +101,6 @@ pub const RSI_ANALYZER: ServiceKey = ServiceKey::new("rsi-analyzer");
 
 /// `auto-harness` seam 服务键(自动化改进周期)。
 pub const AUTO_HARNESS: ServiceKey = ServiceKey::new("auto-harness");
+
+/// `reward` seam 服务键(RL 奖励计算)。
+pub const REWARD: ServiceKey = ServiceKey::new("reward");

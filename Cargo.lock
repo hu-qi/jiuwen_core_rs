@@ -24,6 +24,7 @@ dependencies = [
  "ah-plugins-queue",
  "ah-plugins-rails",
  "ah-plugins-retrieval",
+ "ah-plugins-rl",
  "ah-plugins-rsi",
  "ah-plugins-sandbox",
  "ah-plugins-security",
@@ -260,6 +261,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-rl"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
 ]
 
 [[package]]
