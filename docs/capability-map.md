@@ -117,7 +117,7 @@
 | evaluation_result_analyzer(73) | ah-plugins-rsi | 信号提取、根因归因、证据引用、artifact 落盘 | 已落地(本回合:确定性信号 + 规则归因 + analysis.json);LLM 深度诊断留待后续 |
 | member_optimizer(16 文件) | ah-plugins-rsi | attribution→plan→execute→verify→publish | 现为启发式 plan
 | team_skill_generator/optimizer(26/8) | ah-plugins-rsi | 技能生成与演化 | 现 0%/启发式
-| single_harness(72+12) | ah-plugins-rsi | 迭代编排、候选门禁 | 现 0%
+| single_harness(72+12) | `single-harness` seam + ah-plugins-rsi-single-harness | 迭代编排、候选门禁 | 已落地(本回合:train/holdout 拆分 + 每 epoch 评测→精化→候选 holdout 门禁(严格优于才接受)+ best/checkpoint JSONL 落盘 + 中断续跑) |
 | auto_harness(65 文件) | ah-plugins-autoharness | assess/plan/implement/verify/commit/publish + 真实 git/CI | 编排已落地(本回合:六阶段真实执行,git 提交+分支);远端 PR/GitCode 留待后续 |
 | storage/resource/config/schema | ah-plugins-rsi | 持久化、资源记账、配置、类型 | 现 in-memory
 

@@ -20,6 +20,7 @@ use ah_contracts::subagent::{SubagentRuntime, SubagentSpec};
 use ah_hub::context::Context;
 
 pub mod analyzer;
+pub mod single_harness;
 pub use analyzer::{AnalyzerPlugin, RuleBasedAnalyzer};
 
 fn now_ms() -> u64 {

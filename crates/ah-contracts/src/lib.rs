@@ -46,6 +46,7 @@ pub mod security;
 pub mod service;
 pub mod session;
 pub mod shell;
+pub mod single_harness;
 pub mod skill;
 pub mod store;
 pub mod subagent;
@@ -138,6 +139,10 @@ pub mod prelude {
     pub use crate::service::ServiceKey;
     pub use crate::session::{SessionError, SessionEvent, SessionEventKind, SessionLog};
     pub use crate::shell::{ShellError, ShellOutput, ShellProvider};
+    pub use crate::single_harness::{
+        EpochOutcome, SingleHarnessCheckpoint, SingleHarnessError, SingleHarnessRequest,
+        SingleHarnessResult, SingleHarnessRuntime,
+    };
     pub use crate::skill::{Skill, SkillError, SkillEvaluation, SkillRegistry};
     pub use crate::store::{
         BaseKVStore, BaseMessageStore, KvEntry, StoreError, StoreProvider, StoredMessage,

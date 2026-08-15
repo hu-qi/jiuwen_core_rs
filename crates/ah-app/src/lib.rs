@@ -42,6 +42,7 @@ use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rl::RlPlugin;
 use ah_plugins_rsi::RsiPlugin;
 use ah_plugins_rsi::analyzer::AnalyzerPlugin;
+use ah_plugins_rsi::single_harness::SingleHarnessPlugin;
 use ah_plugins_runner::RunnerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
 use ah_plugins_security::SecurityRailPlugin;
@@ -147,6 +148,12 @@ pub fn plugin_catalog(
         (
             "ah-plugins-rsi-analyzer",
             Arc::new(AnalyzerPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-rsi-single-harness",
+            Arc::new(SingleHarnessPlugin::new(
+                workspace_root.join("single-harness"),
+            )) as DynPlugin,
         ),
         (
             "ah-plugins-context",

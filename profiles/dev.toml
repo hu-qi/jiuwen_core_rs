@@ -14,6 +14,7 @@
 # - ah-plugins-evolving: 真实轨迹抽取/评估/优化
 # - ah-plugins-rsi: 真实 RSI 管线(数据集/评测/精化/checkpoint)
 # - ah-plugins-rsi-analyzer: 真实评测结果分析(信号提取/根因归因/artifact)
+# - ah-plugins-rsi-single-harness: 真实单 harness 迭代编排 + 候选门禁(holdout 门禁/续跑)
 # - ah-plugins-context: 真实上下文引擎(预算组装/压缩/offload)
 # - ah-plugins-store: 真实文件后端 store(KV + message)
 # - ah-plugins-prompt: 真实版本化 prompt 注册表
@@ -48,4 +49,4 @@ name = "dev"
 
 [[bundles]]
 id = "boot"
-plugins = ["ah-plugins-mock", "ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-teams-workflow", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-rsi-analyzer", "ah-plugins-context", "ah-plugins-store", "ah-plugins-prompt", "ah-plugins-queue", "ah-plugins-workspace", "ah-plugins-sandbox", "ah-plugins-sandbox-rail", "ah-plugins-code", "ah-plugins-web", "ah-plugins-transport", "ah-plugins-git", "ah-plugins-ci", "ah-plugins-autoharness", "ah-plugins-rl", "ah-plugins-subagents", "ah-plugins-skill", "ah-plugins-pregel", "ah-plugins-tune", "ah-plugins-oauth", "ah-plugins-agentbuilder", "ah-plugins-symphony", "ah-plugins-cli", "ah-plugins-external", "ah-plugins-controller", "ah-plugins-operator", "ah-plugins-runner", "ah-plugins-graph-memory", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-agent-loop"]
+plugins = ["ah-plugins-mock", "ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-teams-workflow", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-rsi-analyzer", "ah-plugins-rsi-single-harness", "ah-plugins-context", "ah-plugins-store", "ah-plugins-prompt", "ah-plugins-queue", "ah-plugins-workspace", "ah-plugins-sandbox", "ah-plugins-sandbox-rail", "ah-plugins-code", "ah-plugins-web", "ah-plugins-transport", "ah-plugins-git", "ah-plugins-ci", "ah-plugins-autoharness", "ah-plugins-rl", "ah-plugins-subagents", "ah-plugins-skill", "ah-plugins-pregel", "ah-plugins-tune", "ah-plugins-oauth", "ah-plugins-agentbuilder", "ah-plugins-symphony", "ah-plugins-cli", "ah-plugins-external", "ah-plugins-controller", "ah-plugins-operator", "ah-plugins-runner", "ah-plugins-graph-memory", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-agent-loop"]

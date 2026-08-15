@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 46 回合,268 tests / clippy 0 / fmt clean):
+> - single_harness 迭代编排 + 候选门禁(契约 SingleHarnessRuntime;实现复用 RsiRuntime 评测/精化:train/holdout 拆分,候选在 holdout 得分严格优于 best 才接受,best/checkpoint JSONL 落盘 + 中断续跑)
+>
 > **账目更新**(第 45 回合,265 tests / clippy 0 / fmt clean):
 > - trajectory OTLP span codec(trajectory_codec:Trajectory↔Span 树编解码可逆 + aggregate_trajectories 聚合统计:完成率/错误/平均步数;与 telemetry Span 互通)
 >
