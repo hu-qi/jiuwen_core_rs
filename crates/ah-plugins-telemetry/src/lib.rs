@@ -548,11 +548,25 @@ mod tests {
                 }
                 let text = String::from_utf8_lossy(&buf).into_owned();
                 let header_end = text.find("\r\n\r\n").map(|i| i + 4).unwrap_or(text.len());
-                let body = text[header_end..].to_string();
-                let len = body.len();
+                // 解析 Content-Length,续读剩余字节(避免分包竞态)。
+                let content_length = text
+                    .lines()
+                    .find_map(|line| {
+                        let lower = line.to_lowercase();
+                        lower
+                            .strip_prefix("content-length:")
+                            .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                    })
+                    .unwrap_or(0);
+                while buf.len() < header_end + content_length {
+                    match stream.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => buf.extend_from_slice(&chunk[..n]),
+                    }
+                }
+                let body = String::from_utf8_lossy(&buf[header_end..]).into_owned();
                 let response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{{}}", 2);
                 let _ = stream.write_all(response.as_bytes());
-                let _ = &len;
                 std::fs::write("/tmp/otlp_captured.json", body).expect("capture");
             }
         });

@@ -13,6 +13,7 @@ use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
 use ah_plugins_agent_loop::AgentLoopPlugin;
 use ah_plugins_agentbuilder::AgentBuilderPlugin;
+use ah_plugins_anthropic::AnthropicPlugin;
 use ah_plugins_autoharness::AutoHarnessPlugin;
 use ah_plugins_ci::CiPlugin;
 use ah_plugins_cli::CliPlugin;
@@ -280,6 +281,10 @@ pub fn plugin_catalog(
     catalog.push((
         "ah-plugins-openai",
         Arc::new(OpenAiPlugin::lazy()) as DynPlugin,
+    ));
+    catalog.push((
+        "ah-plugins-anthropic",
+        Arc::new(AnthropicPlugin::lazy()) as DynPlugin,
     ));
     catalog
 }

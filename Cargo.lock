@@ -10,6 +10,7 @@ dependencies = [
  "ah-hub",
  "ah-plugins-agent-loop",
  "ah-plugins-agentbuilder",
+ "ah-plugins-anthropic",
  "ah-plugins-autoharness",
  "ah-plugins-ci",
  "ah-plugins-cli",
@@ -107,6 +108,20 @@ dependencies = [
  "ah-plugins-workflow",
  "async-trait",
  "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-anthropic"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "async-trait",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tiny_http",
  "tokio",
 ]
 

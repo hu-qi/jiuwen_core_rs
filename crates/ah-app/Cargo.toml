@@ -58,6 +58,7 @@ ah-plugins-oauth = { workspace = true }
 ah-plugins-operator = { workspace = true }
 ah-plugins-agentbuilder = { workspace = true }
 ah-plugins-symphony = { workspace = true }
+ah-plugins-anthropic = { workspace = true }
 ah-plugins-telemetry = { workspace = true }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

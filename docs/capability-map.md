@@ -21,7 +21,7 @@
 
 | Seam | ServiceKey | Service Definition | 状态
 | --- | --- | --- | --- |
-| llm | `llm` | `ModelProvider`(已实现;`OpenAiConfig` 支持从 credentials seam 解析 key/base_url,credentials 优先、环境变量兜底) | done(契约)/ partial(真实 provider + credentials 集成 e2e 已落地,其余 provider 未实现) |
+| llm | `llm` | `ModelProvider`(已实现;`OpenAiConfig` 支持从 credentials seam 解析 key/base_url,credentials 优先、环境变量兜底) | done(契约)/ partial(openai-compatible + anthropic 真实协议已落地;其余 provider 未实现) |
 | tools | `tools` | `Tool` + `ToolRegistry`(已实现) | done(契约)/ partial(已有真实工具,注册表通用) |
 | prompt | `prompt` | `PromptRegistry`(已实现:版本化注册 + {{var}} 渲染 + 缺失变量显式报错 + 文件持久化);agent-loop 消费方注入渲染系统提示 | done(契约+消费)/ partial(无结构化 schema prompt) |
 | store | `store` | `BaseKVStore`/`BaseMessageStore`(已实现,文件后端);DB/Vector 留待后续 | done(契约,本地文件+Redis+PostgreSQL 后端)/ partial(ES/Milvus) |
@@ -53,7 +53,7 @@
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
 | common(日志/错误/客户端注册表) | ah-contracts 类型 + ah-plugins-core-common | 错误模型、日志事件、client registry、后台任务 | 错误语义对等;日志事件结构对等
-| foundation/llm(11 个 provider) | `llm` seam + ah-plugins-openai/anthropic/dashscope/deepseek 等 | 模型调用、流式、工具调用组装、provider 错误 | 每个 provider 真实协议路径 + 差分契约
+| foundation/llm(11 个 provider) | `llm` seam + ah-plugins-openai/anthropic/dashscope/deepseek 等 | 模型调用、流式、工具调用组装、provider 错误 | openai-compatible + anthropic 已落地(本回合:Messages API system 顶层/tool_use·tool_result 块/x-api-key+version 头,本地 HTTP 协议往返);dashscope/deepseek/流式留待后续 |
 | foundation/tool | `tools` seam | tool 元数据、auth、调用、流式 chunk、校验 | 工具调用链真实执行
 | foundation/prompt | `prompt` seam | 模板渲染、结构化 prompt | 确定性渲染({{var}} + 版本化文件后端已落地) |
 | foundation/store(kv/db/vector/message/graph/object) | `store` seam + ah-plugins-store(本地文件后端);redis/gaussdb/elasticsearch/milvus/chroma 待后续 | 持久化(kv/message 已真实落盘) | 本地后端已测;外部后端集成测试留待后续 |
