@@ -129,7 +129,7 @@
 | message_queue(Pulsar) | `queue` seam + ah-plugins-pulsar | producer/consumer/replay | 现 broadcast 兜底
 | store(GaussDB/ES) | `store` seam + ah-plugins-gaussdb/elasticsearch | SQL/向量检索 | 现执行日志/内存余弦
 | sys_operation(远程沙箱 9 provider) | `sandbox` seam + 进程插件 | AIO/jiuwenbox/yuanrong | 现 4 个白名单命令
-| external_provider(OpenAI OAuth) | `credentials` seam + ah-plugins-openai-auth | 设备码 OAuth、模型目录 | 现恒 unsupported
+| external_provider(OpenAI OAuth) | `oauth` seam + ah-plugins-oauth | 设备码 OAuth、模型目录 | 设备码流已落地(本回合:start/poll,pending/expired 映射);模型目录留待后续 |
 | a2a | `transport` seam + ah-plugins-transport | HTTP server/client、流式 | server/client + SSE 流式已落地(本回合:stream_send 与 text/event-stream 端点) |
 | tracer_otel | `telemetry` seam + ah-plugins-telemetry | span 记录 + JSONL 导出 + OTLP/JSON | JSONL 真实;OTLP/JSON 导出已落地(本回合:resourceSpans/scopeSpans/spans 编码 + POST collector);semconv 留待后续 |
 | context_evolver(58 文件) | `memory` seam + ah-plugins-context-evolver | LLM 记忆流水线、Milvus | 现 0%

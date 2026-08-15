@@ -119,3 +119,6 @@ pub const TUNE: ServiceKey = ServiceKey::new("tune");
 
 /// `tool-approval` seam 服务键(渐进工具披露)。
 pub const TOOL_APPROVAL: ServiceKey = ServiceKey::new("tool-approval");
+
+/// `oauth` seam 服务键(设备码授权)。
+pub const OAUTH: ServiceKey = ServiceKey::new("oauth");

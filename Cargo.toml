@@ -20,6 +20,7 @@ members = [
     "crates/ah-plugins-skill",
     "crates/ah-plugins-pregel",
     "crates/ah-plugins-tune",
+    "crates/ah-plugins-oauth",
     "crates/ah-plugins-mock",
     "crates/ah-plugins-tools",
     "crates/ah-plugins-sysop",
@@ -66,6 +67,7 @@ ah-plugins-subagents = { path = "crates/ah-plugins-subagents" }
 ah-plugins-skill = { path = "crates/ah-plugins-skill" }
 ah-plugins-pregel = { path = "crates/ah-plugins-pregel" }
 ah-plugins-tune = { path = "crates/ah-plugins-tune" }
+ah-plugins-oauth = { path = "crates/ah-plugins-oauth" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }
 ah-plugins-tools = { path = "crates/ah-plugins-tools" }
 ah-plugins-sysop = { path = "crates/ah-plugins-sysop" }

@@ -22,6 +22,7 @@ use ah_plugins_git::GitPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
+use ah_plugins_oauth::OAuthPlugin;
 use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_pregel::PregelPlugin;
 use ah_plugins_prompt::PromptPlugin;
@@ -195,6 +196,7 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-pregel", Arc::new(PregelPlugin) as DynPlugin),
         ("ah-plugins-tune", Arc::new(TunePlugin) as DynPlugin),
+        ("ah-plugins-oauth", Arc::new(OAuthPlugin) as DynPlugin),
         (
             "ah-plugins-sandbox-rail",
             Arc::new(SandboxRailPlugin) as DynPlugin,
