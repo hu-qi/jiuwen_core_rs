@@ -9,7 +9,7 @@
 //!
 //! 导出:export 把未导出的 span 逐行追加写入 `dir/telemetry.jsonl` 并 flush;
 //! 启动时若文件已存在,读回已有行数作为累计导出基数(不重复导出)。
-//! OTLP 导出留待后续。
+//! OTLP/JSON 导出已落地;span 属性键按 tracer_otel.semconv 语义约定(见 semconv 模块)。
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -29,6 +29,9 @@ use ah_contracts::tools::ToolExecuted;
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use serde_json::json;
+
+mod semconv;
+use semconv::{agent_attributes, base_span_attributes};
 
 /// 当前 epoch 毫秒。
 fn now_ms() -> u64 {
@@ -251,6 +254,26 @@ impl Plugin for TelemetryPlugin {
             attributes.insert("iteration".to_string(), json!(step.iteration));
             attributes.insert("tool_calls".to_string(), json!(step.tool_calls));
             attributes.insert("done".to_string(), json!(step.done));
+            // semconv:agent 级与基础 span 属性(对齐 tracer_otel.semconv)。
+            let name = format!("agent/step#{}", step.iteration);
+            attributes.extend(agent_attributes(
+                "agent/step",
+                &name,
+                None,
+                Some(json!({ "tool_calls": step.tool_calls, "done": step.done })),
+                None,
+            ));
+            attributes.extend(base_span_attributes(
+                &name,
+                Some("agent/run"),
+                now_ms(),
+                now_ms(),
+                0,
+                if step.done { "ok" } else { "running" },
+                None,
+                vec![],
+                None,
+            ));
             let span = Span {
                 name: format!("agent/step#{}", step.iteration),
                 parent: Some("agent/run".to_string()),
@@ -276,6 +299,26 @@ impl Plugin for TelemetryPlugin {
                 attributes.insert("component".to_string(), json!("tools"));
                 attributes.insert("tool".to_string(), json!(event.name));
                 attributes.insert("elapsed_ms".to_string(), json!(event.elapsed_ms));
+                // semconv:agent 级与基础 span 属性。
+                let tool_name = format!("tool/{}", event.name);
+                attributes.extend(agent_attributes(
+                    "tool",
+                    &tool_name,
+                    Some(json!(event.arguments)),
+                    Some(json!(event.output)),
+                    None,
+                ));
+                attributes.extend(base_span_attributes(
+                    &tool_name,
+                    None,
+                    now_ms().saturating_sub(event.elapsed_ms),
+                    now_ms(),
+                    event.elapsed_ms,
+                    "ok",
+                    None,
+                    vec![],
+                    None,
+                ));
                 let step = tool_counter.load(Ordering::SeqCst);
                 let span = Span {
                     name: format!("tool/{}", event.name),
@@ -430,6 +473,17 @@ mod tests {
         assert_eq!(step.attributes["component"], "agent-loop");
         assert_eq!(step.attributes["iteration"], 2);
         assert_eq!(step.attributes["done"], false);
+        // semconv 属性(对齐 tracer_otel.semconv)。
+        assert_eq!(
+            step.attributes["openjiuwen.agent.invoke_type"],
+            "agent/step"
+        );
+        assert_eq!(step.attributes["openjiuwen.agent.name"], "agent/step#2");
+        assert_eq!(step.attributes["openjiuwen.status"], "running");
+        assert_eq!(
+            step.attributes["openjiuwen.agent.outputs"],
+            json!({"tool_calls": 1, "done": false})
+        );
 
         let tool = spans
             .iter()
@@ -444,6 +498,15 @@ mod tests {
         assert_eq!(tool.attributes["tool"], "read_file");
         assert_eq!(tool.attributes["event"], "tools/post-execute");
         assert_eq!(tool.duration_ms, 5);
+        // semconv 属性。
+        assert_eq!(tool.attributes["openjiuwen.agent.invoke_type"], "tool");
+        assert_eq!(tool.attributes["openjiuwen.agent.name"], "tool/read_file");
+        assert_eq!(tool.attributes["openjiuwen.status"], "ok");
+        assert_eq!(tool.attributes["openjiuwen.elapsed_time"], 5);
+        assert_eq!(
+            tool.attributes["openjiuwen.agent.inputs"],
+            json!({"path": "x.txt"})
+        );
 
         // 监听器注册可逆:drop effects 后监听器回滚,不再产生 span。
         drop(effects);

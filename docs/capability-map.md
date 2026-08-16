@@ -40,7 +40,7 @@
 | teams | `teams` | `TeamRuntime`(已实现:内存 + SQLite 持久化两套运行时:任务板/依赖门控/成员校验/review/settle/run_task 真实委派/teams/task 事件/消息经 queue seam 传输) | done(契约+持久化+消息)/ partial(外部 CLI 进程/ZMQ) |
 | evolving | `evolving` | `EvolvingRuntime`(已实现:轨迹从会话日志真实抽取;本地判据评估 + LLM judge 附加;优化建议规则推导 + LLM 附加) | done(契约)/ partial(无持久化/RL) |
 | rsi | `rsi` | `RsiRuntime`(已实现:数据集生成 + 用例真实执行 + evolving 评估 + 报告 + 提示精化 + checkpoint 落盘) | done(契约)/ partial(无 LLM 数据生成/RL) |
-| telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约+JSONL+OTLP/JSON 导出)/ partial(semconv 留待后续) |
+| telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约+JSONL+OTLP/JSON 导出+semconv 语义约定) |
 | queue | `queue` | `MessageQueue`(已实现:文件后端,每 channel append-only JSONL + 消费游标 offset 语义,重启恢复;teams 消息消费方) | done(契约+消费,本地+Redis 外部后端)/ partial(外部 Pulsar/ZMQ) |
 | mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约+stdio+http 客户端) |
 | transport | `transport` | A2A 风格传输(JSON-RPC 2.0 + SSE 流式 over HTTP;ureq 客户端 + 本地 HTTP/1.1 服务端) | done(契约+客户端+服务端+流式)/ partial(加密传输) |
@@ -131,7 +131,7 @@
 | sys_operation(远程沙箱 9 provider) | `sandbox` seam + 进程插件 | AIO/jiuwenbox/yuanrong | 现 4 个白名单命令
 | external_provider(OpenAI OAuth) | `oauth` seam + ah-plugins-oauth | 设备码 OAuth、模型目录 | 设备码流已落地(本回合:start/poll,pending/expired 映射);模型目录留待后续 |
 | a2a | `transport` seam + ah-plugins-transport | HTTP server/client、流式 | server/client + SSE 流式已落地(本回合:stream_send 与 text/event-stream 端点) |
-| tracer_otel | `telemetry` seam + ah-plugins-telemetry | span 记录 + JSONL 导出 + OTLP/JSON | JSONL 真实;OTLP/JSON 导出已落地(本回合:resourceSpans/scopeSpans/spans 编码 + POST collector);semconv 留待后续 |
+| tracer_otel | `telemetry` seam + ah-plugins-telemetry | span 记录 + JSONL 导出 + OTLP/JSON + 语义约定 | JSONL 真实;OTLP/JSON 导出已落地;semconv 语义约定已落地(本回合:semconv 模块 1:1 对齐 tracer_otel.semconv — gen_ai.*/openjiuwen.workflow.*/openjiuwen.agent.*/openjiuwen.* 全量常量 + agent/base 属性构建助手;agent step 与 tool span 携带 semconv 属性) |
 | context_evolver(58 文件) | `memory-evolver` seam + ah-plugins-context-evolver | LLM 记忆流水线、Milvus | 已落地(本回合:任务记忆保存(JSONL)/关键词+标签检索/轨迹凝练摘要/上下文注入;Milvus 向量后端留待后续) |
 | mcp(stdio/http) | `mcp` seam + ah-plugins-mcp | stdio 子进程、newline-delimited JSON-RPC 2.0、initialize 握手、list_tools/call_tool/shutdown | stdio 真实 + http 客户端真实(本回合:McpHttpClient POST JSON-RPC,本地 HTTP 端点往返验证) |
 | vendor_specific | `llm` seam | 各厂商重排/嵌入 | 现词法 fallback
