@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-team-pool"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real team runtime pool (team_name-keyed) + InteractGate concurrency gate"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

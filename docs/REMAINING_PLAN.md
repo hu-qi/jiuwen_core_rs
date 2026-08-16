@@ -2,13 +2,16 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 355 tests / 64 crates,clippy -D warnings 0,fmt clean。
+> 当前 361 tests / 65 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 65 回合,355 tests / clippy 0 / fmt clean):
+> **账目更新**(第 66 回合,361 tests / clippy 0 / fmt clean):
+> - 团队对象池 + 并发门禁 ah-plugins-team-pool(1:1 对齐 openjiuwen/agent_teams/runtime/pool.py + gate.py):team-pool 契约(InteractGate(唯一 id/admit 票证/consume_done 外门禁忽略/close_and_drain 阻塞等排空/reset;Mutex+Condvar)/ActiveTeam(team_name+session+state+Arc<InteractGate>)/ActiveTeamInfo 只读快照(gate_closed)/TeamRuntimePool trait(7 方法)+ TEAM_POOL key);MutexTeamPool 以 team_name 为键(get/has_active/add 同名替换/remove/list_team_names/teams_for_session/list_all_info);6 测试(池 CRUD·替换/会话分组/快照/gate admit·关闭拒绝/外门禁票证·reset/close_and_drain 跨线程排空)
+>
+**账目更新**(第 65 回合,355 tests / clippy 0 / fmt clean):
 > - 团队运行派发决策 ah-plugins-team-dispatch(1:1 对齐 openjiuwen/agent_teams/runtime/dispatch.py):team-dispatch 契约(RunActionKind 7 种/RuntimeState(Running·Paused)/PoolEntry(current_session_id+state)/RunAction(kind+require_spec+reason)/TEAM_DB_STATE_* 常量/TeamDispatch trait + TEAM_DISPATCH key);纯函数 7 路 truth table — ①非 DB+在 session:db_state ∈ pending_create/cleaned → CREATE(require_spec,先于不一致检查),否则 REJECT_ORPHANED;②非 DB+池有条目 → REJECT_INCONSISTENT;③非 DB → CREATE(require_spec);④DB+无池:在 session → COLD_RECOVER,否则 NEW_TEAM_IN_SESSION;⑤池条目 session 不匹配 → 不变量违例显式 Err;⑥PAUSED → RESUME_FROM_PAUSE;⑦RUNNING → REJECT_RUNNING;8 测试(全表 + 可重建 + 不变量)
 >
 **账目更新**(第 64 回合,347 tests / clippy 0 / fmt clean):

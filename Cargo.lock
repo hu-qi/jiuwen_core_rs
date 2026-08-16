@@ -58,6 +58,7 @@ dependencies = [
  "ah-plugins-sysop",
  "ah-plugins-team-dispatch",
  "ah-plugins-team-monitor",
+ "ah-plugins-team-pool",
  "ah-plugins-team-skill",
  "ah-plugins-teams",
  "ah-plugins-telemetry",
@@ -720,6 +721,14 @@ dependencies = [
  "ah-plugins-teams",
  "ah-plugins-tools",
  "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-team-pool"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
 ]
 
 [[package]]
