@@ -129,7 +129,7 @@
 | message_queue(Pulsar) | `queue` seam + ah-plugins-queue-redis | producer/consumer/replay | 已落地(本回合:Redis LIST 日志 + INCR 序号 + 游标,真实外部 provider 可互换后端;Pulsar 留待后续) |
 | store(GaussDB/ES) | `store` seam + ah-plugins-store-pg(GaussDB 兼容 SQL)/elasticsearch | SQL/向量检索 | 已落地(本回合:真实 PostgreSQL SQL 后端,kv/messages 两表 + UPSERT + 增量读,与文件/Redis 同 seam 互换;ES 留待后续) |
 | sys_operation(远程沙箱 9 provider) | `sandbox` seam + 进程插件 | AIO/jiuwenbox/yuanrong | 现 4 个白名单命令
-| external_provider(OpenAI OAuth) | `oauth` seam + ah-plugins-oauth | 设备码 OAuth、模型目录 | 设备码流已落地(本回合:start/poll,pending/expired 映射);模型目录留待后续 |
+| external_provider(OpenAI OAuth) | `oauth` seam + ah-plugins-oauth + `model-catalog` seam + ah-plugins-model-catalog | 设备码 OAuth、模型目录 | 设备码流已落地(start/poll,pending/expired 映射);模型目录已落地(本回合:GET {base}/models(Bearer)+ 可见性过滤(hide/hidden)+ (priority,id) 排序去重 + 前向兼容扩展(模板存在追加合成模型)+ JSON 缓存兜底链(实时→缓存→内置默认)) |
 | a2a | `transport` seam + ah-plugins-transport | HTTP server/client、流式 | server/client + SSE 流式已落地(本回合:stream_send 与 text/event-stream 端点) |
 | tracer_otel | `telemetry` seam + ah-plugins-telemetry | span 记录 + JSONL 导出 + OTLP/JSON + 语义约定 | JSONL 真实;OTLP/JSON 导出已落地;semconv 语义约定已落地(本回合:semconv 模块 1:1 对齐 tracer_otel.semconv — gen_ai.*/openjiuwen.workflow.*/openjiuwen.agent.*/openjiuwen.* 全量常量 + agent/base 属性构建助手;agent step 与 tool span 携带 semconv 属性) |
 | context_evolver(58 文件) | `memory-evolver` seam + ah-plugins-context-evolver | LLM 记忆流水线、Milvus | 已落地(本回合:任务记忆保存(JSONL)/关键词+标签检索/轨迹凝练摘要/上下文注入;Milvus 向量后端留待后续) |

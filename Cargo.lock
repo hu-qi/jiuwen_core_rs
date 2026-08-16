@@ -29,6 +29,7 @@ dependencies = [
  "ah-plugins-member-optimizer",
  "ah-plugins-memory",
  "ah-plugins-mock",
+ "ah-plugins-model-catalog",
  "ah-plugins-oauth",
  "ah-plugins-openai",
  "ah-plugins-operator",
@@ -368,6 +369,17 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-model-catalog"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+ "tiny_http",
+ "ureq",
 ]
 
 [[package]]

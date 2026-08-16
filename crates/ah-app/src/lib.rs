@@ -32,6 +32,7 @@ use ah_plugins_mcp::McpPlugin;
 use ah_plugins_member_optimizer::MemberOptimizerPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
+use ah_plugins_model_catalog::ModelCatalogPlugin;
 use ah_plugins_oauth::OAuthPlugin;
 use ah_plugins_openai::OpenAiPlugin;
 use ah_plugins_operator::OperatorPlugin;
@@ -265,6 +266,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-json-parser",
             Arc::new(JsonParserPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-model-catalog",
+            Arc::new(ModelCatalogPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",

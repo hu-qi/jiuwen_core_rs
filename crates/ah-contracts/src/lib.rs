@@ -34,6 +34,7 @@ pub mod llm;
 pub mod mcp;
 pub mod member_optimizer;
 pub mod memory;
+pub mod model_catalog;
 pub mod oauth;
 pub mod operator;
 pub mod optimizer;

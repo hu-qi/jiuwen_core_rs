@@ -1,0 +1,15 @@
+[package]
+name = "ah-plugins-model-catalog"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real OpenAI-account model catalog: /models fetch, visibility filter, priority sort, forward-compat expansion, JSON cache fallback"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"
+ureq = { version = "2.12", default-features = false }
+
+[dev-dependencies]
+tiny_http = "0.12"
