@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-experience-scorer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real experience scoring: Bayesian-smoothed effectiveness, utilization, freshness decay with version staleness, weighted score, usage-stat update"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

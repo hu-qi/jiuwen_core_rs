@@ -102,7 +102,7 @@
 | dataset(5) | ah-plugins-evolving | Case/EvaluatedCase/loader/shuffle/split | 字段语义对等
 | evaluator(40) | `evolving` seam | LLM-as-judge、指标、pipeline | 已落地(本地确定性判据必算 + LLM judge 附加,不可用原因显式记录,不静默) |
 | trajectory(94) | `evolving` seam | OTLP span codec、抽取、聚合、存储 | 已落地(本回合:Trajectory↔Span 树编解码 + 聚合统计,抽取/经验存储先前已落地) |
-| checkpointing/experience/sharing(21/54/20) | ah-plugins-evolving + `sharing` seam + ah-plugins-sharing | 持久化、评分、分享 | experience 持久化已落地(save/load/search JSONL + 跨重开恢复);经验分享已落地(本回合:LocalSharingBackend 本地文件 hub(束 JSON/包/索引 JSONL)+ ExperienceSharer(stage 去重队列/flush 打包上传重试退避/skill 包同步/下载镜像缓存/关键词检索));评分留待后续 |
+| checkpointing/experience/sharing(21/54/20) | ah-plugins-evolving + `sharing` seam + ah-plugins-sharing + `experience-scorer` seam + ah-plugins-experience-scorer | 持久化、评分、分享 | experience 持久化已落地(save/load/search JSONL + 跨重开恢复);经验分享已落地(LocalSharingBackend 本地文件 hub(束 JSON/包/索引 JSONL)+ ExperienceSharer(stage 去重队列/flush 打包上传重试退避/skill 包同步/下载镜像缓存/关键词检索));评分已落地(本回合:贝叶斯平滑有效性 (p+1)/(t+2) / 利用率 used·presented / 新鲜度指数衰减 0.5+0.5·2^(-days/90) + 版本过期 ×0.7 / 加权总分 0.5E+0.3U+0.2F / update 累加统计重算) |
 | optimizer/updater/signal(59/3/32) | `optimizer` seam + ah-plugins-optimizer | LLM 梯度优化、信号检测 | 已落地(本回合:文本梯度 backward(失败信号过滤 + 问题→参数路由)+ step 经 OperatorRegistry 应用(冻结/缺失显式记录));LLM 梯度与信号检测留待后续 |
 | agent_rl(216) | ah-plugins-rl + `rl-step` seam + ah-plugins-rl-step | VERL/PPO、reward、LoRA、gateway | reward 已落地;训练步数学已落地(本回合:advantage(reward−value)/policy ratio/clipped PPO objective/value loss + 聚合,无效/非有限样本剔除);VERL 训练器/LoRA/gateway 留待后续 |
 | trainer/prompts/tools(3/18/23) | `trainer` seam + ah-plugins-trainer | 训练循环、prompt、工具 | 训练循环已落地(本回合:基线评估 → 每轮 train 前向 → Optimizer 文本梯度应用(经 OperatorRegistry)→ 验证门禁 → 改进推进 best → early stop);prompt/tools 组件留待后续 |

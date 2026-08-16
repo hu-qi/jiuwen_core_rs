@@ -20,6 +20,7 @@ dependencies = [
  "ah-plugins-controller",
  "ah-plugins-credentials",
  "ah-plugins-evolving",
+ "ah-plugins-experience-scorer",
  "ah-plugins-external",
  "ah-plugins-git",
  "ah-plugins-graph-memory",
@@ -259,6 +260,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-experience-scorer"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
 ]
 
 [[package]]

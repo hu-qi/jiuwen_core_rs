@@ -22,6 +22,7 @@ members = [
     "crates/ah-plugins-rl-step",
     "crates/ah-plugins-rerank",
     "crates/ah-plugins-sharing",
+    "crates/ah-plugins-experience-scorer",
     "crates/ah-plugins-subagents",
     "crates/ah-plugins-skill",
     "crates/ah-plugins-pregel",
@@ -88,6 +89,7 @@ ah-plugins-rl = { path = "crates/ah-plugins-rl" }
 ah-plugins-rl-step = { path = "crates/ah-plugins-rl-step" }
 ah-plugins-rerank = { path = "crates/ah-plugins-rerank" }
 ah-plugins-sharing = { path = "crates/ah-plugins-sharing" }
+ah-plugins-experience-scorer = { path = "crates/ah-plugins-experience-scorer" }
 ah-plugins-subagents = { path = "crates/ah-plugins-subagents" }
 ah-plugins-skill = { path = "crates/ah-plugins-skill" }
 ah-plugins-pregel = { path = "crates/ah-plugins-pregel" }

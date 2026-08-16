@@ -46,6 +46,7 @@ pub mod rl_step;
 pub mod rsi;
 pub mod runner;
 pub mod sandbox;
+pub mod scoring;
 pub mod seam;
 pub mod security;
 pub mod service;

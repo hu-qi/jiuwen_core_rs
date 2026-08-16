@@ -23,6 +23,7 @@ use ah_plugins_context_evolver::ContextEvolverPlugin;
 use ah_plugins_controller::ControllerPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
+use ah_plugins_experience_scorer::ExperienceScorerPlugin;
 use ah_plugins_external::ExternalCliPlugin;
 use ah_plugins_git::GitPlugin;
 use ah_plugins_graph_memory::GraphMemoryPlugin;
@@ -256,6 +257,10 @@ pub fn plugin_catalog(
         ("ah-plugins-rl", Arc::new(RlPlugin) as DynPlugin),
         ("ah-plugins-rl-step", Arc::new(RlStepPlugin) as DynPlugin),
         ("ah-plugins-rerank", Arc::new(RerankPlugin) as DynPlugin),
+        (
+            "ah-plugins-experience-scorer",
+            Arc::new(ExperienceScorerPlugin) as DynPlugin,
+        ),
         (
             "ah-plugins-sharing",
             Arc::new(SharingPlugin::new(
