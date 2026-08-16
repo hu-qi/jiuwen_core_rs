@@ -88,7 +88,7 @@
 | --- | --- | --- | --- |
 | schema(81) | ah-plugins-teams | TeamAgentSpec/DeepAgentSpec/事件体系 | 字段对等
 | agent/coordination/scheduling(57) | `teams` seam + teams-workflow | 协调内核、调度、生命周期 | swarmflow 编排已落地;生命周期/调度细化留待后续 |
-| runtime(27) | `teams` seam | 任务板/依赖/review/settle 真实状态迁移,run_task 真实委派 | 已落地(ah-plugins-teams);持久化/池/7 路 dispatch 留待后续 |
+| runtime(27) | `teams` seam + `team-dispatch` seam + ah-plugins-team-dispatch | 任务板/依赖/review/settle 真实状态迁移,run_task 真实委派;运行派发决策 | 已落地(ah-plugins-teams + SQLite 持久化);7 路 dispatch 已落地(本回合:纯函数 truth table — CREATE(全新/pending_create·cleaned 可重建)/NEW_TEAM_IN_SESSION/COLD_RECOVER/RESUME_FROM_PAUSE/REJECT_RUNNING/REJECT_ORPHANED/REJECT_INCONSISTENT,require_spec 标记,跨 session 池条目不变量违例显式 Err);池留待后续 |
 | messager(16) | `queue` seam + ah-plugins-queue(本地日志+游标);ZMQ ROUTER/DEALER 留待后续 | 本地队列已落地(本回合) |
 | external(95) | `external` seam + ah-plugins-external | 外部 CLI agent、SSH | 已落地(本回合:真实子进程运行时,流式 stdin + 单发 argv 两风味,adapter 启动知识/完成标记/steer/abort;SSH 留待后续) |
 | workflow(148) | ah-plugins-teams-workflow | swarmflow 引擎(phase/agent 并行 barrier/预算/事件流/journal 续跑) | 已落地(本回合,SwarmflowEngine,worker=SubagentRuntime) |

@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-team-dispatch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real team run-dispatch decision: pure 7-way truth table (create/new-session/cold-recover/resume/rejects)"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

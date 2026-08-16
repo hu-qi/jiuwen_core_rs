@@ -66,6 +66,7 @@ use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_subagents::SubagentsPlugin;
 use ah_plugins_symphony::SymphonyPlugin;
 use ah_plugins_sysop::SysopPlugin;
+use ah_plugins_team_dispatch::TeamDispatchPlugin;
 use ah_plugins_team_monitor::TeamMonitorPlugin;
 use ah_plugins_team_skill::TeamSkillPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
@@ -277,6 +278,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-dataset-curator",
             Arc::new(DatasetCuratorPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-dispatch",
+            Arc::new(TeamDispatchPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",

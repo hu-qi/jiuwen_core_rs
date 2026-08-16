@@ -2,13 +2,16 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 347 tests / 63 crates,clippy -D warnings 0,fmt clean。
+> 当前 355 tests / 64 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 64 回合,347 tests / clippy 0 / fmt clean):
+> **账目更新**(第 65 回合,355 tests / clippy 0 / fmt clean):
+> - 团队运行派发决策 ah-plugins-team-dispatch(1:1 对齐 openjiuwen/agent_teams/runtime/dispatch.py):team-dispatch 契约(RunActionKind 7 种/RuntimeState(Running·Paused)/PoolEntry(current_session_id+state)/RunAction(kind+require_spec+reason)/TEAM_DB_STATE_* 常量/TeamDispatch trait + TEAM_DISPATCH key);纯函数 7 路 truth table — ①非 DB+在 session:db_state ∈ pending_create/cleaned → CREATE(require_spec,先于不一致检查),否则 REJECT_ORPHANED;②非 DB+池有条目 → REJECT_INCONSISTENT;③非 DB → CREATE(require_spec);④DB+无池:在 session → COLD_RECOVER,否则 NEW_TEAM_IN_SESSION;⑤池条目 session 不匹配 → 不变量违例显式 Err;⑥PAUSED → RESUME_FROM_PAUSE;⑦RUNNING → REJECT_RUNNING;8 测试(全表 + 可重建 + 不变量)
+>
+**账目更新**(第 64 回合,347 tests / clippy 0 / fmt clean):
 > - 回放数据集策展 ah-plugins-dataset-curator(1:1 对齐 openjiuwen/rsi/dataset_curator/curator.py):dataset-curator 契约(DatasetCurationConfig(默认 enabled/score_threshold=1.0/require_judgeable_reference/output·report·seed 文件名/source_label)+ DatasetCurationArtifact + DatasetCurator trait + DATASET_CURATOR key);eval_ref 读取(serde_yaml 兼容 JSON);case 决策链(缺失原用例/不确定(status·result.status·evaluation.method==error)/过线(score<阈值,含 result_path 回退)/不可判题(require_judgeable_reference 时)→ 拒绝;否则接受 → replay_{case_id} + metadata(source/synthetic=false/judgeable/provenance(源 id/路径/索引/score/status));定向种子任务(训练信号 → task_pattern/difficulty(easy2·medium3·hard4)/target_capabilities/specific_trap/成功标准(required_behaviors 回退)/failure_summary/轨迹证据(截断 3000)/根因能力(行为得分<0.8,空回退));replay_cases.json + targeted_dataset_seed.json + curation_report.yaml 真实落盘;disabled → disabled 报告;7 测试
 >
 **账目更新**(第 63 回合,340 tests / clippy 0 / fmt clean):
