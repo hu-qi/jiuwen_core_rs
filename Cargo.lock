@@ -19,6 +19,7 @@ dependencies = [
  "ah-plugins-context-evolver",
  "ah-plugins-controller",
  "ah-plugins-credentials",
+ "ah-plugins-dataset-curator",
  "ah-plugins-evolving",
  "ah-plugins-experience-scorer",
  "ah-plugins-external",
@@ -247,6 +248,16 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+]
+
+[[package]]
+name = "ah-plugins-dataset-curator"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -2036,6 +2047,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_yaml"
+version = "0.9.34+deprecated"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
+]
+
+[[package]]
 name = "sha1_smol"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2438,6 +2462,12 @@ name = "unicode-properties"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "untrusted"

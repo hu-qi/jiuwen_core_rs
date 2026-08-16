@@ -21,6 +21,7 @@ pub mod context;
 pub mod context_evolver;
 pub mod controller;
 pub mod credentials;
+pub mod dataset_curator;
 pub mod effect;
 pub mod event;
 pub mod evolving;

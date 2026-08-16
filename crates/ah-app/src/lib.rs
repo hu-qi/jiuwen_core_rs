@@ -22,6 +22,7 @@ use ah_plugins_context::ContextPlugin;
 use ah_plugins_context_evolver::ContextEvolverPlugin;
 use ah_plugins_controller::ControllerPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
+use ah_plugins_dataset_curator::DatasetCuratorPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
 use ah_plugins_experience_scorer::ExperienceScorerPlugin;
 use ah_plugins_external::ExternalCliPlugin;
@@ -273,6 +274,10 @@ pub fn plugin_catalog(
             Arc::new(ModelCatalogPlugin) as DynPlugin,
         ),
         ("ah-plugins-signals", Arc::new(SignalsPlugin) as DynPlugin),
+        (
+            "ah-plugins-dataset-curator",
+            Arc::new(DatasetCuratorPlugin) as DynPlugin,
+        ),
         (
             "ah-plugins-sharing",
             Arc::new(SharingPlugin::new(

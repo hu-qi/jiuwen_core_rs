@@ -26,6 +26,7 @@ members = [
     "crates/ah-plugins-json-parser",
     "crates/ah-plugins-model-catalog",
     "crates/ah-plugins-signals",
+    "crates/ah-plugins-dataset-curator",
     "crates/ah-plugins-subagents",
     "crates/ah-plugins-skill",
     "crates/ah-plugins-pregel",
@@ -96,6 +97,7 @@ ah-plugins-experience-scorer = { path = "crates/ah-plugins-experience-scorer" }
 ah-plugins-json-parser = { path = "crates/ah-plugins-json-parser" }
 ah-plugins-model-catalog = { path = "crates/ah-plugins-model-catalog" }
 ah-plugins-signals = { path = "crates/ah-plugins-signals" }
+ah-plugins-dataset-curator = { path = "crates/ah-plugins-dataset-curator" }
 ah-plugins-subagents = { path = "crates/ah-plugins-subagents" }
 ah-plugins-skill = { path = "crates/ah-plugins-skill" }
 ah-plugins-pregel = { path = "crates/ah-plugins-pregel" }

@@ -149,3 +149,4 @@ pub const EXPERIENCE_SCORER: ServiceKey = ServiceKey::new("experience-scorer");
 pub const JSON_PARSER: ServiceKey = ServiceKey::new("json-parser");
 pub const MODEL_CATALOG: ServiceKey = ServiceKey::new("model-catalog");
 pub const SIGNALS: ServiceKey = ServiceKey::new("signals");
+pub const DATASET_CURATOR: ServiceKey = ServiceKey::new("dataset-curator");
