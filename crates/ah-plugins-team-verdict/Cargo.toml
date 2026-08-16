@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-team-verdict"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real review-vote verdict math: pass quorum ceil(threshold*n), fail when quorum unreachable"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

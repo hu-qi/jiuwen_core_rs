@@ -153,3 +153,4 @@ pub const DATASET_CURATOR: ServiceKey = ServiceKey::new("dataset-curator");
 pub const TEAM_DISPATCH: ServiceKey = ServiceKey::new("team-dispatch");
 pub const TEAM_POOL: ServiceKey = ServiceKey::new("team-pool");
 pub const TEAM_STATUS: ServiceKey = ServiceKey::new("team-status");
+pub const TEAM_VERDICT: ServiceKey = ServiceKey::new("team-verdict");

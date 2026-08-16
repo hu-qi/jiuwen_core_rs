@@ -61,6 +61,7 @@ dependencies = [
  "ah-plugins-team-pool",
  "ah-plugins-team-skill",
  "ah-plugins-team-status",
+ "ah-plugins-team-verdict",
  "ah-plugins-teams",
  "ah-plugins-telemetry",
  "ah-plugins-tokenizer",
@@ -752,6 +753,14 @@ dependencies = [
 
 [[package]]
 name = "ah-plugins-team-status"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+]
+
+[[package]]
+name = "ah-plugins-team-verdict"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",

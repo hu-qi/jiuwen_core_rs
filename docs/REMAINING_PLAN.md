@@ -2,13 +2,16 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 367 tests / 66 crates,clippy -D warnings 0,fmt clean。
+> 当前 372 tests / 67 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 67 回合,367 tests / clippy 0 / fmt clean):
+> **账目更新**(第 68 回合,372 tests / clippy 0 / fmt clean):
+> - 审查投票判定 ah-plugins-team-verdict(1:1 对齐 openjiuwen/agent_teams/agent/scheduling/verdict.py,调度器决策核心 F_62):team-verdict 契约(Verdict(Pass/Fail/Undecided)+ TeamVerdict trait(quorum/judge)+ TEAM_VERDICT key);纯函数投票数学 — quorum=ceil(threshold×reviewer_count);pass_count≥quorum → PASS;fail_count>reviewer_count−quorum(quorum 不可达,决定性迟票即败)→ FAIL;否则 UNDECIDED;reviewer_count≤0 → UNDECIDED;单评审 2/3 阈值退化为首票即定;非法阈值(非有限/≤0)防御 quorum=0;5 测试
+>
+**账目更新**(第 67 回合,367 tests / clippy 0 / fmt clean):
 > - 团队成员/执行状态机 ah-plugins-team-status(1:1 对齐 openjiuwen/agent_teams/schema/status.py):team-status 契约(MemberStatus 10 态/ExecutionStatus 10 态/TeamStatus trait(member_can_transition/execution_can_transition/member_departed/member_unreachable/member_settled/allowed_member_transitions)+ TEAM_STATUS key);成员迁移表(UNSTARTED→STARTING(CAS 守卫)/STARTING→UNSTARTED(回滚)/READY↔BUSY·PAUSED·STOPPED·SHUTDOWN_REQUESTED·SHUTDOWN·ERROR/PAUSED·STOPPED→READY·RESTARTING/SHUTDOWN_REQUESTED→SHUTDOWN·ERROR/SHUTDOWN→RESTARTING(复活)/ERROR→RESTARTING·READY·…);执行迁移表(IDLE→STARTING→RUNNING→(取消链 CANCEL_REQUESTED→CANCELLING→CANCELLED|完成链 COMPLETING→COMPLETED|FAILED|TIMED_OUT) 全部收敛回 IDLE);状态集合 departed(工作守卫)/unreachable(消息投递)/settled(团队完成检查);6 测试
 >
 **账目更新**(第 66 回合,361 tests / clippy 0 / fmt clean):

@@ -65,6 +65,7 @@ ah-plugins-dataset-curator = { workspace = true }
 ah-plugins-team-dispatch = { workspace = true }
 ah-plugins-team-pool = { workspace = true }
 ah-plugins-team-status = { workspace = true }
+ah-plugins-team-verdict = { workspace = true }
 ah-plugins-runner = { workspace = true }
 ah-plugins-subagents = { workspace = true }
 ah-plugins-skill = { workspace = true }
