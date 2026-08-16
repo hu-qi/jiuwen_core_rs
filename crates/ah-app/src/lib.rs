@@ -27,6 +27,7 @@ use ah_plugins_experience_scorer::ExperienceScorerPlugin;
 use ah_plugins_external::ExternalCliPlugin;
 use ah_plugins_git::GitPlugin;
 use ah_plugins_graph_memory::GraphMemoryPlugin;
+use ah_plugins_json_parser::JsonParserPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_member_optimizer::MemberOptimizerPlugin;
 use ah_plugins_memory::MemoryPlugin;
@@ -260,6 +261,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-experience-scorer",
             Arc::new(ExperienceScorerPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-json-parser",
+            Arc::new(JsonParserPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",

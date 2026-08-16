@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-json-parser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real LLM-output JSON parser: fenced code extraction + whole-text fallback + streaming accumulator"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"

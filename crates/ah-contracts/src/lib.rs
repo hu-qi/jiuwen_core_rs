@@ -28,6 +28,7 @@ pub mod external;
 pub mod fs;
 pub mod git;
 pub mod graph_memory;
+pub mod json_parser;
 pub mod keys;
 pub mod llm;
 pub mod mcp;

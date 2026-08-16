@@ -2,13 +2,16 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 315 tests / 59 crates,clippy -D warnings 0,fmt clean。
+> 当前 324 tests / 60 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 60 回合,315 tests / clippy 0 / fmt clean):
+> **账目更新**(第 61 回合,324 tests / clippy 0 / fmt clean):
+> - LLM 输出 JSON 解析 ah-plugins-json-parser(1:1 对齐 openjiuwen/core/foundation/llm/output_parsers/json_output_parser.py):json-parser 契约(JsonParseError(NoJson/Invalid)+ JsonOutputParser trait(extract_fenced/parse)+ JSON_PARSER key);围栏提取(json 围栏后须换行,Python 正则语义)、跨行提取、内容 trim;parse 优先围栏否则整段(空/纯空白 → NoJson,畸形 → Invalid);StreamJsonParser 流式累加(围栏完整才产出,产出后缓冲区推进到围栏之后,非法 JSON 保留缓冲等待);9 测试
+>
+**账目更新**(第 60 回合,315 tests / clippy 0 / fmt clean):
 > - 经验评分 ah-plugins-experience-scorer(1:1 对齐 openjiuwen/agent_evolving/experience/scorer.py 确定性核心):scoring 契约(UsageStats(used/positive/negative/presented/last_evaluated_at)/ScoredExperience(timestamp ISO/skill_version)/ExperienceScorer trait(5 方法)+ EXPERIENCE_SCORER key);E=贝叶斯平滑 (p+1)/(t+2)(无数据 0.5)/U=used/presented(无数据 0.5)/F=0.5+0.5·2^(-days/90) 指数衰减(版本过期 ×0.7,clamp [0,1])/总分 0.5E+0.3U+0.2F/update 按 used·positive·negative 累加并记录评估时间重算分数;手写 ISO-8601 解析(UTC,支持 Z/±hh:mm 偏移)与 civil↔epoch 转换(无 chrono 依赖)
 >
 **账目更新**(第 59 回合,307 tests / clippy 0 / fmt clean):
