@@ -70,6 +70,7 @@ use ah_plugins_team_dispatch::TeamDispatchPlugin;
 use ah_plugins_team_monitor::TeamMonitorPlugin;
 use ah_plugins_team_pool::TeamPoolPlugin;
 use ah_plugins_team_skill::TeamSkillPlugin;
+use ah_plugins_team_status::TeamStatusPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_tokenizer::TokenizerPlugin;
@@ -287,6 +288,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-pool",
             Arc::new(TeamPoolPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-status",
+            Arc::new(TeamStatusPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",

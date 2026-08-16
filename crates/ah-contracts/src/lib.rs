@@ -68,6 +68,7 @@ pub mod team_dispatch;
 pub mod team_monitor;
 pub mod team_pool;
 pub mod team_skill;
+pub mod team_status;
 pub mod teams;
 pub mod telemetry;
 pub mod tokenizer;

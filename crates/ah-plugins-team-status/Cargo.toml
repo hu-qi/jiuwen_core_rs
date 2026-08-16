@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-team-status"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real team member/execution status state machines + status sets (departed/unreachable/settled)"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

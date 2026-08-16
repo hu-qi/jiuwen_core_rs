@@ -29,6 +29,7 @@ members = [
     "crates/ah-plugins-dataset-curator",
     "crates/ah-plugins-team-dispatch",
     "crates/ah-plugins-team-pool",
+    "crates/ah-plugins-team-status",
     "crates/ah-plugins-subagents",
     "crates/ah-plugins-skill",
     "crates/ah-plugins-pregel",
@@ -102,6 +103,7 @@ ah-plugins-signals = { path = "crates/ah-plugins-signals" }
 ah-plugins-dataset-curator = { path = "crates/ah-plugins-dataset-curator" }
 ah-plugins-team-dispatch = { path = "crates/ah-plugins-team-dispatch" }
 ah-plugins-team-pool = { path = "crates/ah-plugins-team-pool" }
+ah-plugins-team-status = { path = "crates/ah-plugins-team-status" }
 ah-plugins-subagents = { path = "crates/ah-plugins-subagents" }
 ah-plugins-skill = { path = "crates/ah-plugins-skill" }
 ah-plugins-pregel = { path = "crates/ah-plugins-pregel" }
