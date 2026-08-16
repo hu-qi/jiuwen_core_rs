@@ -55,6 +55,7 @@ pub mod service;
 pub mod session;
 pub mod sharing;
 pub mod shell;
+pub mod signals;
 pub mod single_harness;
 pub mod skill;
 pub mod store;

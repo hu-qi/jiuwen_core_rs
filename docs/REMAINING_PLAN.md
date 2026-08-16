@@ -2,13 +2,16 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 331 tests / 61 crates,clippy -D warnings 0,fmt clean。
+> 当前 340 tests / 62 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 62 回合,331 tests / clippy 0 / fmt clean):
+> **账目更新**(第 63 回合,340 tests / clippy 0 / fmt clean):
+> - 演化信号映射 ah-plugins-signals(1:1 对齐 openjiuwen/rsi/team_skill_optimizer/signals.py + agent_evolving/signal/base.py):signals 契约(EvolutionSignal(signal_type/section/excerpt/skill_name/context)+ Signals trait(8 方法)+ SIGNALS key);issue_type 归因(attribution.target_ref+category 关键词 → routing_policy/handoff_protocol/shared_context_contract/final_answer_verification/stop_condition,缺省 team_coordination);normalize_trajectory_issue(severity ∈ {low,medium,high} 规整 + type/description/affected_role);issue_description(summary/recommendation + attribution 4 字段拼接,空回退摘录);affected_role(affected_components[0] → evidence(对象/列表) → 空);issue_excerpt(summary→recommendation→description 截断 1000 → 回退 id);issue_ids(1 基编号回退);build_user_query(recommendation 前缀 '- ',空用摘录);build_signals(每条问题一个 trajectory_issue 信号,context 携带 source/trajectory_issues/skill_content/analysis_issue/路径);9 测试
+>
+**账目更新**(第 62 回合,331 tests / clippy 0 / fmt clean):
 > - OpenAI 账号模型目录 ah-plugins-model-catalog(1:1 对齐 openjiuwen/extensions/external_provider/openai_auth/openai_account_models.py):model-catalog 契约(ModelCatalogError(message+status)/ModelCatalog trait(parse_model_ids/add_forward_compat/fetch_models/list_model_ids/read_cache/write_cache)+ MODEL_CATALOG key);实时 GET {base_url}/models(Bearer,ureq;非 2xx 显式带状态码错误);解析 entries 来自 models/data(list 或 dict,dict 注入 slug)、过滤 hide/hidden、id 取 slug/id/name/model 首个非空、按 (priority,id) 排序去重;前向兼容模板(gpt-5.5←gpt-5.4* 等 4 组);兜底链 实时→JSON 缓存(model_ids 或 payload 形式)→内置默认列表;7 测试(含本地 tiny_http /models 服务器)
 >
 **账目更新**(第 61 回合,324 tests / clippy 0 / fmt clean):

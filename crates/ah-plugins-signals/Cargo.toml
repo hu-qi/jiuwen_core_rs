@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-signals"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real evolution-signal mapping: analyzer issue -> trajectory_issue signals (type attribution, normalization, excerpts)"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"

@@ -60,6 +60,7 @@ ah-plugins-sharing = { workspace = true }
 ah-plugins-experience-scorer = { workspace = true }
 ah-plugins-json-parser = { workspace = true }
 ah-plugins-model-catalog = { workspace = true }
+ah-plugins-signals = { workspace = true }
 ah-plugins-runner = { workspace = true }
 ah-plugins-subagents = { workspace = true }
 ah-plugins-skill = { workspace = true }

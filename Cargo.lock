@@ -48,6 +48,7 @@ dependencies = [
  "ah-plugins-security",
  "ah-plugins-session-log",
  "ah-plugins-sharing",
+ "ah-plugins-signals",
  "ah-plugins-skill",
  "ah-plugins-store",
  "ah-plugins-subagent",
@@ -585,6 +586,15 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-signals"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]
