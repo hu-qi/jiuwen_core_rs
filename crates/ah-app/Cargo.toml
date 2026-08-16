@@ -56,6 +56,7 @@ ah-plugins-autoharness = { workspace = true }
 ah-plugins-rl = { workspace = true }
 ah-plugins-rl-step = { workspace = true }
 ah-plugins-rerank = { workspace = true }
+ah-plugins-sharing = { workspace = true }
 ah-plugins-runner = { workspace = true }
 ah-plugins-subagents = { workspace = true }
 ah-plugins-skill = { workspace = true }

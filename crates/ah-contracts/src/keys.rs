@@ -144,3 +144,4 @@ pub const MEMORY_EVOLVER: ServiceKey = ServiceKey::new("memory-evolver");
 pub const TOKENIZER: ServiceKey = ServiceKey::new("tokenizer");
 pub const RL_STEP: ServiceKey = ServiceKey::new("rl-step");
 pub const RERANK: ServiceKey = ServiceKey::new("rerank");
+pub const SHARING: ServiceKey = ServiceKey::new("sharing");

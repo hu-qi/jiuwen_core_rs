@@ -52,6 +52,7 @@ use ah_plugins_runner::RunnerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
+use ah_plugins_sharing::{LocalSharingBackend, SharingPlugin};
 use ah_plugins_skill::SkillPlugin;
 use ah_plugins_store::StorePlugin;
 use ah_plugins_store::pg_store::PgStorePlugin;
@@ -255,6 +256,16 @@ pub fn plugin_catalog(
         ("ah-plugins-rl", Arc::new(RlPlugin) as DynPlugin),
         ("ah-plugins-rl-step", Arc::new(RlStepPlugin) as DynPlugin),
         ("ah-plugins-rerank", Arc::new(RerankPlugin) as DynPlugin),
+        (
+            "ah-plugins-sharing",
+            Arc::new(SharingPlugin::new(
+                Arc::new(LocalSharingBackend::new(
+                    std::env::temp_dir().join("ah-hub-local"),
+                    0.85,
+                )),
+                Some(std::env::temp_dir().join("ah-sharing-cache")),
+            )) as DynPlugin,
+        ),
         ("ah-plugins-runner", Arc::new(RunnerPlugin) as DynPlugin),
         (
             "ah-plugins-subagents",

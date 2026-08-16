@@ -50,6 +50,7 @@ pub mod seam;
 pub mod security;
 pub mod service;
 pub mod session;
+pub mod sharing;
 pub mod shell;
 pub mod single_harness;
 pub mod skill;
