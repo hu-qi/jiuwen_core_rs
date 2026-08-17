@@ -27,6 +27,7 @@ dependencies = [
  "ah-plugins-git",
  "ah-plugins-graph-memory",
  "ah-plugins-inbound-render",
+ "ah-plugins-interaction-router",
  "ah-plugins-json-parser",
  "ah-plugins-mcp",
  "ah-plugins-member-optimizer",
@@ -49,6 +50,7 @@ dependencies = [
  "ah-plugins-rsi",
  "ah-plugins-runner",
  "ah-plugins-sandbox",
+ "ah-plugins-scheduler-render",
  "ah-plugins-security",
  "ah-plugins-session-log",
  "ah-plugins-sharing",
@@ -351,6 +353,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-interaction-router"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
 name = "ah-plugins-json-parser"
 version = "0.1.0"
 dependencies = [
@@ -604,6 +615,15 @@ dependencies = [
  "ah-plugins-tools",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-scheduler-render"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]

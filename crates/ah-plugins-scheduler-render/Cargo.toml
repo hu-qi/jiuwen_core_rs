@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-scheduler-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real scheduler message assembly: meta_* delivery payloads + fail-feedback aggregation + leader strings"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"
