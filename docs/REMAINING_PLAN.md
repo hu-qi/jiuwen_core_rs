@@ -2,13 +2,18 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 425 tests / 72 crates,clippy -D warnings 0,fmt clean。
+> 当前 459 tests / 75 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 70 回合,425 tests / clippy 0 / fmt clean,4 任务并行子代理):
+> **账目更新**(第 71 回合,459 tests / clippy 0 / fmt clean,3 任务并行):
+> - 团队运行时 i18n ah-plugins-team-i18n(1:1 对齐 i18n.py):Language cn/en + t(key,args) 双语查表 + 手写 {var} 占位渲染(缺失键显式 Err;缺失占位保留原样;多余参数忽略)+ reply_hint_for(user 伪成员强制版/其余通用条件版);11 测试
+> - 上下文消息正文 ah-plugins-team-context-text(1:1 对齐 messages.py build_identity_text/build_team_info_text):成员身份(两个名字/私有工作区+用途括号 cn（）·en ()/私有约定块)+ 团队信息(名/展示名/目标 + 共享工作空间 mount+path 分支);全空→None;双语标签;16 测试
+> - 外部 CLI 入站渲染 ah-plugins-external-format(1:1 对齐 external/format.py):组合 inbound-render + timefmt seam — render_message(<team-inbound> + reply-hint/hitt-silence note,human agent for=controller,框架模板 body 去 hint)/render_messages(bodies 按 message_id)/render_task_line(assignee→或 marker + 相对时间)/render_task_board(过滤终态、角色化标题、<team-event kind=task-board>);7 测试(dev-deps 真实组合)
+>
+**账目更新**(第 70 回合,425 tests / clippy 0 / fmt clean,4 任务并行子代理):
 > - 入站 XML 渲染 ah-plugins-inbound-render(1:1 对齐 inbound_render.py:F_46/F_72):<team-inbound(从·消息id·type·time·for=controller)/team-event(kind 最前·task_id)/team-context> + <team-note> 嵌套最后子元素(双全才渲染)+ 手写 XML 转义(body 保留引号/属性转义引号)+ 快照判定(task-board 类,只留最新整条剔除);18 测试
 > - 时间渲染 ah-plugins-timefmt(1:1 对齐 timefmt.py):相对桶(负数/<10s→刚刚;秒/分/时/天)+ 手写 civil 算法绝对时间(负数 epoch/闰日)+ 时区(注入偏移确定性;默认 date +%z→TZ 解析→显式降级 UTC);11 测试
 > - 调度扫描核心 ah-plugins-team-scheduler(1:1 对齐 scheduler.py 纯决策):pick_starts(每成员最早 PENDING(assignee),updated_at 升序同则 task_id 字典序,busy 跳过)+ review_decision(内联投票公式:Pass 结算/Fail 达上限升级否则结算/Undecided 停摆升级否则首次送审)+ (task_id,round) 去重键;13 测试

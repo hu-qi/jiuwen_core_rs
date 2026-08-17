@@ -26,6 +26,7 @@ use ah_plugins_dataset_curator::DatasetCuratorPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
 use ah_plugins_experience_scorer::ExperienceScorerPlugin;
 use ah_plugins_external::ExternalCliPlugin;
+use ah_plugins_external_format::ExternalFormatPlugin;
 use ah_plugins_git::GitPlugin;
 use ah_plugins_graph_memory::GraphMemoryPlugin;
 use ah_plugins_inbound_render::InboundRenderPlugin;
@@ -68,7 +69,9 @@ use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_subagents::SubagentsPlugin;
 use ah_plugins_symphony::SymphonyPlugin;
 use ah_plugins_sysop::SysopPlugin;
+use ah_plugins_team_context_text::TeamContextTextPlugin;
 use ah_plugins_team_dispatch::TeamDispatchPlugin;
+use ah_plugins_team_i18n::TeamI18nPlugin;
 use ah_plugins_team_message::TeamMessagePlugin;
 use ah_plugins_team_monitor::TeamMonitorPlugin;
 use ah_plugins_team_pool::TeamPoolPlugin;
@@ -322,6 +325,18 @@ pub fn plugin_catalog(
         (
             "ah-plugins-roster-diff",
             Arc::new(RosterDiffPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-i18n",
+            Arc::new(TeamI18nPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-context-text",
+            Arc::new(TeamContextTextPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-external-format",
+            Arc::new(ExternalFormatPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",

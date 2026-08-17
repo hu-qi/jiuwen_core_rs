@@ -71,6 +71,9 @@ ah-plugins-inbound-render = { workspace = true }
 ah-plugins-timefmt = { workspace = true }
 ah-plugins-team-scheduler = { workspace = true }
 ah-plugins-roster-diff = { workspace = true }
+ah-plugins-team-i18n = { workspace = true }
+ah-plugins-team-context-text = { workspace = true }
+ah-plugins-external-format = { workspace = true }
 ah-plugins-runner = { workspace = true }
 ah-plugins-subagents = { workspace = true }
 ah-plugins-skill = { workspace = true }
