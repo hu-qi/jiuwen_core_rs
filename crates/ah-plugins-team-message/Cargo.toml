@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-team-message"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real two-phase team message rendering: intent meta {template,refs,params} -> single-pass {{ns.field}} substitution with whitelists"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"

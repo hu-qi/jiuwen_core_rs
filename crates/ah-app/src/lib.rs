@@ -67,6 +67,7 @@ use ah_plugins_subagents::SubagentsPlugin;
 use ah_plugins_symphony::SymphonyPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_team_dispatch::TeamDispatchPlugin;
+use ah_plugins_team_message::TeamMessagePlugin;
 use ah_plugins_team_monitor::TeamMonitorPlugin;
 use ah_plugins_team_pool::TeamPoolPlugin;
 use ah_plugins_team_skill::TeamSkillPlugin;
@@ -297,6 +298,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-verdict",
             Arc::new(TeamVerdictPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-message",
+            Arc::new(TeamMessagePlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",

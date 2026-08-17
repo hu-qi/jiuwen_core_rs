@@ -65,6 +65,7 @@ pub mod subagents;
 pub mod swarm;
 pub mod symphony;
 pub mod team_dispatch;
+pub mod team_message;
 pub mod team_monitor;
 pub mod team_pool;
 pub mod team_skill;

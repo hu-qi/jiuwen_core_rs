@@ -2,13 +2,16 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 372 tests / 67 crates,clippy -D warnings 0,fmt clean。
+> 当前 378 tests / 68 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 68 回合,372 tests / clippy 0 / fmt clean):
+> **账目更新**(第 69 回合,378 tests / clippy 0 / fmt clean):
+> - 团队消息两阶段渲染 ah-plugins-team-message(1:1 对齐 openjiuwen/agent_teams/message_template.py,F_63):team-message 契约(TaskView/MemberView 字段白名单投影/MessageMeta{template,refs,params}/ExpandedMessage{body,is_template}/RefUnresolved/TeamMessage trait(5 方法)+ TEAM_MESSAGE key);meta 解析(空/畸形/无 template 键 → None 普通消息)/build_meta(params 字符串化)/fallback_line(带 task_id 与不带);单遍 {{ns.field}} 替换(手写扫描,{{ ns.field }} 空白容忍,替换值永不二次扫描,未知 ns/字段 → <missing:ns.field>);expand(普通透传/模板渲染/引用行缺失降级 fallback);6 测试
+>
+**账目更新**(第 68 回合,372 tests / clippy 0 / fmt clean):
 > - 审查投票判定 ah-plugins-team-verdict(1:1 对齐 openjiuwen/agent_teams/agent/scheduling/verdict.py,调度器决策核心 F_62):team-verdict 契约(Verdict(Pass/Fail/Undecided)+ TeamVerdict trait(quorum/judge)+ TEAM_VERDICT key);纯函数投票数学 — quorum=ceil(threshold×reviewer_count);pass_count≥quorum → PASS;fail_count>reviewer_count−quorum(quorum 不可达,决定性迟票即败)→ FAIL;否则 UNDECIDED;reviewer_count≤0 → UNDECIDED;单评审 2/3 阈值退化为首票即定;非法阈值(非有限/≤0)防御 quorum=0;5 测试
 >
 **账目更新**(第 67 回合,367 tests / clippy 0 / fmt clean):
