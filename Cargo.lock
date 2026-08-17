@@ -23,6 +23,7 @@ dependencies = [
  "ah-plugins-evolving",
  "ah-plugins-experience-scorer",
  "ah-plugins-external",
+ "ah-plugins-external-format",
  "ah-plugins-git",
  "ah-plugins-graph-memory",
  "ah-plugins-inbound-render",
@@ -58,7 +59,9 @@ dependencies = [
  "ah-plugins-subagents",
  "ah-plugins-symphony",
  "ah-plugins-sysop",
+ "ah-plugins-team-context-text",
  "ah-plugins-team-dispatch",
+ "ah-plugins-team-i18n",
  "ah-plugins-team-message",
  "ah-plugins-team-monitor",
  "ah-plugins-team-pool",
@@ -302,6 +305,17 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-external-format"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-inbound-render",
+ "ah-plugins-timefmt",
+ "serde_json",
 ]
 
 [[package]]
@@ -724,11 +738,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-team-context-text"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
 name = "ah-plugins-team-dispatch"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+]
+
+[[package]]
+name = "ah-plugins-team-i18n"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]

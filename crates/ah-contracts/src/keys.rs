@@ -159,3 +159,6 @@ pub const INBOUND_RENDER: ServiceKey = ServiceKey::new("inbound-render");
 pub const TIMEFMT: ServiceKey = ServiceKey::new("timefmt");
 pub const TEAM_SCHEDULER: ServiceKey = ServiceKey::new("team-scheduler");
 pub const ROSTER_DIFF: ServiceKey = ServiceKey::new("roster-diff");
+pub const TEAM_I18N: ServiceKey = ServiceKey::new("team-i18n");
+pub const TEAM_CONTEXT_TEXT: ServiceKey = ServiceKey::new("team-context-text");
+pub const EXTERNAL_FORMAT: ServiceKey = ServiceKey::new("external-format");
