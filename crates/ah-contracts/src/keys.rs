@@ -164,3 +164,5 @@ pub const TEAM_CONTEXT_TEXT: ServiceKey = ServiceKey::new("team-context-text");
 pub const EXTERNAL_FORMAT: ServiceKey = ServiceKey::new("external-format");
 pub const INTERACTION_ROUTER: ServiceKey = ServiceKey::new("interaction-router");
 pub const SCHEDULER_RENDER: ServiceKey = ServiceKey::new("scheduler-render");
+pub const MODEL_ALLOCATOR: ServiceKey = ServiceKey::new("model-allocator");
+pub const TEAM_JOIN_DESCRIPTOR: ServiceKey = ServiceKey::new("team-join-descriptor");

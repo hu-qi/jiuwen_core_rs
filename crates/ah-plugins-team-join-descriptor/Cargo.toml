@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-team-join-descriptor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real external team-join descriptor: JSON/env serialization + validation"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"

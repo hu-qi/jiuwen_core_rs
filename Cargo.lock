@@ -33,6 +33,7 @@ dependencies = [
  "ah-plugins-member-optimizer",
  "ah-plugins-memory",
  "ah-plugins-mock",
+ "ah-plugins-model-allocator",
  "ah-plugins-model-catalog",
  "ah-plugins-oauth",
  "ah-plugins-openai",
@@ -64,6 +65,7 @@ dependencies = [
  "ah-plugins-team-context-text",
  "ah-plugins-team-dispatch",
  "ah-plugins-team-i18n",
+ "ah-plugins-team-join-descriptor",
  "ah-plugins-team-message",
  "ah-plugins-team-monitor",
  "ah-plugins-team-pool",
@@ -427,6 +429,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-model-allocator"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
 name = "ah-plugins-model-catalog"
 version = "0.1.0"
 dependencies = [
@@ -776,6 +787,15 @@ dependencies = [
 
 [[package]]
 name = "ah-plugins-team-i18n"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-team-join-descriptor"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",
