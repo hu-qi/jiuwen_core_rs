@@ -30,6 +30,7 @@ use ah_plugins_external_format::ExternalFormatPlugin;
 use ah_plugins_git::GitPlugin;
 use ah_plugins_graph_memory::GraphMemoryPlugin;
 use ah_plugins_inbound_render::InboundRenderPlugin;
+use ah_plugins_interaction_router::InteractionRouterPlugin;
 use ah_plugins_json_parser::JsonParserPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_member_optimizer::MemberOptimizerPlugin;
@@ -57,6 +58,7 @@ use ah_plugins_rsi::analyzer::AnalyzerPlugin;
 use ah_plugins_rsi::single_harness::SingleHarnessPlugin;
 use ah_plugins_runner::RunnerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
+use ah_plugins_scheduler_render::SchedulerRenderPlugin;
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_sharing::{LocalSharingBackend, SharingPlugin};
@@ -337,6 +339,14 @@ pub fn plugin_catalog(
         (
             "ah-plugins-external-format",
             Arc::new(ExternalFormatPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-interaction-router",
+            Arc::new(InteractionRouterPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-scheduler-render",
+            Arc::new(SchedulerRenderPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",
