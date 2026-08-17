@@ -2,13 +2,19 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 378 tests / 68 crates,clippy -D warnings 0,fmt clean。
+> 当前 425 tests / 72 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 69 回合,378 tests / clippy 0 / fmt clean):
+> **账目更新**(第 70 回合,425 tests / clippy 0 / fmt clean,4 任务并行子代理):
+> - 入站 XML 渲染 ah-plugins-inbound-render(1:1 对齐 inbound_render.py:F_46/F_72):<team-inbound(从·消息id·type·time·for=controller)/team-event(kind 最前·task_id)/team-context> + <team-note> 嵌套最后子元素(双全才渲染)+ 手写 XML 转义(body 保留引号/属性转义引号)+ 快照判定(task-board 类,只留最新整条剔除);18 测试
+> - 时间渲染 ah-plugins-timefmt(1:1 对齐 timefmt.py):相对桶(负数/<10s→刚刚;秒/分/时/天)+ 手写 civil 算法绝对时间(负数 epoch/闰日)+ 时区(注入偏移确定性;默认 date +%z→TZ 解析→显式降级 UTC);11 测试
+> - 调度扫描核心 ah-plugins-team-scheduler(1:1 对齐 scheduler.py 纯决策):pick_starts(每成员最早 PENDING(assignee),updated_at 升序同则 task_id 字典序,busy 跳过)+ review_decision(内联投票公式:Pass 结算/Fail 达上限升级否则结算/Undecided 停摆升级否则首次送审)+ (task_id,round) 去重键;13 测试
+> - 名册 diff ah-plugins-roster-diff(1:1 对齐 prompts/messages.py):joined/left/changed(仅跟踪 display_name/desc/role)+ format_member_line([human]/[prefix])+ 快照/增量双语正文(空→None);5 测试
+>
+**账目更新**(第 69 回合,378 tests / clippy 0 / fmt clean):
 > - 团队消息两阶段渲染 ah-plugins-team-message(1:1 对齐 openjiuwen/agent_teams/message_template.py,F_63):team-message 契约(TaskView/MemberView 字段白名单投影/MessageMeta{template,refs,params}/ExpandedMessage{body,is_template}/RefUnresolved/TeamMessage trait(5 方法)+ TEAM_MESSAGE key);meta 解析(空/畸形/无 template 键 → None 普通消息)/build_meta(params 字符串化)/fallback_line(带 task_id 与不带);单遍 {{ns.field}} 替换(手写扫描,{{ ns.field }} 空白容忍,替换值永不二次扫描,未知 ns/字段 → <missing:ns.field>);expand(普通透传/模板渲染/引用行缺失降级 fallback);6 测试
 >
 **账目更新**(第 68 回合,372 tests / clippy 0 / fmt clean):

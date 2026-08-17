@@ -28,6 +28,7 @@ use ah_plugins_experience_scorer::ExperienceScorerPlugin;
 use ah_plugins_external::ExternalCliPlugin;
 use ah_plugins_git::GitPlugin;
 use ah_plugins_graph_memory::GraphMemoryPlugin;
+use ah_plugins_inbound_render::InboundRenderPlugin;
 use ah_plugins_json_parser::JsonParserPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_member_optimizer::MemberOptimizerPlugin;
@@ -49,6 +50,7 @@ use ah_plugins_rerank::RerankPlugin;
 use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rl::RlPlugin;
 use ah_plugins_rl_step::RlStepPlugin;
+use ah_plugins_roster_diff::RosterDiffPlugin;
 use ah_plugins_rsi::RsiPlugin;
 use ah_plugins_rsi::analyzer::AnalyzerPlugin;
 use ah_plugins_rsi::single_harness::SingleHarnessPlugin;
@@ -70,11 +72,13 @@ use ah_plugins_team_dispatch::TeamDispatchPlugin;
 use ah_plugins_team_message::TeamMessagePlugin;
 use ah_plugins_team_monitor::TeamMonitorPlugin;
 use ah_plugins_team_pool::TeamPoolPlugin;
+use ah_plugins_team_scheduler::TeamSchedulerPlugin;
 use ah_plugins_team_skill::TeamSkillPlugin;
 use ah_plugins_team_status::TeamStatusPlugin;
 use ah_plugins_team_verdict::TeamVerdictPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
 use ah_plugins_telemetry::TelemetryPlugin;
+use ah_plugins_timefmt::TimefmtPlugin;
 use ah_plugins_tokenizer::TokenizerPlugin;
 use ah_plugins_tools::ToolsPlugin;
 use ah_plugins_trainer::TrainerPlugin;
@@ -302,6 +306,22 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-message",
             Arc::new(TeamMessagePlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-inbound-render",
+            Arc::new(InboundRenderPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-timefmt",
+            Arc::new(TimefmtPlugin::new()) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-scheduler",
+            Arc::new(TeamSchedulerPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-roster-diff",
+            Arc::new(RosterDiffPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",
