@@ -2,13 +2,17 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 485 tests / 77 crates,clippy -D warnings 0,fmt clean。
+> 当前 519 tests / 79 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 72 回合,485 tests / clippy 0 / fmt clean,2 任务并行):
+> **账目更新**(第 73 回合,519 tests / clippy 0 / fmt clean,2 任务并行):
+> - 模型分配器 ah-plugins-model-allocator(1:1 对齐 models/allocator.py):RoundRobin(池序轮转/group_index)/ByModelName(分组组内轮转,counters 用 list 避点号键问题,legacy dict 兼容)/Router(唯一映射,无 hint 首项,空池/重名构造 Err)/IntelliRouter(Router 语义 + provider·deployments 校验 Err)+ build_allocator 工厂 + resolve_member_model(纯位置查找,组缩小回 0)+ state_dict/load_state_dict(digest 不匹配归零);20 测试
+> - 团队加入描述符 ah-plugins-team-join-descriptor(1:1 对齐 external/descriptor.py):TeamJoinDescriptor(session/team/member 必填,role/scope/language/dispatch_mode/teammate_mode/db/transport 默认)+ to_json/to_env/from_json/from_env(缺键/坏值显式 Err)+ 枚举 serde snake_case;14 测试
+>
+**账目更新**(第 72 回合,485 tests / clippy 0 / fmt clean,2 任务并行):
 > - 交互语法解析 ah-plugins-interaction-router(1:1 对齐 interaction/router.py):parse_mention(@target body)/保留名校验(user·team_leader·human_agent)/parse_interact_str(# god-view、$name avatar-drive(含 (?=@) 无空格写法)、@member 定向、@all/@* 广播覆盖列名收件人、@m1 @m2 多播 fan-out 保序、无前缀缺省 #、#hashtag 非频道)+ resolve_targets(严格匹配 member_exists,未知 mention 折回单条无定向消息保留原文);16 测试
 > - 调度消息组装 ah-plugins-scheduler-render(1:1 对齐 scheduling/render.py):meta_task_start(planning 挑 plan 模板)/meta_review_request/renudge/verified_report(refs={task})/meta_rework(params={max_rounds,feedback},空反馈兜底 "无")/format_fail_feedback(- reviewer: feedback 逐行);MessageMeta 构造复用 team_message 契约;10 测试
 >

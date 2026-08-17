@@ -76,6 +76,8 @@ ah-plugins-team-context-text = { workspace = true }
 ah-plugins-external-format = { workspace = true }
 ah-plugins-interaction-router = { workspace = true }
 ah-plugins-scheduler-render = { workspace = true }
+ah-plugins-model-allocator = { workspace = true }
+ah-plugins-team-join-descriptor = { workspace = true }
 ah-plugins-runner = { workspace = true }
 ah-plugins-subagents = { workspace = true }
 ah-plugins-skill = { workspace = true }

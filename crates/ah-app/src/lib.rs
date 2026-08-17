@@ -36,6 +36,7 @@ use ah_plugins_mcp::McpPlugin;
 use ah_plugins_member_optimizer::MemberOptimizerPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_mock::MockPlugin;
+use ah_plugins_model_allocator::ModelAllocatorPlugin;
 use ah_plugins_model_catalog::ModelCatalogPlugin;
 use ah_plugins_oauth::OAuthPlugin;
 use ah_plugins_openai::OpenAiPlugin;
@@ -59,6 +60,8 @@ use ah_plugins_rsi::single_harness::SingleHarnessPlugin;
 use ah_plugins_runner::RunnerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
 use ah_plugins_scheduler_render::SchedulerRenderPlugin;
+use ah_plugins_team_join_descriptor::TeamJoinDescriptorPlugin;
+
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_sharing::{LocalSharingBackend, SharingPlugin};
@@ -347,6 +350,14 @@ pub fn plugin_catalog(
         (
             "ah-plugins-scheduler-render",
             Arc::new(SchedulerRenderPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-model-allocator",
+            Arc::new(ModelAllocatorPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-join-descriptor",
+            Arc::new(TeamJoinDescriptorPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",
