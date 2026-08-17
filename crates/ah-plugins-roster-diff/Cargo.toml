@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-roster-diff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real team roster diff + message-body rendering: joined/left/changed by member_name key, snapshot/delta bilingual text"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

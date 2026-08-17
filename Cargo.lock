@@ -25,6 +25,7 @@ dependencies = [
  "ah-plugins-external",
  "ah-plugins-git",
  "ah-plugins-graph-memory",
+ "ah-plugins-inbound-render",
  "ah-plugins-json-parser",
  "ah-plugins-mcp",
  "ah-plugins-member-optimizer",
@@ -43,6 +44,7 @@ dependencies = [
  "ah-plugins-retrieval",
  "ah-plugins-rl",
  "ah-plugins-rl-step",
+ "ah-plugins-roster-diff",
  "ah-plugins-rsi",
  "ah-plugins-runner",
  "ah-plugins-sandbox",
@@ -60,11 +62,13 @@ dependencies = [
  "ah-plugins-team-message",
  "ah-plugins-team-monitor",
  "ah-plugins-team-pool",
+ "ah-plugins-team-scheduler",
  "ah-plugins-team-skill",
  "ah-plugins-team-status",
  "ah-plugins-team-verdict",
  "ah-plugins-teams",
  "ah-plugins-telemetry",
+ "ah-plugins-timefmt",
  "ah-plugins-tokenizer",
  "ah-plugins-tools",
  "ah-plugins-trainer",
@@ -324,6 +328,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-inbound-render"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
 name = "ah-plugins-json-parser"
 version = "0.1.0"
 dependencies = [
@@ -529,6 +542,14 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-roster-diff"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
 ]
 
 [[package]]
@@ -744,6 +765,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-team-scheduler"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
 name = "ah-plugins-team-skill"
 version = "0.1.0"
 dependencies = [
@@ -806,6 +836,15 @@ dependencies = [
  "serde_json",
  "tokio",
  "ureq",
+]
+
+[[package]]
+name = "ah-plugins-timefmt"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]

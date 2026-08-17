@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-timefmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real epoch-ms to human time rendering: absolute local time + relative bucket (just now/seconds/minutes/hours/days)"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"
