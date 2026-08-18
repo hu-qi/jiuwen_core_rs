@@ -44,6 +44,7 @@ use ah_plugins_operator::OperatorPlugin;
 use ah_plugins_optimizer::OptimizerPlugin;
 use ah_plugins_pregel::PregelPlugin;
 use ah_plugins_prompt::PromptPlugin;
+use ah_plugins_prompt_attachment::PromptAttachmentPlugin;
 use ah_plugins_queue::QueuePlugin;
 use ah_plugins_queue::redis_queue::RedisQueuePlugin;
 use ah_plugins_rails::{
@@ -61,6 +62,7 @@ use ah_plugins_runner::RunnerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
 use ah_plugins_scheduler_render::SchedulerRenderPlugin;
 use ah_plugins_team_join_descriptor::TeamJoinDescriptorPlugin;
+use ah_plugins_team_task_status::TeamTaskStatusPlugin;
 
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
@@ -358,6 +360,14 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-join-descriptor",
             Arc::new(TeamJoinDescriptorPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-task-status",
+            Arc::new(TeamTaskStatusPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-prompt-attachment",
+            Arc::new(PromptAttachmentPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",

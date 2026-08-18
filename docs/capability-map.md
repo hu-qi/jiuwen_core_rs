@@ -93,7 +93,7 @@
 | external(95) | `external` seam + ah-plugins-external + `external-format` seam + ah-plugins-external-format | 外部 CLI agent、SSH、入站渲染 | 子进程运行时已落地(流式 stdin + 单发 argv,adapter 启动知识/完成标记/steer/abort);外部入站渲染已落地(本回合并行:组合 inbound-render + timefmt — <team-inbound> + reply-hint/hitt-silence note、框架模板 body 去 hint、任务看板行/看板(<team-event kind=\"task-board\"> 过滤终态、角色化标题));交互语法解析已落地(本回合并行:#/$/@member 前缀 → typed payloads、@all 广播、未知 mention 折回);团队加入描述符已落地(本回合并行:TeamJoinDescriptor JSON/env 序列化 + 校验);SSH 留待后续 |
 | workflow(148) | ah-plugins-teams-workflow | swarmflow 引擎(phase/agent 并行 barrier/预算/事件流/journal 续跑) | 已落地(本回合,SwarmflowEngine,worker=SubagentRuntime) |
 | residual.rs 资产 | ah-plugins-teams | NativeTaskBoard/Journal/BudgetLedger/检测器 | 接入运行路径(现仅测试引用)
-| kv_cache/memory/monitor/models/rails/skill/prompts/cli/harness | 各插件 | 对应功能 | monitor 已落地(本回合:ah-plugins-team-monitor 只读团队/任务/消息视图 + teams/task 事件日志);models 已落地(本回合并行:模型分配器 4 策略 + resolve_member_model);kv_cache/memory 等留待后续 |
+| kv_cache/memory/monitor/models/rails/skill/prompts/cli/harness | 各插件 | 对应功能 | monitor 已落地(本回合:ah-plugins-team-monitor 只读团队/任务/消息视图 + teams/task 事件日志);models 已落地(本回合并行:模型分配器 4 策略 + resolve_member_model);kv_cache 等留待后续 |
 
 ### 2.4 agent_evolving(602 符号)
 

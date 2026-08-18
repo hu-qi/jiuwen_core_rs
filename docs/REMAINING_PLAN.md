@@ -2,13 +2,17 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 519 tests / 79 crates,clippy -D warnings 0,fmt clean。
+> 当前 552 tests / 81 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
-> **账目更新**(第 73 回合,519 tests / clippy 0 / fmt clean,2 任务并行):
+> **账目更新**(第 74 回合,552 tests / clippy 0 / fmt clean,2 任务并行):
+> - 任务状态机 ah-plugins-team-task-status(1:1 对齐 schema/status.py TaskStatus):TaskStatus 7 态 + 迁移表(Pending→Planning/InProgress/Blocked/Cancelled;Blocked→Pending/Cancelled;Planning 自环(rework)+InProgress/Pending/Blocked/Cancelled;InProgress→InReview/Completed(reviewer 有无)/rework 回 Pending·Blocked·Cancelled;InReview→Completed/InProgress(verify fail rework)/Pending/Cancelled;Completed·Cancelled 无出边)+ is_terminal;12 测试
+> - prompt 附件核心 ah-plugins-prompt-attachment(1:1 对齐 harness/prompts/prompt_attachment_manager.py 纯函数部分):PromptAttachment 数据模型(kind 10 种/priority=100/content_kind=text/plain 默认)+ 自实现 sha256(FIPS 180-4,已知向量/NIST 边界/百万 a 验证)+ content_sha256/hash_rendered/hash_attachment(排除 content_sha256·created_at·updated_at 的 canonical JSON 语义哈希,与 Python 精确向量对拍)+ safe_id_part(非法替换/strip/80 截断/全非法 12 位哈希/空 fallback);21 测试
+>
+**账目更新**(第 73 回合,519 tests / clippy 0 / fmt clean,2 任务并行):
 > - 模型分配器 ah-plugins-model-allocator(1:1 对齐 models/allocator.py):RoundRobin(池序轮转/group_index)/ByModelName(分组组内轮转,counters 用 list 避点号键问题,legacy dict 兼容)/Router(唯一映射,无 hint 首项,空池/重名构造 Err)/IntelliRouter(Router 语义 + provider·deployments 校验 Err)+ build_allocator 工厂 + resolve_member_model(纯位置查找,组缩小回 0)+ state_dict/load_state_dict(digest 不匹配归零);20 测试
 > - 团队加入描述符 ah-plugins-team-join-descriptor(1:1 对齐 external/descriptor.py):TeamJoinDescriptor(session/team/member 必填,role/scope/language/dispatch_mode/teammate_mode/db/transport 默认)+ to_json/to_env/from_json/from_env(缺键/坏值显式 Err)+ 枚举 serde snake_case;14 测试
 >
