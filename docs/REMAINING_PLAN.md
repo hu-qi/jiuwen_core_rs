@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 672 tests / 88 crates,clippy -D warnings 0,fmt clean。
+> 当前 692 tests / 89 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 86 回合,692 tests / clippy 0 / fmt clean,3 子代理 + 协调者接手):
+> - 工具元数据 ah-plugins-tools-metadata(新 crate,1:1 对齐 harness/prompts/tools/*.py 结构):27 个内置工具的双语描述 + 参数 schema(basic:bash/code/read_file/write_file/edit_file/glob/list_files/grep/powershell/free_search/paid_search/fetch_webpage/search_tools;memory_tools:memory/coding_memory/compression_recall/session_tools/todo/task_tool/goal;special:cron/ask_user/agent_mode/mcp/skill_tool/list_skill/load_tools/lsp_tool),全部经 validate_provider 双语完整性校验;20 测试;描述为与 Python 结构对齐的摘要版,逐字完整素材留待后续
 >
 > **账目更新**(第 85 回合,672 tests / clippy 0 / fmt clean,协调者实现):
 > - 工具元数据契约 ah-contracts += ToolMetadata + validate_provider(1:1 对齐 harness/prompts/tools/base.py):ToolMetadata(name/description_cn/en/params_cn/en/idempotent);validate_provider 双语完整性校验(description 非空 + schema object(properties/required)+ properties key 集合一致 + 递归嵌套 properties/items description 校验);7 测试;工具描述素材生成与 provider 实现留待后续

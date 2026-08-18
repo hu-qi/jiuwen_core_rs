@@ -76,7 +76,7 @@
 
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
-| tools(638 符号/117 文件) | `tools` seam + ah-plugins-harness-tools | 浏览器/web/LSP/shell/fs/mcp/多模态/移动 GUI | web_fetch / run_code 真实工具已注册(agent 可调用);browser/lsp 需外部进程 |
+| tools(638 符号/117 文件) | `tools` seam + ah-plugins-harness-tools + ah-plugins-tools-metadata | 浏览器/web/LSP/shell/fs/mcp/多模态/移动 GUI | web_fetch / run_code 真实工具已注册(agent 可调用);工具元数据已落地(本回合:ToolMetadataProvider 契约 + 27 个工具的双语描述/参数 schema 元数据 provider(bash/code/fs 系列/搜索系列/记忆系列/cron/ask_user 等),validate_provider 全量校验);browser/lsp 需外部进程 |
 | rails(143/57 文件) | 事件监听器(waterfall) | 规划/完成/心跳/重试/LSP/MCP/渐进工具 等 | ShellGuard + PathGuard + ToolBudget + 渐进披露 ApprovalRail(本回合,tool-approval seam,批准集持久化)已落地;其余按需补充 |
 | subagents(24/8 文件) | `subagents` seam + ah-plugins-subagents | code/research/plan/verify + browser/mobile | code/research/plan/verify 已落地(本回合:类型提示 + 工具白名单真实强制);browser/mobile 留待后续 |
 | cli(113/19 文件) | ah-plugins-cli | REPL、会话存储、渲染 | 已落地(本回合:Claude Code 风格渲染器 ● Tool(args)/⎿ 摘要/☑☐ todo checkbox/⚙ 消息,事件→块投影,CLI 实时渲染;REPL+会话存储先前已落地)

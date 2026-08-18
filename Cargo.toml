@@ -48,6 +48,7 @@ members = [
     "crates/ah-plugins-stream",
     "crates/ah-plugins-tag-manager",
     "crates/ah-plugins-memory-lite",
+    "crates/ah-plugins-tools-metadata",
     "crates/ah-plugins-reliability-burst",
     "crates/ah-plugins-reliability-tools",
     "crates/ah-plugins-reliability-monitor",
@@ -144,6 +145,7 @@ ah-plugins-prompt-builder = { path = "crates/ah-plugins-prompt-builder" }
 ah-plugins-stream = { path = "crates/ah-plugins-stream" }
 ah-plugins-tag-manager = { path = "crates/ah-plugins-tag-manager" }
 ah-plugins-memory-lite = { path = "crates/ah-plugins-memory-lite" }
+ah-plugins-tools-metadata = { path = "crates/ah-plugins-tools-metadata" }
 ah-plugins-reliability-burst = { path = "crates/ah-plugins-reliability-burst" }
 ah-plugins-reliability-tools = { path = "crates/ah-plugins-reliability-tools" }
 ah-plugins-reliability-monitor = { path = "crates/ah-plugins-reliability-monitor" }
