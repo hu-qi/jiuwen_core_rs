@@ -104,3 +104,90 @@ impl WriteResult {
         serde_json::Value::Object(m)
     }
 }
+/// 记忆配置(对齐 MemorySettings;默认值与 Python 完全一致)。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MemorySettings {
+    pub model: String,
+    pub sources: Vec<String>,
+    pub extra_paths: Vec<String>,
+    pub chunking_tokens: usize,
+    pub chunking_overlap: usize,
+    pub query_max_results: usize,
+    pub query_min_score: f64,
+    pub hybrid_enabled: bool,
+    pub hybrid_vector_weight: f64,
+    pub hybrid_text_weight: f64,
+    pub hybrid_candidate_multiplier: f64,
+    pub store_path: String,
+    pub vector_enabled: bool,
+    pub fts_enabled: bool,
+    pub sync_watch: bool,
+    pub sync_watch_debounce_ms: u64,
+    pub sync_on_search: bool,
+    pub sync_on_session_start: bool,
+    pub sync_interval_minutes: u64,
+    pub cache_enabled: bool,
+    pub cache_max_entries: usize,
+}
+
+impl Default for MemorySettings {
+    fn default() -> Self {
+        Self {
+            model: "text-embedding-v3".to_string(),
+            sources: vec!["memory".to_string(), "sessions".to_string()],
+            extra_paths: Vec::new(),
+            chunking_tokens: 256,
+            chunking_overlap: 32,
+            query_max_results: 10,
+            query_min_score: 0.3,
+            hybrid_enabled: true,
+            hybrid_vector_weight: 0.7,
+            hybrid_text_weight: 0.3,
+            hybrid_candidate_multiplier: 2.0,
+            store_path: "memory.db".to_string(),
+            vector_enabled: true,
+            fts_enabled: true,
+            sync_watch: true,
+            sync_watch_debounce_ms: 2000,
+            sync_on_search: true,
+            sync_on_session_start: true,
+            sync_interval_minutes: 0,
+            cache_enabled: true,
+            cache_max_entries: 10000,
+        }
+    }
+}
+
+impl MemorySettings {
+    /// 应用覆盖(对齐 create_memory_settings 的 **overrides;未知键忽略)。
+    pub fn with_overrides(&self, overrides: &[(&str, serde_json::Value)]) -> Self {
+        let mut out = self.clone();
+        for (key, value) in overrides {
+            match *key {
+                "model" => {
+                    if let Some(v) = value.as_str() {
+                        out.model = v.to_string();
+                    }
+                }
+                "sources" => {
+                    if let Some(v) = value.as_array() {
+                        out.sources = v
+                            .iter()
+                            .filter_map(|x| x.as_str().map(String::from))
+                            .collect();
+                    }
+                }
+                "extra_paths" => {
+                    if let Some(v) = value.as_array() {
+                        out.extra_paths = v
+                            .iter()
+                            .filter_map(|x| x.as_str().map(String::from))
+                            .collect();
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+}

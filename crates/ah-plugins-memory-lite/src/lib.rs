@@ -96,6 +96,14 @@ pub fn extract_body(content: &str) -> String {
     content[end + 3..].trim().to_string()
 }
 
+/// 记忆是否启用(对齐 is_memory_enabled;MEMORY_ENABLED env,默认 true)。
+pub fn is_memory_enabled() -> bool {
+    match std::env::var("MEMORY_ENABLED") {
+        Ok(v) => matches!(v.trim().to_lowercase().as_str(), "true" | "1" | "yes"),
+        Err(_) => true,
+    }
+}
+
 /// 前台服务(供插件注册;frontmatter 为纯函数,此处聚合 API)。
 pub struct MemoryLiteService;
 
@@ -107,6 +115,11 @@ impl MemoryLiteService {
         let fm = parse_frontmatter(content)?;
         let (ok, _) = validate_frontmatter(&fm);
         if ok { Some(fm) } else { None }
+    }
+
+    /// 默认记忆配置。
+    pub fn default_settings() -> ah_contracts::memory_lite::MemorySettings {
+        ah_contracts::memory_lite::MemorySettings::default()
     }
 }
 
@@ -201,6 +214,40 @@ mod tests {
     fn extract_body_without_frontmatter_returns_all() {
         assert_eq!(extract_body("plain body"), "plain body");
         assert_eq!(extract_body("---\na: b\n---\n\nBODY"), "BODY");
+    }
+
+    #[test]
+    fn memory_settings_defaults_match_python() {
+        let s = ah_contracts::memory_lite::MemorySettings::default();
+        assert_eq!(s.model, "text-embedding-v3");
+        assert_eq!(
+            s.sources,
+            vec!["memory".to_string(), "sessions".to_string()]
+        );
+        assert_eq!(s.chunking_tokens, 256);
+        assert_eq!(s.chunking_overlap, 32);
+        assert_eq!(s.query_max_results, 10);
+        assert_eq!(s.query_min_score, 0.3);
+        assert!(s.hybrid_enabled);
+        assert_eq!(s.hybrid_vector_weight, 0.7);
+        assert_eq!(s.hybrid_text_weight, 0.3);
+        assert_eq!(s.store_path, "memory.db");
+        assert_eq!(s.sync_watch_debounce_ms, 2000);
+        assert_eq!(s.cache_max_entries, 10000);
+    }
+
+    #[test]
+    fn memory_settings_with_overrides() {
+        use ah_contracts::memory_lite::MemorySettings;
+        let base = MemorySettings::default();
+        let overridden = base.with_overrides(&[
+            ("model", serde_json::json!("custom-model")),
+            ("sources", serde_json::json!(["a", "b"])),
+            ("unknown_key", serde_json::json!(42)),
+        ]);
+        assert_eq!(overridden.model, "custom-model");
+        assert_eq!(overridden.sources, vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(overridden.chunking_tokens, 256); // untouched
     }
 
     #[test]
