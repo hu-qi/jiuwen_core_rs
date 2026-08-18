@@ -46,6 +46,7 @@ use ah_plugins_pregel::PregelPlugin;
 use ah_plugins_prompt::PromptPlugin;
 use ah_plugins_prompt_attachment::PromptAttachmentPlugin;
 use ah_plugins_prompt_builder::PromptBuilderPlugin;
+use ah_plugins_stream::StreamPlugin;
 use ah_plugins_queue::QueuePlugin;
 use ah_plugins_queue::redis_queue::RedisQueuePlugin;
 use ah_plugins_rails::{
@@ -376,6 +377,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-prompt-builder",
             Arc::new(PromptBuilderPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-stream",
+            Arc::new(StreamPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-reliability-burst",

@@ -63,7 +63,7 @@
 | controller(57 类) | `controller` seam + ah-plugins-controller | 任务调度/执行器/意图识别 | 已落地(本回合:任务 CRUD/状态机/优先级/父子层级防环;执行器注册表 + 同会话冲突拒绝;确定性意图识别;LLM 意图留待后续) |
 | operator(8 类) | `operator` seam + ah-plugins-operator | LLM/Tool/Memory/Skill 算子 | 已落地(本回合:自进化参数句柄,LLM/tool/memory/skill 四算子 + freeze 检查 + 回调同步 + 检查点) |
 | runner(46 类) | `runner` seam + ah-plugins-runner | 回调链、资源管理、取消、超时 | 已落地(本回合:优先级降序执行 + retry/timeout/break/rollback 逆序回滚 + CallbackMetrics;资源管理/取消留待后续) |
-| session(38 类) | `sessions` seam + ah-plugins-session-log | 检查点、VCS/fork/restore、tracer | append-only 日志重建 + fork/checkpoint/restore 已落地(本回合) |
+| session(38 类) | `sessions` seam + ah-plugins-session-log + `stream` seam + ah-plugins-stream | 检查点、VCS/fork/restore、tracer、流式输出 | append-only 日志重建 + fork/checkpoint/restore 已落地;stream schema 契约已落地(本回合:StreamMode/OutputSchema/TraceSchema/CustomSchema/TeamOutputSchema + StreamError);流管道已落地(本回合:AsyncStreamQueue(tokio mpsc 有界队列 + 发送重试/接收超时/关闭排空)+ StreamEmitter(END_FRAME 哨兵)+ StreamWriterManager(默认 writer + stream_output 消费)+ StreamWriter(Output/Trace/Custom 校验发射)) |
 | context_engine(72 文件) | `context` seam + `tokenizer` seam | 压缩、offload、token 预算、reinjection | 已实现(ah-plugins-context:预算组装/摘录压缩+LLM 总结/offload JSONL/reinject;精确 tokenizer 已落地(BPE-lite + CJK 感知,注册后 estimate_tokens 用精确计数));向量化留待后续 |
 | memory(104 文件) | `memory` seam + ah-plugins-graph-memory | graph/lite/coding 记忆、外部 provider | 图记忆已落地(本回合:确定性实体抽取 + 共现关系 + episode + JSONL 持久化 + 关键词检索/邻居遍历 + graph_* 工具);lite/coding 与外部 provider 留待后续 |
 | retrieval(84 文件) | `retrieval` seam | indexing/embedding/reranker/vector store/retriever | BM25 + 本地确定性向量(哈希 n-gram TF + 余弦)已落地;reranker 本地确定性融合重排已落地(ah-plugins-rerank:词法+向量归一化加权融合 + 多样性惩罚);外部模型 embedding 留待后续 |

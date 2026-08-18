@@ -103,6 +103,30 @@ impl TeamOutputSchema {
         }
     }
 }
+/// stream 错误(对齐 session/stream 的错误语义;code 为稳定错误码)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StreamError {
+    pub code: &'static str,
+    pub message: String,
+}
+
+impl StreamError {
+    pub fn new(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+impl core::fmt::Display for StreamError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "[{}] {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for StreamError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
