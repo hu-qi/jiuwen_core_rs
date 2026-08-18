@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-reliability-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real tool-call health detectors: OutputLengthDetector + RepeatToolCallDetector (stable hash)"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"

@@ -553,6 +553,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-reliability-burst"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-reliability-tools"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
 name = "ah-plugins-rerank"
 version = "0.1.0"
 dependencies = [

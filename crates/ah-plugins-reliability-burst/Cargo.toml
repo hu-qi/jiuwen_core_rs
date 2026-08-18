@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-reliability-burst"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real error-burst detectors: SlidingWindowCounter + ErrorBurstDetector + Tool/Model error-rate"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"

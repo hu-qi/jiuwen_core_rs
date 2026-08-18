@@ -85,6 +85,7 @@ pub mod team_task_status;
 pub mod team_verdict;
 pub mod teams;
 pub mod telemetry;
+pub mod reliability_detectors;
 pub mod timefmt;
 pub mod tokenizer;
 pub mod tool_approval;

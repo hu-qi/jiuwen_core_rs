@@ -168,3 +168,5 @@ pub const MODEL_ALLOCATOR: ServiceKey = ServiceKey::new("model-allocator");
 pub const TEAM_JOIN_DESCRIPTOR: ServiceKey = ServiceKey::new("team-join-descriptor");
 pub const TEAM_TASK_STATUS: ServiceKey = ServiceKey::new("team-task-status");
 pub const PROMPT_ATTACHMENT: ServiceKey = ServiceKey::new("prompt-attachment");
+pub const RELIABILITY_BURST: ServiceKey = ServiceKey::new("reliability-burst");
+pub const RELIABILITY_TOOLS: ServiceKey = ServiceKey::new("reliability-tools");
