@@ -131,6 +131,91 @@ pub fn view_lines(
     (text, total, start_idx, end_idx, cut)
 }
 
+/// 向量转二进制 blob(对齐 vector_to_blob;f32 小端,与 Python struct '<f' 对齐)。
+pub fn vector_to_blob(embedding: &[f64]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(embedding.len() * 4);
+    for v in embedding {
+        out.extend_from_slice(&(*v as f32).to_le_bytes());
+    }
+    out
+}
+
+/// 二进制 blob 转向量(对齐 blob_to_vector)。
+pub fn blob_to_vector(blob: &[u8]) -> Vec<f64> {
+    blob.chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]) as f64)
+        .collect()
+}
+
+/// 会话文件名是否为今天或昨天(对齐 _is_recent_session_file;北京时区 +8)。
+/// today 注入以便确定性测试。
+pub fn is_recent_session_file(filename: &str, today: &str) -> bool {
+    // YYYY-MM-DD.md
+    if filename.len() != 13 || !filename.ends_with(".md") {
+        return false;
+    }
+    let date_part = &filename[..10];
+    // validate date format loosely (digits + dashes)
+    let ok =
+        date_part.len() == 10 && date_part.as_bytes()[4] == b'-' && date_part.as_bytes()[7] == b'-';
+    if !ok {
+        return false;
+    }
+    let Some(today_days) = days_from_civil(today) else {
+        return false;
+    };
+    let Some(file_days) = days_from_civil(date_part) else {
+        return false;
+    };
+    file_days == today_days || file_days == today_days - 1
+}
+
+/// 混合检索结果融合重排(对齐 _merge_hybrid_results;加权融合后按分数降序)。
+pub fn merge_hybrid_results(
+    vector_results: Vec<(String, f64)>,
+    keyword_results: Vec<(String, f64)>,
+    vector_weight: f64,
+    text_weight: f64,
+) -> Vec<(String, f64)> {
+    use std::collections::HashMap;
+    let mut by_id: HashMap<String, (f64, f64)> = HashMap::new();
+    for (id, score) in vector_results {
+        by_id.entry(id).or_insert((0.0, 0.0)).0 = score;
+    }
+    for (id, score) in keyword_results {
+        let e = by_id.entry(id).or_insert((0.0, 0.0));
+        e.1 = score;
+    }
+    let mut results: Vec<(String, f64)> = by_id
+        .into_iter()
+        .map(|(id, (v, t))| (id, vector_weight * v + text_weight * t))
+        .collect();
+    results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    results
+}
+
+/// 把 YYYY-MM-DD 转为从 1970-01-01 起的天数(非法返回 None)。
+fn days_from_civil(date: &str) -> Option<i64> {
+    let b = date.as_bytes();
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
+        return None;
+    }
+    let year: i64 = date[0..4].parse().ok()?;
+    let month: i64 = date[5..7].parse().ok()?;
+    let day: i64 = date[8..10].parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    // Howard Hinnant's days_from_civil
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    Some(era * 146097 + doe - 719468)
+}
+
 /// 记忆是否启用(对齐 is_memory_enabled;MEMORY_ENABLED env,默认 true)。
 pub fn is_memory_enabled() -> bool {
     match std::env::var("MEMORY_ENABLED") {
@@ -277,6 +362,39 @@ mod tests {
         let (_, _, _, end, cut) = view_lines(&lines, Some(9), Some(5));
         assert_eq!(end, 10);
         assert!(!cut);
+    }
+
+    #[test]
+    fn vector_blob_roundtrip() {
+        let v = vec![1.5, -2.25, 0.0, 3.75];
+        let blob = vector_to_blob(&v);
+        assert_eq!(blob.len(), 16);
+        let back = blob_to_vector(&blob);
+        assert_eq!(back.len(), 4);
+        for (a, b) in v.iter().zip(back.iter()) {
+            assert!((a - b).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn recent_session_file_checks_today_yesterday() {
+        assert!(is_recent_session_file("2026-08-18.md", "2026-08-18"));
+        assert!(is_recent_session_file("2026-08-17.md", "2026-08-18"));
+        assert!(!is_recent_session_file("2026-08-16.md", "2026-08-18"));
+        assert!(!is_recent_session_file("notes.md", "2026-08-18"));
+        assert!(!is_recent_session_file("2026-13-01.md", "2026-08-18"));
+    }
+
+    #[test]
+    fn hybrid_merge_reranks_by_weight() {
+        let vector = vec![("a".to_string(), 0.9), ("b".to_string(), 0.5)];
+        let keyword = vec![("b".to_string(), 0.8), ("c".to_string(), 0.6)];
+        let merged = merge_hybrid_results(vector, keyword, 0.7, 0.3);
+        // b: 0.7*0.5+0.3*0.8 = 0.59; a: 0.7*0.9 = 0.63; c: 0.3*0.6 = 0.18
+        assert_eq!(merged[0].0, "a");
+        assert_eq!(merged[1].0, "b");
+        assert_eq!(merged[2].0, "c");
+        assert!((merged[1].1 - 0.59).abs() < 1e-9);
     }
 
     #[test]
