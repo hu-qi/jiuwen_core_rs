@@ -96,6 +96,41 @@ pub fn extract_body(content: &str) -> String {
     content[end + 3..].trim().to_string()
 }
 
+/// 映射 tool offset/limit 到 read_file line_range(对齐 _line_range_to_fs_read;
+/// 1-based 文件行;-1 表示读到 EOF;offset 为 None 返回 None)。
+pub fn line_range_to_fs_read(
+    first_line: Option<usize>,
+    line_cap: Option<usize>,
+) -> Option<(usize, i64)> {
+    match first_line {
+        None => None,
+        Some(fl) => match line_cap {
+            Some(cap) => Some((fl, (fl + cap - 1) as i64)),
+            None => Some((fl, -1)),
+        },
+    }
+}
+
+/// 行视图切片(对齐 _view_lines;first_line 1-based;返回 (excerpt, total, start_idx, end_idx, truncated))。
+pub fn view_lines(
+    all_lines: &[String],
+    first_line: Option<usize>,
+    line_cap: Option<usize>,
+) -> (String, usize, usize, usize, bool) {
+    let total = all_lines.len();
+    let start_idx = match first_line {
+        Some(fl) => fl.saturating_sub(1).min(total),
+        None => 0,
+    };
+    let end_idx = match line_cap {
+        None => total,
+        Some(cap) => (start_idx + cap).min(total),
+    };
+    let text = all_lines[start_idx..end_idx].join("\n");
+    let cut = line_cap.is_some() && end_idx < total;
+    (text, total, start_idx, end_idx, cut)
+}
+
 /// 记忆是否启用(对齐 is_memory_enabled;MEMORY_ENABLED env,默认 true)。
 pub fn is_memory_enabled() -> bool {
     match std::env::var("MEMORY_ENABLED") {
@@ -214,6 +249,34 @@ mod tests {
     fn extract_body_without_frontmatter_returns_all() {
         assert_eq!(extract_body("plain body"), "plain body");
         assert_eq!(extract_body("---\na: b\n---\n\nBODY"), "BODY");
+    }
+
+    #[test]
+    fn line_range_maps_offset_and_cap() {
+        assert_eq!(line_range_to_fs_read(None, Some(10)), None);
+        assert_eq!(line_range_to_fs_read(Some(3), None), Some((3, -1)));
+        assert_eq!(line_range_to_fs_read(Some(3), Some(5)), Some((3, 7)));
+    }
+
+    #[test]
+    fn view_lines_slices_and_reports_truncation() {
+        let lines: Vec<String> = (1..=10).map(|i| i.to_string()).collect();
+        // first_line=2, cap=3 -> lines 2,3,4 (1-based) -> indices 1..4
+        let (text, total, start, end, cut) = view_lines(&lines, Some(2), Some(3));
+        assert_eq!(total, 10);
+        assert_eq!(start, 1);
+        assert_eq!(end, 4);
+        assert_eq!(text, "2\n3\n4");
+        assert!(cut);
+        // no cap -> all
+        let (_, _, start, end, cut) = view_lines(&lines, None, None);
+        assert_eq!(start, 0);
+        assert_eq!(end, 10);
+        assert!(!cut);
+        // cap beyond end -> no truncation
+        let (_, _, _, end, cut) = view_lines(&lines, Some(9), Some(5));
+        assert_eq!(end, 10);
+        assert!(!cut);
     }
 
     #[test]
