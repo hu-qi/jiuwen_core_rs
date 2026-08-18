@@ -257,6 +257,27 @@ fn is_daily_date_file(name: &str) -> bool {
         && name[8..10].chars().all(|c| c.is_ascii_digit())
 }
 
+/// 校验 coding memory 路径在 coding_memory 目录内(对齐 validate_coding_memory_path)。
+pub fn validate_coding_memory_path(path: &str, coding_memory_dir: Option<&str>) -> (bool, String) {
+    let Some(coding_memory_dir) = coding_memory_dir else {
+        return (false, "Workspace not initialized".to_string());
+    };
+    if path.contains("..") || path.starts_with('/') {
+        return (
+            false,
+            "Invalid path: directory traversal not allowed".to_string(),
+        );
+    }
+    if !path.ends_with(".md") {
+        return (false, "Path must end with .md".to_string());
+    }
+    if coding_memory_dir.is_empty() {
+        return (false, "coding_memory node not configured".to_string());
+    }
+    let basename = path.rsplit('/').next().unwrap_or(path);
+    (true, format!("{coding_memory_dir}/{basename}"))
+}
+
 /// 记忆是否启用(对齐 is_memory_enabled;MEMORY_ENABLED env,默认 true)。
 pub fn is_memory_enabled() -> bool {
     match std::env::var("MEMORY_ENABLED") {
@@ -431,6 +452,30 @@ mod tests {
         let (ok, msg) = validate_memory_path("x.md", None);
         assert!(!ok);
         assert!(msg.contains("Workspace not initialized"));
+    }
+
+    #[test]
+    fn validate_coding_memory_path_accepts_md() {
+        let (ok, resolved) = validate_coding_memory_path("project.md", Some("/ws/coding_memory"));
+        assert!(ok);
+        assert_eq!(resolved, "/ws/coding_memory/project.md");
+        let (ok, _) = validate_coding_memory_path("dir/notes.md", Some("/ws/coding_memory"));
+        assert!(ok);
+    }
+
+    #[test]
+    fn validate_coding_memory_path_rejects_non_md_and_traversal() {
+        let (ok, msg) = validate_coding_memory_path("notes.txt", Some("/ws/coding_memory"));
+        assert!(!ok);
+        assert!(msg.contains(".md"));
+        let (ok, _) = validate_coding_memory_path("../x.md", Some("/ws/coding_memory"));
+        assert!(!ok);
+        let (ok, msg) = validate_coding_memory_path("x.md", None);
+        assert!(!ok);
+        assert!(msg.contains("Workspace not initialized"));
+        let (ok, msg) = validate_coding_memory_path("x.md", Some(""));
+        assert!(!ok);
+        assert!(msg.contains("not configured"));
     }
 
     #[test]

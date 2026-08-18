@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 703 tests / 89 crates,clippy -D warnings 0,fmt clean。
+> 当前 705 tests / 89 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 91 回合,705 tests / clippy 0 / fmt clean,协调者实现):
+> - coding 记忆路径校验 ah-plugins-memory-lite += validate_coding_memory_path(1:1 对齐 coding_memory_tool_ops.py):目录遍历防护 + .md 后缀强制 + coding_memory 目录解析;2 测试
 >
 > **账目更新**(第 90 回合,703 tests / clippy 0 / fmt clean,协调者实现):
 > - 记忆路径校验 ah-plugins-memory-lite += validate_memory_path(1:1 对齐 memory_tool_ops.py):目录遍历防护(.. 与绝对路径拒绝)+ basename 分类解析(USER.md → memory/USER.md;MEMORY.md → memory/MEMORY.md;YYYY-MM-DD.md → memory/daily_memory/;其他 → memory/)+ memory_dir 缺失报错;2 测试
