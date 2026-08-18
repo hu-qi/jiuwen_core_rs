@@ -82,6 +82,7 @@ ah-plugins-team-task-status = { workspace = true }
 ah-plugins-prompt-attachment = { workspace = true }
 ah-plugins-prompt-builder = { workspace = true }
 ah-plugins-stream = { workspace = true }
+ah-plugins-tag-manager = { workspace = true }
 ah-plugins-reliability-burst = { workspace = true }
 ah-plugins-reliability-tools = { workspace = true }
 ah-plugins-reliability-monitor = { workspace = true }

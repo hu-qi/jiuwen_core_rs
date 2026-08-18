@@ -76,6 +76,7 @@ pub mod subagent;
 pub mod subagents;
 pub mod swarm;
 pub mod symphony;
+pub mod tag_manager;
 pub mod team_context_text;
 pub mod team_dispatch;
 pub mod team_i18n;
