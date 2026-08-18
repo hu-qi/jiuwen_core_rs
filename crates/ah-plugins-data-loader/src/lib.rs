@@ -1,0 +1,313 @@
+//! # ah-plugins-data-loader
+//!
+//! Real curriculum-balanced batch planning (aligned with
+//! rsi/data_loader/batch_planner.py + profiler.py):
+//! - case_value: read balance value from top-level or nested metadata;
+//! - BatchPlanner::plan: difficulty progression + dimension round-robin;
+//! - batch_plan_item: serializable per-batch plan entry.
+
+use std::collections::{BTreeMap, VecDeque};
+use std::sync::Arc;
+
+use ah_contracts::dataset_curator::{
+    BatchPlanCase, BatchPlanEntry, BatchPlanMetadata, UNKNOWN_VALUE,
+};
+use ah_contracts::keys::DATA_LOADER;
+use ah_contracts::prelude::Effect;
+use ah_contracts::seam::Seam;
+use ah_contracts::service::ServiceKey;
+use ah_hub::context::Context;
+use ah_hub::plugin::{Plugin, PluginError};
+use serde_json::Value;
+
+/// 难度排序(对齐 _DIFFICULTY_ORDER)。
+fn difficulty_rank(difficulty: &str) -> usize {
+    match difficulty {
+        "easy" => 0,
+        "medium" => 1,
+        "hard" => 2,
+        _ => 3,
+    }
+}
+
+/// 从 case 读取平衡值(对齐 case_value:顶层字段或 metadata 嵌套,空 → unknown)。
+pub fn case_value(case: &BTreeMap<String, Value>, key: &str) -> String {
+    let top = case.get(key).and_then(non_empty_str);
+    if let Some(v) = top {
+        return v;
+    }
+    if let Some(v) = case
+        .get("metadata")
+        .and_then(Value::as_object)
+        .and_then(|meta| meta.get(key).and_then(non_empty_str))
+    {
+        return v;
+    }
+    UNKNOWN_VALUE.to_string()
+}
+
+fn non_empty_str(v: &Value) -> Option<String> {
+    match v {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+/// 稳定 case 标识(对齐 case_id:case_id 或 id,空 → unknown)。
+pub fn case_id(case: &BTreeMap<String, Value>) -> String {
+    for key in ["case_id", "id"] {
+        if let Some(v) = case.get(key).and_then(non_empty_str) {
+            return v;
+        }
+    }
+    UNKNOWN_VALUE.to_string()
+}
+
+/// 课程平衡分批规划器(对齐 BatchPlanner)。
+pub struct BatchPlanner;
+
+impl BatchPlanner {
+    /// 规划一轮的批次(难度渐进 + 维度轮转;对齐 plan)。
+    pub fn plan(
+        cases: Vec<BTreeMap<String, Value>>,
+        batch_size: usize,
+    ) -> Vec<Vec<BTreeMap<String, Value>>> {
+        let ordered = curriculum_balanced_cases(cases);
+        let mut batches = Vec::new();
+        let mut batch = Vec::new();
+        for case in ordered {
+            batch.push(case);
+            if batch.len() >= batch_size {
+                batches.push(std::mem::take(&mut batch));
+            }
+        }
+        if !batch.is_empty() {
+            batches.push(batch);
+        }
+        batches
+    }
+}
+
+/// 生成批次计划条目(对齐 batch_plan_item)。
+pub fn batch_plan_item(batch: &[BTreeMap<String, Value>], batch_index: usize) -> BatchPlanEntry {
+    let difficulties: Vec<String> = batch.iter().map(|c| case_value(c, "difficulty")).collect();
+    let mut dimensions: Vec<String> = batch.iter().map(|c| case_value(c, "dimension")).collect();
+    dimensions.sort();
+    dimensions.dedup();
+    BatchPlanEntry {
+        batch_id: format!("batch_{batch_index:03}"),
+        cases: batch
+            .iter()
+            .map(|case| BatchPlanCase {
+                case_id: case_id(case),
+                difficulty: case_value(case, "difficulty"),
+                dimension: case_value(case, "dimension"),
+                source: case_value(case, "source"),
+                task_type: case_value(case, "task_type"),
+                case_path: case
+                    .get("case_path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                case_index: case.get("case_index").and_then(Value::as_u64),
+            })
+            .collect(),
+        metadata: BatchPlanMetadata {
+            difficulty_stage: dominant_difficulty(&difficulties),
+            dimensions,
+        },
+    }
+}
+
+/// 课程平衡排序(难度升序 + 组内维度轮转;对齐 _curriculum_balanced_cases)。
+fn curriculum_balanced_cases(cases: Vec<BTreeMap<String, Value>>) -> Vec<BTreeMap<String, Value>> {
+    let mut by_difficulty: BTreeMap<String, Vec<BTreeMap<String, Value>>> = BTreeMap::new();
+    for case in cases {
+        by_difficulty
+            .entry(case_value(&case, "difficulty"))
+            .or_default()
+            .push(case);
+    }
+    let mut ordered = Vec::new();
+    for group in by_difficulty.into_values() {
+        ordered.extend(round_robin_by_dimension(group));
+    }
+    ordered
+}
+
+/// 组内维度轮转(对齐 _round_robin_by_dimension)。
+fn round_robin_by_dimension(cases: Vec<BTreeMap<String, Value>>) -> Vec<BTreeMap<String, Value>> {
+    let mut grouped: BTreeMap<String, VecDeque<BTreeMap<String, Value>>> = BTreeMap::new();
+    let mut sorted = cases;
+    sorted.sort_by_key(stable_case_sort_key);
+    for case in sorted {
+        grouped
+            .entry(case_value(&case, "dimension"))
+            .or_default()
+            .push_back(case);
+    }
+    let dimensions: Vec<String> = grouped.keys().cloned().collect();
+    let mut ordered = Vec::new();
+    loop {
+        let mut advanced = false;
+        for dim in &dimensions {
+            if let Some(c) = grouped.get_mut(dim).and_then(VecDeque::pop_front) {
+                ordered.push(c);
+                advanced = true;
+            }
+        }
+        if !advanced {
+            break;
+        }
+    }
+    ordered
+}
+
+/// 稳定排序键(对齐 _stable_case_sort_key)。
+fn stable_case_sort_key(case: &BTreeMap<String, Value>) -> (String, String, String, u64) {
+    let source = case_value(case, "source");
+    let task_type = case_value(case, "task_type");
+    let cid = case_id(case);
+    let index = case.get("case_index").and_then(Value::as_u64).unwrap_or(0);
+    (source, task_type, cid, index)
+}
+
+/// 主导难度(对齐 _dominant_difficulty:已知难度中最低等级)。
+fn dominant_difficulty(difficulties: &[String]) -> String {
+    let known: Vec<&String> = difficulties
+        .iter()
+        .filter(|d| d.as_str() != UNKNOWN_VALUE)
+        .collect();
+    if known.is_empty() {
+        return UNKNOWN_VALUE.to_string();
+    }
+    known
+        .iter()
+        .min_by_key(|d| difficulty_rank(d))
+        .map(|d| (*d).clone())
+        .unwrap_or_else(|| UNKNOWN_VALUE.to_string())
+}
+
+/// data-loader 插件:注册分批规划服务。
+pub struct DataLoaderPlugin;
+
+impl Plugin for DataLoaderPlugin {
+    fn name(&self) -> &'static str {
+        "ah-plugins-data-loader"
+    }
+
+    fn provides(&self) -> Vec<ServiceKey> {
+        vec![DATA_LOADER]
+    }
+
+    fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
+        let planner = Arc::new(BatchPlanner);
+        Ok(vec![ctx.register(DATA_LOADER, planner)])
+    }
+}
+
+impl Seam for BatchPlanner {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn case(
+        cid: &str,
+        difficulty: &str,
+        dimension: &str,
+        source: &str,
+        index: u64,
+    ) -> BTreeMap<String, Value> {
+        let mut m = BTreeMap::new();
+        m.insert("case_id".to_string(), Value::String(cid.to_string()));
+        m.insert(
+            "difficulty".to_string(),
+            Value::String(difficulty.to_string()),
+        );
+        m.insert(
+            "dimension".to_string(),
+            Value::String(dimension.to_string()),
+        );
+        m.insert("source".to_string(), Value::String(source.to_string()));
+        m.insert("task_type".to_string(), Value::String("t".to_string()));
+        m.insert("case_index".to_string(), Value::from(index));
+        m
+    }
+
+    #[test]
+    fn case_value_reads_top_or_metadata() {
+        let mut m = BTreeMap::new();
+        m.insert("difficulty".to_string(), Value::String("easy".to_string()));
+        m.insert(
+            "metadata".to_string(),
+            serde_json::json!({"dimension": "code"}),
+        );
+        assert_eq!(case_value(&m, "difficulty"), "easy");
+        assert_eq!(case_value(&m, "dimension"), "code");
+        assert_eq!(case_value(&m, "missing"), UNKNOWN_VALUE);
+    }
+
+    #[test]
+    fn plan_groups_by_batch_size() {
+        let cases = vec![
+            case("a", "easy", "code", "s1", 0),
+            case("b", "medium", "code", "s1", 1),
+            case("c", "hard", "test", "s2", 2),
+            case("d", "easy", "test", "s2", 3),
+            case("e", "medium", "code", "s1", 4),
+        ];
+        let batches = BatchPlanner::plan(cases, 2);
+        assert_eq!(batches.len(), 3);
+        assert_eq!(batches[0].len(), 2);
+        assert_eq!(batches[2].len(), 1);
+    }
+
+    #[test]
+    fn plan_orders_by_difficulty_then_round_robin_dimension() {
+        let cases = vec![
+            case("a", "easy", "code", "s", 0),
+            case("b", "easy", "test", "s", 1),
+            case("c", "easy", "code", "s", 2),
+            case("d", "hard", "code", "s", 3),
+        ];
+        let ordered = curriculum_balanced_cases(cases);
+        assert_eq!(case_value(&ordered[0], "difficulty"), "easy");
+        assert_eq!(case_value(&ordered[3], "difficulty"), "hard");
+        assert_ne!(
+            case_value(&ordered[0], "dimension"),
+            case_value(&ordered[1], "dimension")
+        );
+    }
+
+    #[test]
+    fn batch_plan_item_produces_serializable_entry() {
+        let batch = vec![
+            case("x1", "easy", "code", "src", 0),
+            case("x2", "medium", "test", "src", 1),
+        ];
+        let entry = batch_plan_item(&batch, 0);
+        assert_eq!(entry.batch_id, "batch_000");
+        assert_eq!(entry.cases.len(), 2);
+        assert_eq!(entry.cases[0].case_id, "x1");
+        assert_eq!(entry.metadata.difficulty_stage, "easy");
+        let dims = &entry.metadata.dimensions;
+        assert_eq!(dims.len(), 2);
+        assert!(dims.contains(&"code".to_string()));
+        let js = serde_json::to_string(&entry).unwrap();
+        assert!(js.contains("batch_000"));
+    }
+
+    #[test]
+    fn unknown_difficulty_dominates_to_unknown() {
+        let difficulties = vec![UNKNOWN_VALUE.to_string(), UNKNOWN_VALUE.to_string()];
+        assert_eq!(dominant_difficulty(&difficulties), UNKNOWN_VALUE);
+        let mixed = vec![
+            "hard".to_string(),
+            "easy".to_string(),
+            UNKNOWN_VALUE.to_string(),
+        ];
+        assert_eq!(dominant_difficulty(&mixed), "easy");
+    }
+}

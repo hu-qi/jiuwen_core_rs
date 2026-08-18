@@ -113,7 +113,7 @@
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
 | orchestrator(100) | ah-plugins-rsi | 多轮优化编排、checkpoint/resume | 已落地:run_rounds 多轮循环(评测→精化→checkpoint 续跑,本回合);git/CI 基建留待后续 |
-| dataset_generator(72) / dataset_curator(13) / data_loader(5) | ah-plugins-rsi + `dataset-curator` seam + ah-plugins-dataset-curator | LLM 生成、curate、分批 | 生成已落地(确定性扩展 + LLM 合成:提示→JSON 任务变体解析/去重,LLM 不可用显式回退确定性扩展);curate 已落地(本回合:回放数据集策展 — eval_ref 读取(YAML/JSON)/case 决策(缺失原用例/不确定(error)/过线/不可判题 → 拒绝;失败且可判题 → 接受,replay_ 前缀 + provenance 元数据)/定向种子任务(训练信号 → 任务模式/难度/根因能力/成功标准/轨迹证据)/报告 YAML(状态/汇总/接受拒绝明细),disabled 配置 → disabled 报告);分批留待后续 |
+| dataset_generator(72) / dataset_curator(13) / data_loader(5) | ah-plugins-rsi + `dataset-curator` seam + ah-plugins-dataset-curator + ah-plugins-data-loader | LLM 生成、curate、分批 | 生成已落地(确定性扩展 + LLM 合成);curate 已落地(回放数据集策展);分批已落地(本回合:BatchPlanner 课程平衡规划 — case_value(顶层/metadata 嵌套,空→unknown)+ 难度排序(easy/medium/hard)+ 组内维度轮转 + batch_plan_item(batch_id/cases 摘要/difficulty_stage/dimensions)) |
 | evaluator(judger 91/case_runner 56/…) | `evolving` seam + ah-plugins-rsi | LLM judge、执行后端 | 已落地(expected 匹配优先 + evolving 轨迹评估(本地判据 + LLM judge 附加)) |
 | evaluation_result_analyzer(73) | ah-plugins-rsi | 信号提取、根因归因、证据引用、artifact 落盘 | 已落地(本回合:确定性信号 + 规则归因 + analysis.json);LLM 深度诊断留待后续 |
 | member_optimizer(16 文件) | `member-optimizer` seam + ah-plugins-member-optimizer | attribution→plan→execute→verify→publish | 已落地(本回合:确定性机制归因(prompt/tool/skill/memory/workflow/context→lever/目标面)+ 计划(文本梯度)+ 经 Optimizer/OperatorRegistry 执行 + val 集验证门禁 + best 引用 JSON 落盘) |

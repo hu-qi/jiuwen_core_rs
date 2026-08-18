@@ -50,6 +50,7 @@ use ah_plugins_stream::StreamPlugin;
 use ah_plugins_tag_manager::TagManagerPlugin;
 use ah_plugins_memory_lite::MemoryLitePlugin;
 use ah_plugins_tools_metadata::ToolsMetadataPlugin;
+use ah_plugins_data_loader::DataLoaderPlugin;
 use ah_plugins_queue::QueuePlugin;
 use ah_plugins_queue::redis_queue::RedisQueuePlugin;
 use ah_plugins_rails::{
@@ -396,6 +397,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-tools-metadata",
             Arc::new(ToolsMetadataPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-data-loader",
+            Arc::new(DataLoaderPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-reliability-burst",

@@ -70,3 +70,36 @@ pub trait DatasetCurator: Seam {
         output_dir: &str,
     ) -> Result<DatasetCurationArtifact, CurationError>;
 }
+// ---------------------------------------------------------------------------
+// data_loader:课程平衡分批规划(对齐 rsi/data_loader/batch_planner.py)
+// ---------------------------------------------------------------------------
+
+/// 未知难度/维度值(对齐 UNKNOWN_VALUE)。
+pub const UNKNOWN_VALUE: &str = "unknown";
+
+/// 批次计划条目(对齐 batch_plan_item 的返回 dict)。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BatchPlanEntry {
+    pub batch_id: String,
+    pub cases: Vec<BatchPlanCase>,
+    pub metadata: BatchPlanMetadata,
+}
+
+/// 批次内单个 case 的摘要(对齐 batch_plan_item 的 cases 列表)。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BatchPlanCase {
+    pub case_id: String,
+    pub difficulty: String,
+    pub dimension: String,
+    pub source: String,
+    pub task_type: String,
+    pub case_path: String,
+    pub case_index: Option<u64>,
+}
+
+/// 批次元数据(对齐 batch_plan_item 的 metadata)。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BatchPlanMetadata {
+    pub difficulty_stage: String,
+    pub dimensions: Vec<String>,
+}
