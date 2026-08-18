@@ -44,6 +44,8 @@ dependencies = [
  "ah-plugins-prompt-attachment",
  "ah-plugins-queue",
  "ah-plugins-rails",
+ "ah-plugins-reliability-burst",
+ "ah-plugins-reliability-tools",
  "ah-plugins-rerank",
  "ah-plugins-retrieval",
  "ah-plugins-rl",
