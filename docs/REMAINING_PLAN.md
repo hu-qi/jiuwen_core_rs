@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 644 tests / 86 crates,clippy -D warnings 0,fmt clean。
+> 当前 646 tests / 86 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 81 回合,646 tests / clippy 0 / fmt clean,协调者实现):
+> - stream 管道增强 ah-plugins-stream:stream_output_with_timeouts(首帧超时 + 后续帧超时,对齐 stream_output 的 first_frame_timeout/timeout);2 测试;异步迭代器形态与敏感模式日志留待后续
 >
 > **账目更新**(第 80 回合,644 tests / clippy 0 / fmt clean,协调者实现):
 > - 会话流管道 ah-plugins-stream(新 crate,1:1 对齐 core/session/stream/{emitter,manager,writer}.py):AsyncStreamQueue(tokio mpsc 有界队列,发送超时重试 5 次/接收超时/关闭排空 + 强制清空,stats 统计)+ StreamEmitter(END_FRAME 哨兵,closed 后 emit 报错)+ StreamWriterManager(默认 output/trace/custom writer + stream_output 消费直到 END_FRAME)+ StreamWriter(OutputSchema/TraceSchema/CustomSchema 校验后发射);stream 契约(StreamMode/OutputSchema/TraceSchema/CustomSchema/TeamOutputSchema + StreamError);5 测试;StreamWriterManager 异步迭代器/首帧超时/敏感模式日志留待后续

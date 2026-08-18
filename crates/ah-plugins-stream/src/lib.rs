@@ -258,11 +258,28 @@ impl StreamWriterManager {
 
     /// 消费流直到 END_FRAME(对齐 stream_output)。
     pub async fn stream_output(&self) -> Result<Vec<Value>, StreamError> {
+        self.stream_output_with_timeouts(None, None).await
+    }
+
+    /// 带超时的流消费(对齐 stream_output 的 first_frame_timeout / timeout):
+    /// 首帧用 first_frame_timeout(默认无限),后续帧用 timeout(默认无限)。
+    pub async fn stream_output_with_timeouts(
+        &self,
+        first_frame_timeout: Option<Duration>,
+        timeout: Option<Duration>,
+    ) -> Result<Vec<Value>, StreamError> {
         let mut out = Vec::new();
         let queue = self.emitter.stream_queue();
         let mut guard = queue.lock().await;
+        let mut is_first = true;
         loop {
-            match guard.receive(None).await {
+            let t = if is_first {
+                first_frame_timeout
+            } else {
+                timeout
+            };
+            is_first = false;
+            match guard.receive(t).await {
                 Ok(v) => {
                     if v == Value::String(StreamEmitter::END_FRAME.to_string()) {
                         break;
@@ -346,6 +363,34 @@ mod tests {
         let parsed: OutputSchema = serde_json::from_value(out[0].clone()).unwrap();
         assert_eq!(parsed.r#type, "nodeA");
         assert_eq!(parsed.index, 1);
+    }
+
+    #[tokio::test]
+    async fn stream_output_with_first_frame_timeout_errors() {
+        let emitter = Arc::new(StreamEmitter::new());
+        let manager = StreamWriterManager::new(emitter.clone());
+        // no frames emitted, short first-frame timeout -> receive timeout error
+        let res = manager
+            .stream_output_with_timeouts(Some(Duration::from_millis(30)), None)
+            .await;
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().code, "stream_queue_receive_timeout");
+    }
+
+    #[tokio::test]
+    async fn stream_output_chunk_timeout_between_frames() {
+        let emitter = Arc::new(StreamEmitter::new());
+        let manager = StreamWriterManager::new(emitter.clone());
+        let writer = StreamWriter::new(emitter.clone());
+        writer
+            .write_output(OutputSchema::new("a", 1, serde_json::json!(1)))
+            .await
+            .unwrap();
+        // chunk timeout fires while waiting for END_FRAME after first frame
+        let res = manager
+            .stream_output_with_timeouts(None, Some(Duration::from_millis(30)))
+            .await;
+        assert!(res.is_err());
     }
 
     #[tokio::test]
