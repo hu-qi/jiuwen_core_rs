@@ -42,6 +42,7 @@ dependencies = [
  "ah-plugins-pregel",
  "ah-plugins-prompt",
  "ah-plugins-prompt-attachment",
+ "ah-plugins-prompt-builder",
  "ah-plugins-queue",
  "ah-plugins-rails",
  "ah-plugins-reliability-burst",
@@ -525,6 +526,15 @@ dependencies = [
 
 [[package]]
 name = "ah-plugins-prompt-attachment"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-prompt-builder"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",

@@ -46,6 +46,7 @@ pub mod optimizer;
 pub mod pregel;
 pub mod prompt;
 pub mod prompt_attachment;
+pub mod prompt_builder;
 pub mod queue;
 pub mod reliability_config;
 pub mod reliability_detectors;

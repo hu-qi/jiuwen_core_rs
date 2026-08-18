@@ -44,6 +44,7 @@ members = [
     "crates/ah-plugins-team-join-descriptor",
     "crates/ah-plugins-team-task-status",
     "crates/ah-plugins-prompt-attachment",
+    "crates/ah-plugins-prompt-builder",
     "crates/ah-plugins-reliability-burst",
     "crates/ah-plugins-reliability-tools",
     "crates/ah-plugins-reliability-monitor",
@@ -136,6 +137,7 @@ ah-plugins-model-allocator = { path = "crates/ah-plugins-model-allocator" }
 ah-plugins-team-join-descriptor = { path = "crates/ah-plugins-team-join-descriptor" }
 ah-plugins-team-task-status = { path = "crates/ah-plugins-team-task-status" }
 ah-plugins-prompt-attachment = { path = "crates/ah-plugins-prompt-attachment" }
+ah-plugins-prompt-builder = { path = "crates/ah-plugins-prompt-builder" }
 ah-plugins-reliability-burst = { path = "crates/ah-plugins-reliability-burst" }
 ah-plugins-reliability-tools = { path = "crates/ah-plugins-reliability-tools" }
 ah-plugins-reliability-monitor = { path = "crates/ah-plugins-reliability-monitor" }
