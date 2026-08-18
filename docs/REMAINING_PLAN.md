@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 665 tests / 88 crates,clippy -D warnings 0,fmt clean。
+> 当前 672 tests / 88 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 85 回合,672 tests / clippy 0 / fmt clean,协调者实现):
+> - 工具元数据契约 ah-contracts += ToolMetadata + validate_provider(1:1 对齐 harness/prompts/tools/base.py):ToolMetadata(name/description_cn/en/params_cn/en/idempotent);validate_provider 双语完整性校验(description 非空 + schema object(properties/required)+ properties key 集合一致 + 递归嵌套 properties/items description 校验);7 测试;工具描述素材生成与 provider 实现留待后续
 >
 > **账目更新**(第 84 回合,665 tests / clippy 0 / fmt clean,协调者实现):
 > - 记忆配置 ah-plugins-memory-lite += MemorySettings(1:1 对齐 core/memory/lite/config.py):model/sources/extra_paths + chunking(256/32)/query(max_results 10/min_score 0.3/hybrid 0.7/0.3/2.0)/store(memory.db,vector+fts)/sync(watch 2000ms/onSearch/onSessionStart)/cache(10000)全量默认 + with_overrides(未知键忽略)+ is_memory_enabled(MEMORY_ENABLED env,默认 true);2 测试
