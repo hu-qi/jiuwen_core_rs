@@ -71,6 +71,7 @@ pub mod signals;
 pub mod single_harness;
 pub mod skill;
 pub mod store;
+pub mod stream;
 pub mod subagent;
 pub mod subagents;
 pub mod swarm;

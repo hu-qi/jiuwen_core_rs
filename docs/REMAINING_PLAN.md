@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 634 tests / 85 crates,clippy -D warnings 0,fmt clean。
+> 当前 639 tests / 85 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 79 回合,639 tests / clippy 0 / fmt clean,协调者实现):
+> - session stream schema ah-contracts += stream 模块(1:1 对齐 core/session/stream/base.py):StreamMode(output/trace/custom + as_str)、OutputSchema(type/index/payload)、TraceSchema(type/payload)、CustomSchema(type/payload)、TeamOutputSchema(OutputSchema + source_member/role,from_output 不修改原 schema);5 测试;StreamEmitter/StreamWriterManager/StreamWriter 状态性管道留待后续
 >
 > **账目更新**(第 78 回合,634 tests / clippy 0 / fmt clean,脚本自动生成 + 协调者实现):
 > - 系统提示 sections ah-plugins-prompt-builder += sections 模块(18 个 build_*_section,双语常量从 harness/prompts/sections/*.py 逐字对齐,priority 一致):基础(identity 10/safety 20/skills 40/todo/task_tool/session_tools)、运行时(heartbeat/memory/coding_memory/prompt_attachments/offload/reload/compression_recall)、高级(agent_mode PLAN_MODE_PROMPT/goal/external_memory(参数化 prompt_block,空→None)/task_completion/progressive_tool_rules);SectionName 27 常量契约;8 测试;workspace(目录扫描)/context(配置文件读取)动态 section 留待后续
