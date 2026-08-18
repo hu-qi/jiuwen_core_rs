@@ -216,6 +216,47 @@ fn days_from_civil(date: &str) -> Option<i64> {
     Some(era * 146097 + doe - 719468)
 }
 
+/// 校验记忆路径在 memory 目录内(对齐 validate_memory_path)。
+/// memory_dir 为 workspace 解析出的 memory 节点绝对路径。
+pub fn validate_memory_path(path: &str, memory_dir: Option<&str>) -> (bool, String) {
+    let Some(memory_dir) = memory_dir else {
+        return (false, "Workspace not initialized".to_string());
+    };
+    if path.contains("..") || path.starts_with('/') {
+        return (
+            false,
+            "Invalid path: directory traversal not allowed".to_string(),
+        );
+    }
+    let basename = path.rsplit('/').next().unwrap_or(path);
+    let resolved = if basename == "USER.md" {
+        Some(format!("{memory_dir}/USER.md"))
+    } else if basename == "MEMORY.md" {
+        // memory 目录下的 MEMORY.md(默认 schema 中 memory 的子节点)
+        Some(format!("{memory_dir}/MEMORY.md"))
+    } else if is_daily_date_file(basename) {
+        Some(format!("{memory_dir}/daily_memory/{basename}"))
+    } else {
+        Some(format!("{memory_dir}/{basename}"))
+    };
+    match resolved {
+        Some(p) => (true, p),
+        None => (false, format!("Cannot resolve path: {path}")),
+    }
+}
+
+/// 是否 YYYY-MM-DD.md 格式(对齐 re.match(r"^\d{4}-\d{2}-\d{2}\.md$"))。
+fn is_daily_date_file(name: &str) -> bool {
+    let b = name.as_bytes();
+    b.len() == 13
+        && name.ends_with(".md")
+        && b[4] == b'-'
+        && b[7] == b'-'
+        && name[0..4].chars().all(|c| c.is_ascii_digit())
+        && name[5..7].chars().all(|c| c.is_ascii_digit())
+        && name[8..10].chars().all(|c| c.is_ascii_digit())
+}
+
 /// 记忆是否启用(对齐 is_memory_enabled;MEMORY_ENABLED env,默认 true)。
 pub fn is_memory_enabled() -> bool {
     match std::env::var("MEMORY_ENABLED") {
@@ -362,6 +403,34 @@ mod tests {
         let (_, _, _, end, cut) = view_lines(&lines, Some(9), Some(5));
         assert_eq!(end, 10);
         assert!(!cut);
+    }
+
+    #[test]
+    fn validate_memory_path_accepts_normal_paths() {
+        let (ok, resolved) = validate_memory_path("notes.md", Some("/ws/memory"));
+        assert!(ok);
+        assert_eq!(resolved, "/ws/memory/notes.md");
+        let (ok, resolved) = validate_memory_path("USER.md", Some("/ws/memory"));
+        assert!(ok);
+        assert_eq!(resolved, "/ws/memory/USER.md");
+        let (ok, resolved) = validate_memory_path("MEMORY.md", Some("/ws/memory"));
+        assert!(ok);
+        assert_eq!(resolved, "/ws/memory/MEMORY.md");
+        let (ok, resolved) = validate_memory_path("2026-08-18.md", Some("/ws/memory"));
+        assert!(ok);
+        assert_eq!(resolved, "/ws/memory/daily_memory/2026-08-18.md");
+    }
+
+    #[test]
+    fn validate_memory_path_rejects_traversal_and_absolute() {
+        let (ok, msg) = validate_memory_path("../evil.md", Some("/ws/memory"));
+        assert!(!ok);
+        assert!(msg.contains("traversal"));
+        let (ok, _) = validate_memory_path("/etc/passwd", Some("/ws/memory"));
+        assert!(!ok);
+        let (ok, msg) = validate_memory_path("x.md", None);
+        assert!(!ok);
+        assert!(msg.contains("Workspace not initialized"));
     }
 
     #[test]
