@@ -45,6 +45,7 @@ dependencies = [
  "ah-plugins-queue",
  "ah-plugins-rails",
  "ah-plugins-reliability-burst",
+ "ah-plugins-reliability-monitor",
  "ah-plugins-reliability-tools",
  "ah-plugins-rerank",
  "ah-plugins-retrieval",
@@ -556,6 +557,15 @@ dependencies = [
 
 [[package]]
 name = "ah-plugins-reliability-burst"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-reliability-monitor"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",

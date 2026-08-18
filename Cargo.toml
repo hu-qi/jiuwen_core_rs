@@ -46,6 +46,7 @@ members = [
     "crates/ah-plugins-prompt-attachment",
     "crates/ah-plugins-reliability-burst",
     "crates/ah-plugins-reliability-tools",
+    "crates/ah-plugins-reliability-monitor",
     "crates/ah-plugins-team-message",
     "crates/ah-plugins-subagents",
     "crates/ah-plugins-skill",
@@ -137,6 +138,7 @@ ah-plugins-team-task-status = { path = "crates/ah-plugins-team-task-status" }
 ah-plugins-prompt-attachment = { path = "crates/ah-plugins-prompt-attachment" }
 ah-plugins-reliability-burst = { path = "crates/ah-plugins-reliability-burst" }
 ah-plugins-reliability-tools = { path = "crates/ah-plugins-reliability-tools" }
+ah-plugins-reliability-monitor = { path = "crates/ah-plugins-reliability-monitor" }
 ah-plugins-team-message = { path = "crates/ah-plugins-team-message" }
 ah-plugins-subagents = { path = "crates/ah-plugins-subagents" }
 ah-plugins-skill = { path = "crates/ah-plugins-skill" }

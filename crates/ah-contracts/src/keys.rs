@@ -170,3 +170,6 @@ pub const TEAM_TASK_STATUS: ServiceKey = ServiceKey::new("team-task-status");
 pub const PROMPT_ATTACHMENT: ServiceKey = ServiceKey::new("prompt-attachment");
 pub const RELIABILITY_BURST: ServiceKey = ServiceKey::new("reliability-burst");
 pub const RELIABILITY_TOOLS: ServiceKey = ServiceKey::new("reliability-tools");
+pub const RELIABILITY_MONITOR: ServiceKey = ServiceKey::new("reliability-monitor");
+pub const RELIABILITY_POLICY: ServiceKey = ServiceKey::new("reliability-policy");
+pub const RELIABILITY_REPORTER: ServiceKey = ServiceKey::new("reliability-reporter");
