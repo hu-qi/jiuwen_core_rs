@@ -32,6 +32,7 @@ dependencies = [
  "ah-plugins-mcp",
  "ah-plugins-member-optimizer",
  "ah-plugins-memory",
+ "ah-plugins-memory-lite",
  "ah-plugins-mock",
  "ah-plugins-model-allocator",
  "ah-plugins-model-catalog",
@@ -423,6 +424,15 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-memory-lite"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]

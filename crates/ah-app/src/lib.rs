@@ -48,6 +48,7 @@ use ah_plugins_prompt_attachment::PromptAttachmentPlugin;
 use ah_plugins_prompt_builder::PromptBuilderPlugin;
 use ah_plugins_stream::StreamPlugin;
 use ah_plugins_tag_manager::TagManagerPlugin;
+use ah_plugins_memory_lite::MemoryLitePlugin;
 use ah_plugins_queue::QueuePlugin;
 use ah_plugins_queue::redis_queue::RedisQueuePlugin;
 use ah_plugins_rails::{
@@ -386,6 +387,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-tag-manager",
             Arc::new(TagManagerPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-memory-lite",
+            Arc::new(MemoryLitePlugin) as DynPlugin,
         ),
         (
             "ah-plugins-reliability-burst",

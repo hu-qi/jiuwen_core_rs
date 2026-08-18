@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 655 tests / 87 crates,clippy -D warnings 0,fmt clean。
+> 当前 663 tests / 88 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 83 回合,663 tests / clippy 0 / fmt clean,协调者实现):
+> - 轻量记忆原语 ah-plugins-memory-lite(新 crate,1:1 对齐 core/memory/lite/{frontmatter,types,conflict_types}.py):frontmatter 解析(--- 块 key: value,无 frontmatter/缺闭合返回 None)/校验(name/description/type 必填 + type ∈ user/feedback/project/reference)/丰富(created_at 首次 + updated_at 每次,today 注入可测)/重建(保留正文)/正文提取;MemoryChunk + WriteMode(Create/Append/Skip)+ WriteResult(to_dict 仅含非默认字段);memory_lite 契约;8 测试;coding memory 工具操作(manager/memory_tool_ops)与外部 provider 留待后续
 >
 > **账目更新**(第 82 回合,655 tests / clippy 0 / fmt clean,协调者实现):
 > - 资源标签管理 ah-plugins-tag-manager(新 crate,1:1 对齐 core/runner/resources_manager/tag_manager.py):TagMgr 双向索引(resource_tags + tag_to_resource,含 GLOBAL 预置)+ GLOBAL 语义(打 GLOBAL 替换旧标签、global 资源拒绝其他标签)+ tag_resource/remove_resource/remove_resource_tags(skip_if_not_exists)/update_resource_tags(REPLACE/MERGE)/remove_tag/get_tag_resources/find_resources_by_tags(ANY/ALL,缺失 tag 报错或跳过)/has_resource_tag/get_resources_tags/stats/display;tag_manager 契约(Tag/GLOBAL/TagMatchStrategy/TagUpdateStrategy/TagError);9 测试;agent/tool/model/sys_operation/workflow 资源管理器与取消留待后续
