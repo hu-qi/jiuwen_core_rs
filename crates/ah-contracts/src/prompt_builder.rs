@@ -43,6 +43,36 @@ impl PromptSection {
     }
 }
 
+/// Section 名常量(对齐 SectionName)。
+pub mod section_name {
+    pub const IDENTITY: &str = "identity";
+    pub const SAFETY: &str = "safety";
+    pub const SKILLS: &str = "skills";
+    pub const TOOLS: &str = "tools";
+    pub const TODO: &str = "todo";
+    pub const TASK_TOOL: &str = "task_tool";
+    pub const TOOL_NAVIGATION: &str = "tool_navigation";
+    pub const PROGRESSIVE_TOOL_RULES: &str = "progressive_tool_rules";
+    pub const RUNTIME: &str = "runtime";
+    pub const PROMPT_ATTACHMENTS: &str = "prompt_attachments";
+    pub const MEMORY: &str = "memory";
+    pub const SESSION_TOOLS: &str = "session_tools";
+    pub const MODE_INSTRUCTIONS: &str = "mode_instructions";
+    pub const WORKSPACE: &str = "workspace";
+    pub const HEARTBEAT: &str = "heartbeat";
+    pub const CONTEXT: &str = "context";
+    pub const EXTERNAL_MEMORY: &str = "external_memory";
+    pub const COMPLETION_SIGNAL: &str = "completion_signal";
+    pub const VERIFICATION_CONTRACT: &str = "verification_contract";
+    pub const EVOLUTION_PROTOCOL: &str = "evolution_protocol";
+    pub const EVOLUTION_TEAM_PROTOCOL: &str = "evolution_team_protocol";
+    pub const SKILL_CREATION_GUIDANCE: &str = "skill_creation_guidance";
+    pub const SKILL_CREATION_NUDGE: &str = "skill_creation_nudge";
+    pub const TEAM_SKILL_CREATION_GUIDANCE: &str = "team_skill_creation_guidance";
+    pub const TEAM_SKILL_CREATION_NUDGE: &str = "team_skill_creation_nudge";
+    pub const GOAL_PROTOCOL: &str = "goal_protocol";
+}
+
 /// 提示构建模式(对齐 PromptMode)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]

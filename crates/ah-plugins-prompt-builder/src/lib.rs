@@ -10,6 +10,7 @@
 pub mod builder;
 pub mod report;
 pub mod sanitize;
+pub mod sections;
 
 use std::sync::Arc;
 
