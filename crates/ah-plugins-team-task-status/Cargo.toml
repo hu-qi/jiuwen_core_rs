@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-team-task-status"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real team task-status state machine: TaskStatus transition table + generic is_valid_transition"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"

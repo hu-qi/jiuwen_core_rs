@@ -166,3 +166,5 @@ pub const INTERACTION_ROUTER: ServiceKey = ServiceKey::new("interaction-router")
 pub const SCHEDULER_RENDER: ServiceKey = ServiceKey::new("scheduler-render");
 pub const MODEL_ALLOCATOR: ServiceKey = ServiceKey::new("model-allocator");
 pub const TEAM_JOIN_DESCRIPTOR: ServiceKey = ServiceKey::new("team-join-descriptor");
+pub const TEAM_TASK_STATUS: ServiceKey = ServiceKey::new("team-task-status");
+pub const PROMPT_ATTACHMENT: ServiceKey = ServiceKey::new("prompt-attachment");

@@ -42,6 +42,8 @@ members = [
     "crates/ah-plugins-scheduler-render",
     "crates/ah-plugins-model-allocator",
     "crates/ah-plugins-team-join-descriptor",
+    "crates/ah-plugins-team-task-status",
+    "crates/ah-plugins-prompt-attachment",
     "crates/ah-plugins-team-message",
     "crates/ah-plugins-subagents",
     "crates/ah-plugins-skill",
@@ -129,6 +131,8 @@ ah-plugins-interaction-router = { path = "crates/ah-plugins-interaction-router" 
 ah-plugins-scheduler-render = { path = "crates/ah-plugins-scheduler-render" }
 ah-plugins-model-allocator = { path = "crates/ah-plugins-model-allocator" }
 ah-plugins-team-join-descriptor = { path = "crates/ah-plugins-team-join-descriptor" }
+ah-plugins-team-task-status = { path = "crates/ah-plugins-team-task-status" }
+ah-plugins-prompt-attachment = { path = "crates/ah-plugins-prompt-attachment" }
 ah-plugins-team-message = { path = "crates/ah-plugins-team-message" }
 ah-plugins-subagents = { path = "crates/ah-plugins-subagents" }
 ah-plugins-skill = { path = "crates/ah-plugins-skill" }

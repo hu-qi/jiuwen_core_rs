@@ -41,6 +41,7 @@ dependencies = [
  "ah-plugins-optimizer",
  "ah-plugins-pregel",
  "ah-plugins-prompt",
+ "ah-plugins-prompt-attachment",
  "ah-plugins-queue",
  "ah-plugins-rails",
  "ah-plugins-rerank",
@@ -72,6 +73,7 @@ dependencies = [
  "ah-plugins-team-scheduler",
  "ah-plugins-team-skill",
  "ah-plugins-team-status",
+ "ah-plugins-team-task-status",
  "ah-plugins-team-verdict",
  "ah-plugins-teams",
  "ah-plugins-telemetry",
@@ -519,6 +521,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-prompt-attachment"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
 name = "ah-plugins-queue"
 version = "0.1.0"
 dependencies = [
@@ -869,6 +880,15 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+]
+
+[[package]]
+name = "ah-plugins-team-task-status"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]
