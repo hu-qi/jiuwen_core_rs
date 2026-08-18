@@ -11,7 +11,9 @@
 use crate::seam::Seam;
 
 /// 异常严重度(对齐 Severity,rank 0..3)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
     Low,

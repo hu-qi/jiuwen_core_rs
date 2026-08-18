@@ -2,11 +2,16 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 568 tests / 83 crates,clippy -D warnings 0,fmt clean。
+> 当前 586 tests / 84 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 76 回合,586 tests / clippy 0 / fmt clean,3 任务并行子代理):
+> - 压缩推断 ah-plugins-reliability-burst += FrequentCompactionDetector(1:1 对齐 reliability/detectors/compaction.py):BEFORE_MODEL_CALL 消息数显著下降(≥drop_ratio 0.3)推断压缩事件,300s 窗口内 ≥3 次 → Medium(边沿触发,触发后锁存);5 测试
+> - 团队乒乓 ah-plugins-reliability-tools += PingPongDetector(1:1 对齐 reliability/detectors/pingpong.py):MESSAGE 信号双向方向反转计数,min_volleys 6→Medium/12→High,第三方消息重置 + 边沿触发,evidence 含排序 pair;5 测试
+> - 可靠性框架 ah-plugins-reliability-monitor(新 crate,1:1 对齐 reliability/{monitor,remediation,reporter}.py):reliability_config 契约(全量检测器阈值 + 严重度→动作映射 + 重启强度预算);RemediationPolicy 分层策略(LOW observe/MEDIUM report/HIGH steer+report/CRITICAL steer+escalate);LocalAutoRemediator(强度限流 5 次/60s 可逆本地纠偏 + 消息渲染,VecDeque 自实现窗口);ReliabilityMonitor(detectors 聚合 feed + 策略路由 + panic 容忍 + reset);AnomalyReporter trait + LocalAnomalyReporter(进程内 sink 绑定);8 测试
 >
 > **账目更新**(第 75 回合,568 tests / clippy 0 / fmt clean,2 任务并行):
 > - 错误突发检测 ah-plugins-reliability-burst(1:1 对齐 agent_teams/reliability/{window,tool_error,model_error}.py):SlidingWindowCounter(VecDeque 滑窗 add/count/reset)+ ErrorBurstDetector(2×阈值→High/单阈值→Medium,边沿触发,now 注入)+ ToolErrorRateDetector(窗口 60s/rate 5/consec 3)+ ModelErrorRateDetector(同构);7 测试

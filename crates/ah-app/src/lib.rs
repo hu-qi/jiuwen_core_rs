@@ -51,6 +51,7 @@ use ah_plugins_rails::{
     ApprovalRailPlugin, PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin,
 };
 use ah_plugins_reliability_burst::ReliabilityBurstPlugin;
+use ah_plugins_reliability_monitor::ReliabilityMonitorPlugin;
 use ah_plugins_reliability_tools::ReliabilityToolsPlugin;
 use ah_plugins_rerank::RerankPlugin;
 use ah_plugins_retrieval::RetrievalPlugin;
@@ -378,6 +379,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-reliability-tools",
             Arc::new(ReliabilityToolsPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-reliability-monitor",
+            Arc::new(ReliabilityMonitorPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",
