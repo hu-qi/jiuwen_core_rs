@@ -2,11 +2,15 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 552 tests / 81 crates,clippy -D warnings 0,fmt clean。
+> 当前 568 tests / 83 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 75 回合,568 tests / clippy 0 / fmt clean,2 任务并行):
+> - 错误突发检测 ah-plugins-reliability-burst(1:1 对齐 agent_teams/reliability/{window,tool_error,model_error}.py):SlidingWindowCounter(VecDeque 滑窗 add/count/reset)+ ErrorBurstDetector(2×阈值→High/单阈值→Medium,边沿触发,now 注入)+ ToolErrorRateDetector(窗口 60s/rate 5/consec 3)+ ModelErrorRateDetector(同构);7 测试
+> - 工具调用可靠性 ah-plugins-reliability-tools(1:1 对齐 reliability/detectors/{output_length,repeat_tool,pingpong}.py):自实现 sha256(FIPS 180-4,已知向量验证)+ canonical JSON(递归键排序)+ stable_call_hash/stable_result_hash;OutputLengthDetector(text 32000/thinking 16000 触发一次);RepeatToolCallDetector 四层(identical≥30→Critical/≥20→High/alternation≥10→Medium/repeats≥10→Low,边沿触发);9 测试
 >
 > **账目更新**(第 74 回合,552 tests / clippy 0 / fmt clean,2 任务并行):
 > - 任务状态机 ah-plugins-team-task-status(1:1 对齐 schema/status.py TaskStatus):TaskStatus 7 态 + 迁移表(Pending→Planning/InProgress/Blocked/Cancelled;Blocked→Pending/Cancelled;Planning 自环(rework)+InProgress/Pending/Blocked/Cancelled;InProgress→InReview/Completed(reviewer 有无)/rework 回 Pending·Blocked·Cancelled;InReview→Completed/InProgress(verify fail rework)/Pending/Cancelled;Completed·Cancelled 无出边)+ is_terminal;12 测试

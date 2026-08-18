@@ -50,6 +50,8 @@ use ah_plugins_queue::redis_queue::RedisQueuePlugin;
 use ah_plugins_rails::{
     ApprovalRailPlugin, PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin,
 };
+use ah_plugins_reliability_burst::ReliabilityBurstPlugin;
+use ah_plugins_reliability_tools::ReliabilityToolsPlugin;
 use ah_plugins_rerank::RerankPlugin;
 use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rl::RlPlugin;
@@ -368,6 +370,14 @@ pub fn plugin_catalog(
         (
             "ah-plugins-prompt-attachment",
             Arc::new(PromptAttachmentPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-reliability-burst",
+            Arc::new(ReliabilityBurstPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-reliability-tools",
+            Arc::new(ReliabilityToolsPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sharing",

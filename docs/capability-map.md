@@ -94,6 +94,7 @@
 | workflow(148) | ah-plugins-teams-workflow | swarmflow 引擎(phase/agent 并行 barrier/预算/事件流/journal 续跑) | 已落地(本回合,SwarmflowEngine,worker=SubagentRuntime) |
 | residual.rs 资产 | ah-plugins-teams | NativeTaskBoard/Journal/BudgetLedger/检测器 | 接入运行路径(现仅测试引用)
 | kv_cache/memory/monitor/models/rails/skill/prompts/cli/harness | 各插件 | 对应功能 | monitor 已落地(本回合:ah-plugins-team-monitor 只读团队/任务/消息视图 + teams/task 事件日志);models 已落地(本回合并行:模型分配器 4 策略 + resolve_member_model);kv_cache 等留待后续 |
+| reliability(1036 符号:anomaly/config/factory/handler/monitor/rail/reporter/signals/window + detectors/{base,compaction,model_error,output_length,pingpong,repeat_tool,tool_error} + remediation/{action,local,policy}) | `reliability` seam + ah-plugins-reliability-burst + ah-plugins-reliability-tools | 错误突发/工具错误率/模型错误率/输出长度/重复·乒乓·循环调用检测 | burst+tool-error+model-error 已落地(本回合并行:SlidingWindowCounter 滑动窗口 + ErrorBurstDetector 边沿触发严重度分级 + 2×阈值 High/单阈值 Medium;窗口 60s/rate 5/consec 3);output-length+repeat-tool+pingpong 已落地(本回合并行:输出长度上限 text 32000/thinking 16000 触发一次;四层重复检测 identical≥30→Critical/≥20→High/alternation≥10→Medium/repeats≥10→Low + stable_call_hash/stable_result_hash sha256);window/anomaly/signals 契约已落地;compaction/monitor/rail/reporter/handler/factory/remediation 留待后续 |
 
 ### 2.4 agent_evolving(602 符号)
 
