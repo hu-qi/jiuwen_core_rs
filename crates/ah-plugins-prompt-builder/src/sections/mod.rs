@@ -5,6 +5,7 @@
 
 pub mod advanced;
 pub mod base;
+pub mod context;
 pub mod runtime;
 pub mod workspace;
 

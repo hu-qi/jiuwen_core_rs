@@ -2,11 +2,15 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 811 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 818 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 110 回合,818 tests / clippy 0 / fmt clean,协调者实现):
+> - context 动态 section ah-plugins-prompt-builder += sections/context.rs(新模块文件,1:1 对齐 harness/prompts/sections/context.py 纯逻辑部分):CONTEXT_HEADER/CONTEXT_FILE_TITLES/CONTEXT_FILES/CONTEXT_SECTION_BY_FILE/DAILY_MEMORY_GUIDANCE 常量 + is_unfilled_template(长度>500 非模板/HTML 注释剥离/6 个模板标记/标题行剥离)+ clean_agent_name(去 (…权威…)/(见 IDENTITY.md) 括号后缀 + 引号标点)+ identity_has_filled_name(名字/Name 行扫描,空或 _() 占位排除)+ build_context_content(头部+单文件标题/内容+空文件提示+每日记忆引导+extra)+ build_context_section(priority=80)+ build_context_file_sections(context.* 单文件)+ extract_task_tool_agent_lines(标记/停止标记切分,行归一化 - 前缀);文件读取与缓存(sys_operation)留待集成;7 测试(40 总)
+> - 注:发现 Rust 1.92 工具链移除隐式字符串字面量拼接,多行相邻字面量必须改用 concat! 宏
 >
 > **账目更新**(第 109 回合,811 tests / clippy 0 / fmt clean,协调者实现):
 > - workspace 动态 section ah-plugins-prompt-builder += sections/workspace.rs(新模块文件,1:1 对齐 harness/prompts/sections/workspace.py + workspace_header.py):WORKSPACE_HEADER/IMPORTANT_FILES 双语常量 + DIRECTORY_DESCRIPTIONS 12 项双语描述(get_directory_description 未知→空)+ DirNode(name/path/description/is_file/children)+ format_tree(├──/└──/│ 连接符,目录带 # 描述)+ build_workspace_content(头部 + 路径声明 + 重要文件表)+ build_workspace_section(name=workspace,priority=70);真实目录扫描(sys_operation.fs)留待集成;5 测试(33 总)
