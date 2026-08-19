@@ -100,7 +100,7 @@
 
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
-| dataset(5) | ah-plugins-evolving | Case/EvaluatedCase/loader/shuffle/split | 字段语义对等
+| dataset(5) | ah-plugins-evolving | Case/EvaluatedCase/loader/shuffle/split | 已落地(本回合:Case(inputs/label/tools/case_id 自动生成)+ ToolInfo(type=function 默认)+ EvaluatedCase(score 夹取 [0,1]+ 访问器)+ shuffle_cases(seed 确定性)+ split_cases(ratio 校验)+ CaseLoader(迭代/拷贝/split)) |
 | evaluator(40) | `evolving` seam | LLM-as-judge、指标、pipeline | 已落地(本地确定性判据必算 + LLM judge 附加,不可用原因显式记录,不静默) |
 | trajectory(94) | `evolving` seam | OTLP span codec、抽取、聚合、存储 | 已落地(本回合:Trajectory↔Span 树编解码 + 聚合统计,抽取/经验存储先前已落地) |
 | checkpointing/experience/sharing(21/54/20) | ah-plugins-evolving + `sharing` seam + ah-plugins-sharing + `experience-scorer` seam + ah-plugins-experience-scorer | 持久化、评分、分享 | experience 持久化已落地(save/load/search JSONL + 跨重开恢复);经验分享已落地(LocalSharingBackend 本地文件 hub(束 JSON/包/索引 JSONL)+ ExperienceSharer(stage 去重队列/flush 打包上传重试退避/skill 包同步/下载镜像缓存/关键词检索));评分已落地(本回合:贝叶斯平滑有效性 (p+1)/(t+2) / 利用率 used·presented / 新鲜度指数衰减 0.5+0.5·2^(-days/90) + 版本过期 ×0.7 / 加权总分 0.5E+0.3U+0.2F / update 累加统计重算) |

@@ -209,7 +209,8 @@ pub struct ToolCard {
     pub input_params: Value,
 }
 
-fn unique_hex() -> String {
+/// 进程内唯一 hex 标识(时间戳 + 计数器;对齐 uuid4().hex 的唯一性语义)。
+pub fn unique_hex() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
