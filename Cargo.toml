@@ -10,7 +10,9 @@ members = [
     "crates/ah-plugins-prompt",
     "crates/ah-plugins-queue",
     "crates/ah-plugins-workspace",
+    "crates/ah-plugins-worktree",
     "crates/ah-plugins-sandbox",
+    "crates/ah-plugins-checkpointer",
     "crates/ah-plugins-code",
     "crates/ah-plugins-web",
     "crates/ah-plugins-transport",
@@ -20,10 +22,12 @@ members = [
     "crates/ah-plugins-autoharness",
     "crates/ah-plugins-rl",
     "crates/ah-plugins-rl-step",
+    "crates/ah-plugins-resources",
     "crates/ah-plugins-rerank",
     "crates/ah-plugins-sharing",
     "crates/ah-plugins-experience-scorer",
     "crates/ah-plugins-json-parser",
+    "crates/ah-plugins-kv-cache",
     "crates/ah-plugins-model-catalog",
     "crates/ah-plugins-signals",
     "crates/ah-plugins-dataset-curator",
@@ -45,6 +49,7 @@ members = [
     "crates/ah-plugins-team-task-status",
     "crates/ah-plugins-prompt-attachment",
     "crates/ah-plugins-prompt-builder",
+    "crates/ah-plugins-prompt-builder-devtools",
     "crates/ah-plugins-stream",
     "crates/ah-plugins-tag-manager",
     "crates/ah-plugins-memory-lite",
@@ -57,6 +62,7 @@ members = [
     "crates/ah-plugins-team-message",
     "crates/ah-plugins-subagents",
     "crates/ah-plugins-skill",
+    "crates/ah-plugins-skill-creator",
     "crates/ah-plugins-pregel",
     "crates/ah-plugins-tune",
     "crates/ah-plugins-trainer",
@@ -78,6 +84,7 @@ members = [
     "crates/ah-plugins-memory",
     "crates/ah-plugins-manifest",
     "crates/ah-plugins-mcp",
+    "crates/ah-plugins-lsp",
     "crates/ah-plugins-member-optimizer",
     "crates/ah-plugins-credentials",
     "crates/ah-plugins-retrieval",
@@ -110,6 +117,8 @@ ah-plugins-store = { path = "crates/ah-plugins-store" }
 ah-plugins-prompt = { path = "crates/ah-plugins-prompt" }
 ah-plugins-queue = { path = "crates/ah-plugins-queue" }
 ah-plugins-workspace = { path = "crates/ah-plugins-workspace" }
+ah-plugins-worktree = { path = "crates/ah-plugins-worktree" }
+ah-plugins-checkpointer = { path = "crates/ah-plugins-checkpointer" }
 ah-plugins-sandbox = { path = "crates/ah-plugins-sandbox" }
 ah-plugins-code = { path = "crates/ah-plugins-code" }
 ah-plugins-web = { path = "crates/ah-plugins-web" }
@@ -120,10 +129,12 @@ ah-plugins-ci = { path = "crates/ah-plugins-ci" }
 ah-plugins-autoharness = { path = "crates/ah-plugins-autoharness" }
 ah-plugins-rl = { path = "crates/ah-plugins-rl" }
 ah-plugins-rl-step = { path = "crates/ah-plugins-rl-step" }
+ah-plugins-resources = { path = "crates/ah-plugins-resources" }
 ah-plugins-rerank = { path = "crates/ah-plugins-rerank" }
 ah-plugins-sharing = { path = "crates/ah-plugins-sharing" }
 ah-plugins-experience-scorer = { path = "crates/ah-plugins-experience-scorer" }
 ah-plugins-json-parser = { path = "crates/ah-plugins-json-parser" }
+ah-plugins-kv-cache = { path = "crates/ah-plugins-kv-cache" }
 ah-plugins-model-catalog = { path = "crates/ah-plugins-model-catalog" }
 ah-plugins-signals = { path = "crates/ah-plugins-signals" }
 ah-plugins-dataset-curator = { path = "crates/ah-plugins-dataset-curator" }
@@ -145,6 +156,7 @@ ah-plugins-team-join-descriptor = { path = "crates/ah-plugins-team-join-descript
 ah-plugins-team-task-status = { path = "crates/ah-plugins-team-task-status" }
 ah-plugins-prompt-attachment = { path = "crates/ah-plugins-prompt-attachment" }
 ah-plugins-prompt-builder = { path = "crates/ah-plugins-prompt-builder" }
+ah-plugins-prompt-builder-devtools = { path = "crates/ah-plugins-prompt-builder-devtools" }
 ah-plugins-stream = { path = "crates/ah-plugins-stream" }
 ah-plugins-tag-manager = { path = "crates/ah-plugins-tag-manager" }
 ah-plugins-memory-lite = { path = "crates/ah-plugins-memory-lite" }
@@ -157,6 +169,7 @@ ah-plugins-reliability-monitor = { path = "crates/ah-plugins-reliability-monitor
 ah-plugins-team-message = { path = "crates/ah-plugins-team-message" }
 ah-plugins-subagents = { path = "crates/ah-plugins-subagents" }
 ah-plugins-skill = { path = "crates/ah-plugins-skill" }
+ah-plugins-skill-creator = { path = "crates/ah-plugins-skill-creator" }
 ah-plugins-pregel = { path = "crates/ah-plugins-pregel" }
 ah-plugins-tune = { path = "crates/ah-plugins-tune" }
 ah-plugins-trainer = { path = "crates/ah-plugins-trainer" }
@@ -178,6 +191,7 @@ ah-plugins-workflow = { path = "crates/ah-plugins-workflow" }
 ah-plugins-memory = { path = "crates/ah-plugins-memory" }
 ah-plugins-manifest = { path = "crates/ah-plugins-manifest" }
 ah-plugins-mcp = { path = "crates/ah-plugins-mcp" }
+ah-plugins-lsp = { path = "crates/ah-plugins-lsp" }
 ah-plugins-member-optimizer = { path = "crates/ah-plugins-member-optimizer" }
 ah-plugins-credentials = { path = "crates/ah-plugins-credentials" }
 ah-plugins-retrieval = { path = "crates/ah-plugins-retrieval" }

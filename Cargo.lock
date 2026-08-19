@@ -12,6 +12,7 @@ dependencies = [
  "ah-plugins-agentbuilder",
  "ah-plugins-anthropic",
  "ah-plugins-autoharness",
+ "ah-plugins-checkpointer",
  "ah-plugins-ci",
  "ah-plugins-cli",
  "ah-plugins-code",
@@ -30,6 +31,8 @@ dependencies = [
  "ah-plugins-inbound-render",
  "ah-plugins-interaction-router",
  "ah-plugins-json-parser",
+ "ah-plugins-kv-cache",
+ "ah-plugins-lsp",
  "ah-plugins-manifest",
  "ah-plugins-mcp",
  "ah-plugins-member-optimizer",
@@ -46,12 +49,14 @@ dependencies = [
  "ah-plugins-prompt",
  "ah-plugins-prompt-attachment",
  "ah-plugins-prompt-builder",
+ "ah-plugins-prompt-builder-devtools",
  "ah-plugins-queue",
  "ah-plugins-rails",
  "ah-plugins-reliability-burst",
  "ah-plugins-reliability-monitor",
  "ah-plugins-reliability-tools",
  "ah-plugins-rerank",
+ "ah-plugins-resources",
  "ah-plugins-retrieval",
  "ah-plugins-rl",
  "ah-plugins-rl-step",
@@ -66,6 +71,7 @@ dependencies = [
  "ah-plugins-sharing",
  "ah-plugins-signals",
  "ah-plugins-skill",
+ "ah-plugins-skill-creator",
  "ah-plugins-store",
  "ah-plugins-stream",
  "ah-plugins-subagent",
@@ -97,6 +103,7 @@ dependencies = [
  "ah-plugins-web",
  "ah-plugins-workflow",
  "ah-plugins-workspace",
+ "ah-plugins-worktree",
  "serde_json",
  "tokio",
 ]
@@ -189,6 +196,15 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-checkpointer"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]
@@ -397,6 +413,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-kv-cache"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+]
+
+[[package]]
+name = "ah-plugins-lsp"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
 name = "ah-plugins-manifest"
 version = "0.1.0"
 dependencies = [
@@ -579,6 +612,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-prompt-builder-devtools"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
 name = "ah-plugins-queue"
 version = "0.1.0"
 dependencies = [
@@ -634,6 +676,16 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-resources"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-manifest",
  "serde_json",
 ]
 
@@ -791,6 +843,15 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-skill-creator"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]
@@ -1160,6 +1221,14 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-worktree"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
 ]
 
 [[package]]

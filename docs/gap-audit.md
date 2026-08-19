@@ -52,9 +52,9 @@
 | subagents(8 文件) | partial | code/research/plan/verify(工具白名单真实强制) | browser、explore、mobile |
 | goal | partial | workspace.json + 目标状态机(ah-plugins-workspace) | goal/manager.py、evaluation.py、store.py 完整语义 |
 | manifest | done(第 127 回合) | ah-plugins-manifest:catalog(重名拒绝/Effect 回滚)/factory_registry(factory_ref 可逆注册)/registration(kind 路由 TOOL/RAIL/SUBAGENT)/ModelElementFactory(双源 resolve)+ ah-contracts manifest seam | 真实 harness 元素声明(builtin/harness/meta elements)的工厂接线留待各 rails/tools 模块落地 |
-| kv_cache | **missing** | — | kv_cache_hooks(harness 与 core/single_agent、agent_teams 三处) |
-| lsp | **missing** | — | core(client/diagnostic_registry/instance/manager/types/utils/file_uri/git_ignore)+ servers(registry + go/java/python/rust/typescript) |
-| resources | partial | 部分类型 | extension_loader、extension_resolver |
+| kv_cache | done(第 128 回合) | ah-plugins-kv-cache:affinity/sticky/session-id 判定 + prefetch/offload/evict 信号;ah-contracts kv_cache team 部分(状态机/manageable/control domain) | 团队 registry 运行时(记录/锁/并发)留待 runtime 接线 |
+| lsp | partial(第 128 回合) | ah-plugins-lsp:状态机/诊断注册表六步算法/file_uri/5 语言 server 配置 | stdio JSON-RPC 客户端(spawn/读写/握手)留待进程接线 |
+| resources | partial(第 128 回合) | ah-plugins-resources:Spec 模型/MCP 归一化/模板渲染/路径校验/ExtensionParts 解析 | manifest 发现/文件读取(FS 接线) |
 | schema | partial | 部分类型 | stop_condition/task/config/interaction/agent_mode/loop_event/extension_spec/build_context/deep_agent_spec/state 字段对等 |
 | security(harness) | partial | ah-plugins-security 规则 | suggestions/patterns/models/host/tiered_policy/core/factory/file_guard/shell_ast/checker/files registry/extract |
 | task_loop | **missing** | — | event_manager/loop_coordinator/loop_queues/session_spawn_executor/task_loop_controller/task_loop_event_executor/task_loop_event_handler |
@@ -77,7 +77,7 @@ i18n、上下文正文、外部 CLI 子进程运行时、入站格式、交互�
 | observability(16) | partial | claude/codex otel 桥(agent-core 新增,未移植) |
 | rails(12) | partial | 团队侧 rails 细化 |
 | tools(27) | partial | 团队工具面(database/locales 描述等) |
-| worktree(6) | partial | 团队 worktree 操作 |
+| worktree(6) | partial(第 128 回合) | ah-plugins-worktree:命名(slug+sha256)/成员状态归属判定 | git worktree 生命周期(create/remove/贡献分类)留待 git 扩展 |
 | workflow(148) | done | — |
 | reliability | partial | rail/handler/factory/EventAnomalyReporter 留待后续(依赖 coordination 运行时) |
 | residual.rs 资产 | partial | NativeTaskBoard/Journal/BudgetLedger 仅测试引用,未接入运行路径 |
@@ -114,7 +114,7 @@ dataset_generator(确定性+LLM)、dataset_curator、data_loader 分批、rsi-co
 
 | Python 子模块 | 状态 | 已落地 | 未完成(缺口) |
 | --- | --- | --- | --- |
-| checkpointer(Redis) | partial | SET/GET/DEL/KEYS | TTL/集群/pipeline |
+| checkpointer(Redis) | partial(第 128 回合) | ah-plugins-checkpointer:TTL/key 构造/四存储/钩子编排(RedisStore seam 注入) | 真实 Redis 进程集成测试 |
 | message_queue(Pulsar) | partial | Redis LIST+INCR+游标 | Pulsar |
 | store(GaussDB/ES) | partial | PostgreSQL/GaussDB 兼容 SQL | Elasticsearch |
 | sys_operation(远程沙箱 9 provider) | partial | 4 个白名单命令 | AIO/jiuwenbox/yuanrong 等远程 provider |
@@ -127,7 +127,7 @@ dataset_generator(确定性+LLM)、dataset_curator、data_loader 分批、rsi-co
 
 | Python 子模块 | 状态 | 已落地 | 未完成(缺口) |
 | --- | --- | --- | --- |
-| prompt_builder | partial | {{var}} 渲染 | meta/feedback/badcase 构建器 |
+| prompt_builder | partial(第 128 回合) | ah-plugins-prompt-builder-devtools:三构建器校验/解析/模板编排(LLM seam 注入) | 真实 LLM 模型接线 |
 | skill_creator/evaluator | partial | 技能注册/持久化/评估(subagent 委派) | creator 脚本(skill_omni_creation)、evaluator 管线(skill_eval_pipeline/skill_judge/skill_safety_judge/skill_tester)细化 |
 | agent_builder / tune / symphony | done | — | — |
 

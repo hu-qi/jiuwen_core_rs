@@ -9,8 +9,8 @@
 
 | 指标 | 值 |
 | --- | --- |
-| **总体对等度** | **≈ 48.7%**(按 Python 文件数加权;excluded 不参与计分) |
-| done / partial / missing / excluded | **4 / 83 / 8 / 2** |
+| **总体对等度** | **≈ 53.1%**(按 Python 文件数加权;excluded 不参与计分) |
+| done / partial / missing / excluded | **5 / 90 / 0 / 2** |
 | 上一基线(第 75 回合) | ≈ 31% |
 
 ## 1. 逐域对等度
@@ -18,14 +18,14 @@
 | 域 | 文件数 | 对等度 | done/partial/missing |
 | --- | ---: | ---: | --- |
 | core | 796 | 53% | 0/16/0 |
-| agent_teams | 276 | 65% | 1/22/2 |
+| agent_teams | 276 | 70% | 1/24/0 |
 | agent_evolving | 208 | 64% | 1/11/0 |
-| extensions | 102 | 42% | 0/9/1 |
+| extensions | 102 | 48% | 0/10/0 |
 | rsi | 175(excl. 5) | 38% | 1/12/0(2 excluded) |
-| harness | 337 | 30% | 1/10/3 |
-| dev_tools | 94 | 24% | 0/3/2 |
+| harness | 337 | 45% | 2/12/0 |
+| dev_tools | 94 | 41% | 0/5/0 |
 
-## 2. 完整完成(done)—— 4 个(全是确定性算法)
+## 2. 完整完成(done)—— 5 个(全是确定性算法)
 
 | 模块 | pct | 证据 |
 | --- | ---: | --- |
@@ -33,19 +33,11 @@
 | agent_teams / models | 90 | `ah-plugins-model-allocator/src/lib.rs:58` 四类分配器 + IntelliRouter |
 | rsi / dataset_curator | 90 | `ah-plugins-dataset-curator/src/lib.rs:423/485` 决策路径 1:1 |
 | harness / manifest | 90 | `ah-plugins-manifest/src/lib.rs:27/88/136/262` + `ah-contracts/src/manifest.rs:19/48/115/189` 描述符目录/工厂注册表/kind 路由注册 1:1 |
+| harness / kv_cache | 90 | `ah-contracts/src/kv_cache.rs:77/94/131/186` + `ah-plugins-kv-cache/src/lib.rs:21-118` affinity/sticky/session-id 判定 + prefetch/offload/evict 信号 1:1 |
 
-## 3. 完全未实现(missing)—— 8 个
+## 3. 完全未实现(missing)—— 0 个
 
-| 域 | 模块 | 缺口 |
-| --- | --- | --- |
-| harness | kv_cache | KV-cache 亲和/预取/驱逐,0 crate |
-| harness | lsp | LSP 客户端/诊断/语言服务器,0 crate |
-| harness | resources | 插件/模板扩展加载与解析,0 crate |
-| dev_tools | prompt_builder | LLM badcase/feedback/meta-template 构建,0 crate |
-| dev_tools | skill_creator | 抓取→下载→过滤→LLM 生成流水线,0 crate |
-| agent_teams | kv_cache | 团队 KV cache 生命周期,0 crate |
-| agent_teams | worktree | git worktree 生命周期,0 crate |
-| extensions | checkpointer | Redis checkpointer + 生命周期钩子,0 seam |
+全部 11 个 missing 模块已补到至少 partial(第 127-128 回合):manifest、resources、worktree、checkpointer、kv_cache(harness)、lsp、kv_cache(agent_teams)、prompt_builder、skill_creator;rsi/resource、rsi/storage 判 excluded(见 §3b)。
 
 ## 3b. 排除(excluded)—— 2 个(Python 侧亦为 TODO 桩,无真实功能)
 
@@ -54,7 +46,7 @@
 | rsi | resource | Python `rsi/resource/manager.py:14-20` `read_text`/`resolve_path` 均为 `NotImplementedError("TODO: ...")` 桩;Rust 不硬造功能 |
 | rsi | storage | Python `rsi/storage/store.py:14-32` 五个 `allocate_*`/`write_result_ref` 均为 `NotImplementedError("TODO: ...")` 桩;Rust 不硬造功能 |
 
-## 4. 需深度推进(partial)—— 83 个
+## 4. 需深度推进(partial)—— 90 个
 
 ### 4.1 core(16 子模块,53%)
 

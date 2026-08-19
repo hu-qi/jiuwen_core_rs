@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-worktree"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real team worktree lifecycle: deterministic naming + member-state ownership matching"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

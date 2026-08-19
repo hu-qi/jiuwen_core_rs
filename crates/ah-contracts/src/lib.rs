@@ -14,6 +14,7 @@ pub mod agent;
 pub mod agent_builder;
 pub mod analyzer;
 pub mod autoharness;
+pub mod checkpointer;
 pub mod ci;
 pub mod cli;
 pub mod code;
@@ -34,7 +35,9 @@ pub mod inbound_render;
 pub mod interaction_router;
 pub mod json_parser;
 pub mod keys;
+pub mod kv_cache;
 pub mod llm;
+pub mod lsp;
 pub mod manifest;
 pub mod mcp;
 pub mod member_optimizer;
@@ -49,10 +52,12 @@ pub mod pregel;
 pub mod prompt;
 pub mod prompt_attachment;
 pub mod prompt_builder;
+pub mod prompt_builder_devtools;
 pub mod queue;
 pub mod reliability_config;
 pub mod reliability_detectors;
 pub mod rerank;
+pub mod resources;
 pub mod retrieval;
 pub mod reward;
 pub mod rl_step;
@@ -73,6 +78,7 @@ pub mod shell;
 pub mod signals;
 pub mod single_harness;
 pub mod skill;
+pub mod skill_creator;
 pub mod store;
 pub mod stream;
 pub mod subagent;
@@ -103,6 +109,7 @@ pub mod tune;
 pub mod web;
 pub mod workflow;
 pub mod workspace;
+pub mod worktree;
 
 pub use effect::Effect;
 
@@ -115,6 +122,13 @@ pub mod prelude {
     };
     pub use crate::autoharness::{
         AutoHarness, AutoHarnessConfig, AutoHarnessError, CycleResult, StageKind, StageResult,
+    };
+    pub use crate::checkpointer::{
+        Checkpointer, CheckpointerError, CheckpointerProvider, INTERACTIVE_INPUT,
+        RedisCheckpointerConfig, RedisConnectionConfig, RedisPipeline, RedisStore, RedisTTLConfig,
+        RedisValue, SESSION_NAMESPACE_AGENT, SESSION_NAMESPACE_AGENT_TEAM,
+        SESSION_NAMESPACE_WORKFLOW, TASK_STATUS_INTERRUPT, WORKFLOW_NAMESPACE_GRAPH, build_key,
+        build_key_with_namespace, ttl_seconds_from_minutes,
     };
     pub use crate::ci::{CiError, CiGateRequest, CiGateResult, CiGateRunner};
     pub use crate::cli::{CliChunk, CliError, CliRenderer, TodoItem, TodoStatus};
@@ -148,9 +162,23 @@ pub mod prelude {
         AGENT_LOOP, CREDENTIALS, FS, LLM, MCP, MEMORY, RETRIEVAL, SESSION_MANAGER, SESSIONS, SHELL,
         TELEMETRY, TOOLS, WORKFLOW,
     };
+    pub use crate::kv_cache::{
+        ControlDomain, KvcAffinityModel, KvcCacheIdentity, KvcError, KvcHooks, KvcTeamAction,
+        SessionKvcAction, SessionKvcSignal, TeamKvcState, build_control_domain,
+        is_binding_manageable, is_sticky_subagent_type, normalized_config_value, record_actionable,
+        resolve_kvc_action_timeout, resolve_sub_session_id, run_session_kv_action,
+        state_after_action, validate_signal_action,
+    };
     pub use crate::llm::{
         ChatMessage, ChatRole, ModelChunk, ModelError, ModelProvider, ModelRequest, ModelResponse,
         ToolCall, ToolCallDelta, ToolSchema,
+    };
+    pub use crate::lsp::{
+        DEFAULT_STARTUP_TIMEOUT_MS, InitializeOptions, LspDiagnosticFile, LspDiagnosticItem,
+        LspDiagnosticRegistry, LspError, LspServerState, LspServerStatus, LspService,
+        MAX_CRASH_RECOVERY_ATTEMPTS, MAX_DIAG_PER_FILE, MAX_DIAG_TOTAL, SERVER_GO, SERVER_JAVA,
+        SERVER_PYTHON, SERVER_RUST, SERVER_TYPESCRIPT, ScopedLspServerConfig, ServerDefinition,
+        SpawnHandle, diag_key, file_uri_to_path, parse_raw_diagnostic, path_to_file_uri,
     };
     pub use crate::manifest::{
         ConstructionInputModel, ElementFactory, ElementKind, HarnessElementDescriptor,
@@ -178,6 +206,13 @@ pub mod prelude {
     pub use crate::prompt::{PromptError, PromptRegistry, PromptTemplate, RenderedPrompt};
     pub use crate::queue::{MessageQueue, QueueError, QueueMessage};
     pub use crate::rerank::{RerankConfig, RerankError, RerankedHit, Reranker};
+    pub use crate::resources::{
+        AgentTemplateSpec, BuiltinToolSpec, ExtensionParts, LoadRecord, McpServerSpec, PluginSpec,
+        PromptSectionSpec, RailSpec, ResolvedPromptSection, ResolvedSkill, ResourceKind,
+        ResourceRef, ResourcesError, ResourcesResolver, SkillSpec, looks_like_mcp_server_entry,
+        mcp_transport_alias, normalize_mcp_server_entry, render_params, render_template,
+        select_content, skill_enabled_list, skill_mode, validate_plain_data, validate_plugin_paths,
+    };
     pub use crate::retrieval::{RetrievalError, RetrievalHit, RetrievalProvider};
     pub use crate::reward::{RewardCase, RewardConfig, RewardError, RewardFunction, RewardOutput};
     pub use crate::rl_step::{PpoParams, RlSample, RlStep, RlStepError, RlStepResult};
@@ -203,6 +238,12 @@ pub mod prelude {
         SingleHarnessResult, SingleHarnessRuntime,
     };
     pub use crate::skill::{Skill, SkillError, SkillEvaluation, SkillRegistry};
+    pub use crate::skill_creator::{
+        AssetEntry, FilterDecision, MAX_ASSETS, MAX_CONTENT_LENGTH, SUPPORTED_EXTS, SkillCreator,
+        SkillCreatorError, SkillFetcher, SkillGenRequest, SkillGenerator, encode_b64, filter_block,
+        image_ext, mime_to_ext, save_fetched_assets_manifest, slugify, strip_hallucinated_images,
+        strip_json_fence, url_to_slug,
+    };
     pub use crate::store::{
         BaseKVStore, BaseMessageStore, KvEntry, StoreError, StoreProvider, StoredMessage,
     };
@@ -243,5 +284,11 @@ pub mod prelude {
     };
     pub use crate::workspace::{
         Goal, GoalStatus, WorkspaceError, WorkspaceManifest, WorkspaceService,
+    };
+    pub use crate::worktree::{
+        MAX_SLUG_LENGTH, MEMBER_PART_LENGTH, MemberWorktreeInfo, TEAM_PART_LENGTH, WorktreeError,
+        WorktreeMemberState, WorktreeNaming, WorktreeOwnerScope, build_teammate_worktree_name,
+        info_from_options, info_matches_scope, matches_scope, sha256, sha256_hex_prefix, slug_part,
+        validate_slug,
     };
 }

@@ -2,11 +2,17 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 925 tests / 92 crates,clippy -D warnings 0,fmt clean。
+> 当前 1000+ tests / 100 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 128 回合,missing 11 → 0,协调者实现):
+> - 全部 11 个 missing 模块补到至少 partial / done:
+>   - **done**:harness/kv_cache(ah-contracts/src/kv_cache.rs:77-131 + ah-plugins-kv-cache,affinity/sticky/session-id 判定 + prefetch/offload/evict 信号 1:1)
+>   - **partial**:harness/resources(ah-contracts/src/resources.rs + ah-plugins-resources:spec 模型/MCP 归一化/模板渲染/路径校验/resolver);agent_teams/worktree(ah-contracts/src/worktree.rs + ah-plugins-worktree:naming/member_state/session_scope 确定性部分);extensions/checkpointer(ah-contracts/src/checkpointer.rs + ah-plugins-checkpointer:TTL 换算/key 构造/四存储/钩子编排);agent_teams/kv_cache(ah-contracts/src/kv_cache.rs team 部分:状态机/manageable/control domain);harness/lsp(ah-contracts/src/lsp.rs + ah-plugins-lsp:状态机/诊断注册表/5 语言 server 配置);dev_tools/prompt_builder(ah-contracts/src/prompt_builder_devtools.rs + ah-plugins-prompt-builder-devtools:三构建器校验/解析/模板编排,LLM 经 seam 注入);dev_tools/skill_creator(ah-contracts/src/skill_creator.rs + ah-plugins-skill-creator:slugify/资产编号/过滤/去幻影,抓取与 LLM 经 seam 注入)
+> - 第 127 回合(上一条):rsi/resource + rsi/storage 判 excluded;harness/manifest done
 >
 > **账目更新**(第 127 回合,925 tests / 92 crates / clippy 0 / fmt clean,协调者实现):
 > - rsi/resource + rsi/storage 判 **excluded**:Python 侧 `rsi/resource/manager.py:14-20` 与 `rsi/storage/store.py:14-32` 均为 NotImplementedError TODO 桩(无真实功能),Rust 不硬造;parity-audit.md §3/§3b 已标注

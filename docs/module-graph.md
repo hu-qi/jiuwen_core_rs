@@ -2,7 +2,7 @@
 
 > 等价 DSH 的 module-graph:登记 crate 布局与依赖规则。新增 crate 时必须更新本文件。
 
-## 1. 当前 crate 依赖(全部 92 crates)
+## 1. 当前 crate 依赖(全部 100 crates)
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -91,7 +91,7 @@
 ## 2. 规划:完整插件布局(源自 capability-map.md)
 
 ```text
-ah-contracts                契约层:seam / 事件 / effect / 类型(50 crates 之一)
+ah-contracts                契约层:seam / 事件 / effect / 类型(100 crates 之一)
 ah-hub                      内核:Context / EventBus / Plugin 生命周期
 ah-app                      boot 入口 + demo(main)+ ah-cli(交互 CLI,消费会话管理)
 
@@ -128,6 +128,13 @@ ah-plugins-credentials       (已实现)env provider 凭据引用(openai.api_key
 [工具与执行](全部已实现)
 ah-plugins-tools             (已实现)真实工具注册表 + pre/post-execute 管线
 ah-plugins-manifest          (已实现)真实 harness 元素 manifest:描述符目录/工厂注册表/kind 路由注册
+ah-plugins-resources         (已实现)真实扩展资源:Spec 模型/MCP 归一化/模板渲染/路径校验/ExtensionParts 解析
+ah-plugins-lsp               (已实现)真实 LSP 子系统:状态机/诊断注册表/5 语言 server 配置
+ah-plugins-kv-cache          (已实现)真实 KV-cache 策略钩子:affinity/sticky 判定 + prefetch/offload/evict 信号
+ah-plugins-worktree          (已实现)真实团队 worktree 确定性部分:命名(slug+sha256)/成员状态归属判定
+ah-plugins-checkpointer      (已实现)真实 Redis checkpointer:TTL/key 构造/四存储/生命周期钩子(RedisStore seam 注入)
+ah-plugins-prompt-builder-devtools (已实现)真实 dev_tools 提示构建器:badcase/feedback/meta-template(LLM seam 注入)
+ah-plugins-skill-creator     (已实现)真实技能创建流水线:slugify/资产编号/过滤/去幻影图片(抓取与 LLM seam 注入)
 ah-plugins-sysop             (已实现)受限 fs/shell + read_file/write_file/list_dir/run_shell 工具
 ah-plugins-code              (已实现)python3 子进程代码执行
 ah-plugins-sandbox           (已实现)策略沙箱 + tools/pre-execute rail

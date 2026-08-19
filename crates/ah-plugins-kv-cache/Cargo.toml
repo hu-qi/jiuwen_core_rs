@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-kv-cache"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real KV-cache policy hooks: sticky subagent prefetch/offload/evict signals"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

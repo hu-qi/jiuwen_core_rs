@@ -80,7 +80,7 @@
 | rails(143/57 文件) | 事件监听器(waterfall) | 规划/完成/心跳/重试/LSP/MCP/渐进工具 等 | ShellGuard + PathGuard + ToolBudget + 渐进披露 ApprovalRail(本回合,tool-approval seam,批准集持久化)已落地;其余按需补充 |
 | subagents(24/8 文件) | `subagents` seam + ah-plugins-subagents | code/research/plan/verify + browser/mobile | code/research/plan/verify 已落地(本回合:类型提示 + 工具白名单真实强制);browser/mobile 留待后续 |
 | cli(113/19 文件) | ah-plugins-cli | REPL、会话存储、渲染 | 已落地(本回合:Claude Code 风格渲染器 ● Tool(args)/⎿ 摘要/☑☐ todo checkbox/⚙ 消息,事件→块投影,CLI 实时渲染;REPL+会话存储先前已落地)
-| workspace/goal/manifest(本回合已落地:workspace.json + 目标状态机;manifest 已落地:描述符目录/工厂注册表/kind 路由注册)/ resources/schema/security/prompts/kv_cache/lsp | 各插件 | 对应功能 | 逐模块对等;workspace 已实现;manifest 已实现(本回合:ah-contracts manifest seam + ah-plugins-manifest — HarnessElementDescriptor/ElementKind/InterfaceMethod/ConstructionInputModel(field 源标签+JSON schema)/factory_ref·resolve_factory(可逆工厂注册表)/add_descriptor 重名拒绝+Effect 回滚/list_elements JSON 导出/default_interface_methods(kind)/register_from_catalog kind 路由(TOOL/RAIL/SUBAGENT provider 表)+ 类 builder 适配;5 契约测试 + 8 插件测试 + 4 集成测试) |
+| workspace/goal/manifest(本回合已落地:workspace.json + 目标状态机;manifest 已落地:描述符目录/工厂注册表/kind 路由注册)/ resources/schema/security/prompts/kv_cache/lsp | 各插件 | 对应功能 | 逐模块对等;workspace 已实现;manifest 已实现(本回合:ah-contracts manifest seam + ah-plugins-manifest — HarnessElementDescriptor/ElementKind/InterfaceMethod/ConstructionInputModel(field 源标签+JSON schema)/factory_ref·resolve_factory(可逆工厂注册表)/add_descriptor 重名拒绝+Effect 回滚/list_elements JSON 导出/default_interface_methods(kind)/register_from_catalog kind 路由(TOOL/RAIL/SUBAGENT provider 表)+ 类 builder 适配;5 契约测试 + 8 插件测试 + 4 集成测试);kv_cache 已实现(本回合:ah-contracts kv_cache seam + ah-plugins-kv-cache — affinity/sticky 判定/session-id 解析/prefetch/offload/evict 信号,LLM 无关);resources 已实现(本回合:ah-contracts resources seam + ah-plugins-resources — Spec 模型/MCP 归一化/模板渲染/路径校验/ExtensionParts 解析,loader 文件系统留待 FS 接线);lsp 已实现(本回合:ah-contracts lsp seam + ah-plugins-lsp — 状态机/诊断注册表六步算法/file_uri/5 语言 server 配置,stdio 客户端留待进程接线) |
 
 ### 2.3 agent_teams(1104 符号)
 
@@ -93,7 +93,7 @@
 | external(95) | `external` seam + ah-plugins-external + `external-format` seam + ah-plugins-external-format | 外部 CLI agent、SSH、入站渲染 | 子进程运行时已落地(流式 stdin + 单发 argv,adapter 启动知识/完成标记/steer/abort);外部入站渲染已落地(本回合并行:组合 inbound-render + timefmt — <team-inbound> + reply-hint/hitt-silence note、框架模板 body 去 hint、任务看板行/看板(<team-event kind=\"task-board\"> 过滤终态、角色化标题));交互语法解析已落地(本回合并行:#/$/@member 前缀 → typed payloads、@all 广播、未知 mention 折回);团队加入描述符已落地(本回合并行:TeamJoinDescriptor JSON/env 序列化 + 校验);SSH 留待后续 |
 | workflow(148) | ah-plugins-teams-workflow | swarmflow 引擎(phase/agent 并行 barrier/预算/事件流/journal 续跑) | 已落地(本回合,SwarmflowEngine,worker=SubagentRuntime) |
 | residual.rs 资产 | ah-plugins-teams | NativeTaskBoard/Journal/BudgetLedger/检测器 | 接入运行路径(现仅测试引用)
-| kv_cache/memory/monitor/models/rails/skill/prompts/cli/harness | 各插件 | 对应功能 | monitor 已落地(本回合:ah-plugins-team-monitor 只读团队/任务/消息视图 + teams/task 事件日志);models 已落地(本回合并行:模型分配器 4 策略 + resolve_member_model);kv_cache 等留待后续 |
+| kv_cache/memory/monitor/models/rails/skill/prompts/cli/harness + worktree | 各插件 | 对应功能 | monitor 已落地(本回合:ah-plugins-team-monitor 只读团队/任务/消息视图 + teams/task 事件日志);models 已落地(本回合并行:模型分配器 4 策略 + resolve_member_model);kv_cache 已落地(本回合:ah-contracts kv_cache team 部分 — TeamKVCState 状态机/is_binding_manageable/control domain/action plan 纯逻辑 + record_actionable/state_after_action);worktree 已落地(本回合:ah-contracts worktree seam + ah-plugins-worktree — build_teammate_worktree_name(slug+sha256)/validate_slug/matches_scope/info_from_options,git 生命周期留待 git 扩展) |
 | reliability(1036 符号:anomaly/config/factory/handler/monitor/rail/reporter/signals/window + detectors/{base,compaction,model_error,output_length,pingpong,repeat_tool,tool_error} + remediation/{action,local,policy}) | `reliability` seam + ah-plugins-reliability-burst + ah-plugins-reliability-tools | 错误突发/工具错误率/模型错误率/输出长度/重复·乒乓·循环调用检测 | burst+tool-error+model-error 已落地(本回合并行:SlidingWindowCounter 滑动窗口 + ErrorBurstDetector 边沿触发严重度分级 + 2×阈值 High/单阈值 Medium;窗口 60s/rate 5/consec 3);output-length+repeat-tool+pingpong 已落地(本回合并行:输出长度上限 text 32000/thinking 16000 触发一次;四层重复检测 identical≥30→Critical/≥20→High/alternation≥10→Medium/repeats≥10→Low + stable_call_hash/stable_result_hash sha256);window/anomaly/signals 契约已落地;compaction 已落地(本回合:消息数显著下降推断压缩事件,窗口内频率阈值 3 次 → Medium,边沿触发,drop_ratio 0.3);pingpong 已落地(本回合并行:团队级双向消息往返检测 min_volleys 6→Medium/12→High,方向反转计数 + 第三方重置 + 边沿触发);config 契约已落地(本回合并行:ToolError/RepeatTool/ModelError/OutputLength/Compaction/PingPong/Detectors/Reliability 全量配置 + 严重度→动作映射 + 重启强度预算);remediation 已落地(本回合并行:RemediationPolicy 分层策略 LOW→observe/MEDIUM→report/HIGH→steer+report/CRITICAL→steer+escalate + LocalAutoRemediator 强度限流可逆本地纠偏 5 次/60s + 消息渲染);monitor 已落地(本回合并行:ReliabilityMonitor 检测器聚合 feed + 策略路由 + panic 容忍 + reset);reporter 已落地(本回合并行:AnomalyReporter trait + LocalAnomalyReporter 进程内 sink 绑定);rail/handler/factory/EventAnomalyReporter 留待后续(依赖 coordination 运行时) |
 
 ### 2.4 agent_evolving(602 符号)
@@ -131,7 +131,7 @@
 
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
-| checkpointer(Redis) | `store` seam + ah-plugins-store-redis | TTL/集群/pipeline | Redis 后端已落地(本回合:真实 SET/GET/DEL/KEYS,与文件后端同 seam 互换) |
+| checkpointer(Redis) | `checkpointer` seam + ah-plugins-checkpointer + ah-plugins-store-redis | TTL/集群/pipeline/多实体存储/pre-post 钩子 | 已落地(本回合:ah-contracts checkpointer seam + ah-plugins-checkpointer — RedisTTLConfig/RedisConnectionConfig(url 前缀白名单+cluster 判定+URL 规整)/RedisCheckpointerConfig 校验/四存储(Agent/AgentGroup/Workflow/Graph)key 构造+save/recover/clear/exists 命令序列/RedisCheckpointer 全钩子(pre/post agent·team·workflow/interrupt/session_exists/release/graph_store)/TTL 分钟→秒换算+refresh_on_read;RedisStore seam 为唯一 Redis 访问边界,真实后端与测试后端互换) |
 | message_queue(Pulsar) | `queue` seam + ah-plugins-queue-redis | producer/consumer/replay | 已落地(本回合:Redis LIST 日志 + INCR 序号 + 游标,真实外部 provider 可互换后端;Pulsar 留待后续) |
 | store(GaussDB/ES) | `store` seam + ah-plugins-store-pg(GaussDB 兼容 SQL)/elasticsearch | SQL/向量检索 | 已落地(本回合:真实 PostgreSQL SQL 后端,kv/messages 两表 + UPSERT + 增量读,与文件/Redis 同 seam 互换;ES 留待后续) |
 | sys_operation(远程沙箱 9 provider) | `sandbox` seam + 进程插件 | AIO/jiuwenbox/yuanrong | 现 4 个白名单命令
@@ -146,10 +146,10 @@
 
 | Python 子模块 | seam / 插件 | 关键功能 | 验收要点
 | --- | --- | --- | --- |
-| prompt_builder | ah-plugins-devtools | meta/feedback/badcase 构建 | 现 {{var}} 渲染
+| prompt_builder | ah-plugins-prompt-builder-devtools | meta/feedback/badcase 构建 | 已落地(本回合:ah-contracts prompt_builder_devtools seam + ah-plugins-prompt-builder-devtools — 三构建器确定性编排:校验(空/上限 10/索引边界)/bad-case 拼接/```json 围栏解析/<intent>/<summary> 提取/META_TEMPLATE_ 前缀注册表;LLM 调用经 PromptBuilderModel seam 注入,缺失显式报错) |
 | agent_builder | ah-plugins-agentbuilder | NL→设计→DSL→执行 | 已落地(本回合:确定性意图解析 → WorkflowSpec DSL → WorkflowEngine 真实执行) |
 | tune | ah-plugins-tune | optimizer/evaluator/trainer 流水线 | 已落地(本回合:subagent 执行 + evolving 评估/优化精化 prompt + 最优跟踪) |
-| skill_creator/evaluator | ah-plugins-skill | 技能注册/持久化/评估 | 已落地(本回合:文件后端 + subagent 委派 + evolving 轨迹评估) |
+| skill_creator/evaluator | ah-plugins-skill-creator + ah-plugins-skill | 技能注册/持久化/评估 | skill_creator 已落地(本回合:ah-contracts skill_creator seam + ah-plugins-skill-creator — slugify/url_to_slug/image_ext/资产编号 dom_NNN/内容过滤/去幻影图片/空行折叠;抓取与 LLM 生成经 SkillFetcher/SkillGenerator seam 注入,缺失显式报错);skill/evaluator 已落地(文件后端 + subagent 委派 + evolving 轨迹评估) |
 | symphony | ah-plugins-symphony | 能力检索/编排/legacy runtime | 已落地(本回合:能力注册 + 语义指纹 + 任务检索 + 可解释计划 + 工具/subagent 真实执行,JSONL 持久化)
 
 ## 3. 工作包生命周期与验收标准

@@ -15,6 +15,7 @@ use ah_plugins_agent_loop::AgentLoopPlugin;
 use ah_plugins_agentbuilder::AgentBuilderPlugin;
 use ah_plugins_anthropic::AnthropicPlugin;
 use ah_plugins_autoharness::AutoHarnessPlugin;
+use ah_plugins_checkpointer::CheckpointerPlugin;
 use ah_plugins_ci::CiPlugin;
 use ah_plugins_cli::CliPlugin;
 use ah_plugins_code::CodePlugin;
@@ -33,6 +34,8 @@ use ah_plugins_graph_memory::GraphMemoryPlugin;
 use ah_plugins_inbound_render::InboundRenderPlugin;
 use ah_plugins_interaction_router::InteractionRouterPlugin;
 use ah_plugins_json_parser::JsonParserPlugin;
+use ah_plugins_kv_cache::KvcCachePlugin;
+use ah_plugins_lsp::LspPlugin;
 use ah_plugins_manifest::ManifestPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_member_optimizer::MemberOptimizerPlugin;
@@ -49,6 +52,7 @@ use ah_plugins_pregel::PregelPlugin;
 use ah_plugins_prompt::PromptPlugin;
 use ah_plugins_prompt_attachment::PromptAttachmentPlugin;
 use ah_plugins_prompt_builder::PromptBuilderPlugin;
+use ah_plugins_prompt_builder_devtools::PromptBuilderDevtoolsPlugin;
 use ah_plugins_queue::QueuePlugin;
 use ah_plugins_queue::redis_queue::RedisQueuePlugin;
 use ah_plugins_rails::{
@@ -58,6 +62,7 @@ use ah_plugins_reliability_burst::ReliabilityBurstPlugin;
 use ah_plugins_reliability_monitor::ReliabilityMonitorPlugin;
 use ah_plugins_reliability_tools::ReliabilityToolsPlugin;
 use ah_plugins_rerank::RerankPlugin;
+use ah_plugins_resources::ResourcesPlugin;
 use ah_plugins_retrieval::RetrievalPlugin;
 use ah_plugins_rl::RlPlugin;
 use ah_plugins_rl_step::RlStepPlugin;
@@ -80,6 +85,7 @@ use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_sharing::{LocalSharingBackend, SharingPlugin};
 use ah_plugins_signals::SignalsPlugin;
 use ah_plugins_skill::SkillPlugin;
+use ah_plugins_skill_creator::SkillCreatorPlugin;
 use ah_plugins_store::StorePlugin;
 use ah_plugins_store::pg_store::PgStorePlugin;
 use ah_plugins_store::redis_store::RedisStorePlugin;
@@ -108,6 +114,7 @@ use ah_plugins_tune::TunePlugin;
 use ah_plugins_web::WebPlugin;
 use ah_plugins_workflow::WorkflowPlugin;
 use ah_plugins_workspace::WorkspacePlugin;
+use ah_plugins_worktree::WorktreePlugin;
 
 /// 插件目录:名称 → 插件对象。
 ///
@@ -253,6 +260,7 @@ pub fn plugin_catalog(
             "ah-plugins-workspace",
             Arc::new(WorkspacePlugin::new(workspace_root)) as DynPlugin,
         ),
+        ("ah-plugins-worktree", Arc::new(WorktreePlugin) as DynPlugin),
         (
             "ah-plugins-sandbox",
             Arc::new(SandboxPlugin::new(workspace_root.join("sandbox"))) as DynPlugin,
@@ -277,6 +285,17 @@ pub fn plugin_catalog(
             Arc::new(GraphMemoryPlugin::new(workspace_root.join("graph-memory"))) as DynPlugin,
         ),
         ("ah-plugins-ci", Arc::new(CiPlugin) as DynPlugin),
+        (
+            "ah-plugins-checkpointer",
+            // 真实 Redis checkpointer;store_factory 由宿主注入 RedisStore 后端。
+            // 无真实 Redis 时挂载失败由后端显式报错(不静默 fallback)。
+            Arc::new(CheckpointerPlugin::new(Arc::new(|info| {
+                Err(ah_contracts::checkpointer::CheckpointerError(format!(
+                    "no redis-store backend injected for checkpointer: {} (cluster={})",
+                    info.url, info.cluster_mode
+                )))
+            }))) as DynPlugin,
+        ),
         ("ah-plugins-cli", Arc::new(CliPlugin) as DynPlugin),
         (
             // 真实外部 CLI 运行时:通用流式 adapter(boot 不拉起,首次 start 才 spawn)。
@@ -291,6 +310,10 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-rl", Arc::new(RlPlugin) as DynPlugin),
         ("ah-plugins-rl-step", Arc::new(RlStepPlugin) as DynPlugin),
+        (
+            "ah-plugins-resources",
+            Arc::new(ResourcesPlugin) as DynPlugin,
+        ),
         ("ah-plugins-rerank", Arc::new(RerankPlugin) as DynPlugin),
         (
             "ah-plugins-experience-scorer",
@@ -300,6 +323,7 @@ pub fn plugin_catalog(
             "ah-plugins-json-parser",
             Arc::new(JsonParserPlugin) as DynPlugin,
         ),
+        ("ah-plugins-kv-cache", Arc::new(KvcCachePlugin) as DynPlugin),
         (
             "ah-plugins-model-catalog",
             Arc::new(ModelCatalogPlugin) as DynPlugin,
@@ -385,6 +409,14 @@ pub fn plugin_catalog(
             "ah-plugins-prompt-builder",
             Arc::new(PromptBuilderPlugin) as DynPlugin,
         ),
+        (
+            "ah-plugins-prompt-builder-devtools",
+            // 真实 dev_tools 提示构建器;LLM 模型由宿主注入。此默认模型显式报错,
+            // 宿主注入真实模型前不可调用(不静默 fallback)。
+            Arc::new(PromptBuilderDevtoolsPlugin::new(Arc::new(
+                UninjectedPromptBuilderModel,
+            ))) as DynPlugin,
+        ),
         ("ah-plugins-stream", Arc::new(StreamPlugin) as DynPlugin),
         (
             "ah-plugins-tag-manager",
@@ -437,6 +469,14 @@ pub fn plugin_catalog(
             "ah-plugins-skill",
             Arc::new(SkillPlugin::new(workspace_root.join("skills"))) as DynPlugin,
         ),
+        (
+            "ah-plugins-skill-creator",
+            // 真实技能创建流水线;抓取器/LLM 生成器由宿主注入,缺失时显式报错。
+            Arc::new(SkillCreatorPlugin::new(
+                Arc::new(UninjectedSkillFetcher),
+                Arc::new(UninjectedSkillGenerator),
+            )) as DynPlugin,
+        ),
         ("ah-plugins-pregel", Arc::new(PregelPlugin) as DynPlugin),
         ("ah-plugins-tune", Arc::new(TunePlugin) as DynPlugin),
         ("ah-plugins-trainer", Arc::new(TrainerPlugin) as DynPlugin),
@@ -486,6 +526,7 @@ pub fn plugin_catalog(
                 ],
             )) as DynPlugin,
         ),
+        ("ah-plugins-lsp", Arc::new(LspPlugin) as DynPlugin),
         (
             "ah-plugins-member-optimizer",
             Arc::new(MemberOptimizerPlugin::new(
@@ -576,4 +617,47 @@ pub fn agent_and_manager(ctx: &Context) -> Result<AgentManagerPair, Box<dyn std:
         .service::<dyn SessionManager>(&SESSION_MANAGER)
         .ok_or("session-manager seam not registered")?;
     Ok((agent, manager))
+}
+
+/// 未注入 LLM 模型的 dev_tools 提示构建器模型:任何调用显式报错。
+pub struct UninjectedPromptBuilderModel;
+
+impl ah_contracts::prompt_builder_devtools::PromptBuilderModel for UninjectedPromptBuilderModel {
+    fn invoke(
+        &self,
+        _messages: &[ah_contracts::prompt_builder_devtools::ChatMessageView],
+    ) -> Result<Option<String>, ah_contracts::prompt_builder_devtools::PromptBuilderError> {
+        Err(ah_contracts::prompt_builder_devtools::PromptBuilderError(
+            "no LLM model injected for prompt-builder-devtools".to_string(),
+        ))
+    }
+}
+
+/// 未注入抓取器的技能创建抓取器:任何调用显式报错。
+pub struct UninjectedSkillFetcher;
+
+impl ah_contracts::skill_creator::SkillFetcher for UninjectedSkillFetcher {
+    fn fetch(
+        &self,
+        url: &str,
+    ) -> Result<(Vec<u8>, String), ah_contracts::skill_creator::SkillCreatorError> {
+        Err(ah_contracts::skill_creator::SkillCreatorError(format!(
+            "no fetcher injected for skill-creator (url: {url})"
+        )))
+    }
+}
+
+/// 未注入 LLM 生成器的技能创建生成器:任何调用显式报错。
+pub struct UninjectedSkillGenerator;
+
+impl ah_contracts::skill_creator::SkillGenerator for UninjectedSkillGenerator {
+    fn generate_skill_md(
+        &self,
+        spec: &ah_contracts::skill_creator::SkillGenRequest,
+    ) -> Result<String, ah_contracts::skill_creator::SkillCreatorError> {
+        Err(ah_contracts::skill_creator::SkillCreatorError(format!(
+            "no LLM generator injected for skill-creator (slug: {})",
+            spec.slug
+        )))
+    }
 }

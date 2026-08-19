@@ -6,6 +6,7 @@ use crate::service::ServiceKey;
 
 /// `llm` seam 服务键。
 pub const LLM: ServiceKey = ServiceKey::new("llm");
+pub const LSP: ServiceKey = ServiceKey::new("lsp");
 
 /// `tools` seam 服务键。
 pub const TOOLS: ServiceKey = ServiceKey::new("tools");
@@ -33,6 +34,7 @@ pub const MEMORY: ServiceKey = ServiceKey::new("memory");
 
 /// `retrieval` seam 服务键(知识库检索)。
 pub const RETRIEVAL: ServiceKey = ServiceKey::new("retrieval");
+pub const RESOURCES: ServiceKey = ServiceKey::new("resources");
 
 /// `security` seam 服务键(安全检测)。
 pub const SECURITY: ServiceKey = ServiceKey::new("security");
@@ -110,6 +112,7 @@ pub const SUBAGENTS: ServiceKey = ServiceKey::new("subagents");
 
 /// `skill` seam 服务键(技能注册与评估)。
 pub const SKILL: ServiceKey = ServiceKey::new("skill");
+pub const SKILL_CREATOR: ServiceKey = ServiceKey::new("skill-creator");
 
 /// `pregel` seam 服务键(超级步图执行)。
 pub const PREGEL: ServiceKey = ServiceKey::new("pregel");
@@ -131,6 +134,9 @@ pub const SYMPHONY: ServiceKey = ServiceKey::new("symphony");
 pub const CLI_RENDERER: ServiceKey = ServiceKey::new("cli-renderer");
 pub const EXTERNAL_CLI: ServiceKey = ServiceKey::new("external-cli");
 pub const CONTROLLER: ServiceKey = ServiceKey::new("controller");
+pub const CHECKPOINTER: ServiceKey = ServiceKey::new("checkpointer");
+pub const CHECKPOINTER_PROVIDER: ServiceKey = ServiceKey::new("checkpointer-provider");
+pub const REDIS_STORE: ServiceKey = ServiceKey::new("redis-store");
 pub const OPERATOR: ServiceKey = ServiceKey::new("operator");
 pub const RUNNER: ServiceKey = ServiceKey::new("runner");
 pub const GRAPH_MEMORY: ServiceKey = ServiceKey::new("graph-memory");
@@ -147,6 +153,7 @@ pub const RERANK: ServiceKey = ServiceKey::new("rerank");
 pub const SHARING: ServiceKey = ServiceKey::new("sharing");
 pub const EXPERIENCE_SCORER: ServiceKey = ServiceKey::new("experience-scorer");
 pub const JSON_PARSER: ServiceKey = ServiceKey::new("json-parser");
+pub const KVC_HOOKS: ServiceKey = ServiceKey::new("kvc-hooks");
 pub const MODEL_CATALOG: ServiceKey = ServiceKey::new("model-catalog");
 pub const SIGNALS: ServiceKey = ServiceKey::new("signals");
 pub const DATASET_CURATOR: ServiceKey = ServiceKey::new("dataset-curator");
@@ -171,10 +178,13 @@ pub const TEAM_JOIN_DESCRIPTOR: ServiceKey = ServiceKey::new("team-join-descript
 pub const TEAM_TASK_STATUS: ServiceKey = ServiceKey::new("team-task-status");
 pub const PROMPT_ATTACHMENT: ServiceKey = ServiceKey::new("prompt-attachment");
 pub const PROMPT_BUILDER: ServiceKey = ServiceKey::new("prompt-builder");
+pub const PROMPT_BUILDER_DEVTOOLS: ServiceKey = ServiceKey::new("prompt-builder-devtools");
 pub const STREAM: ServiceKey = ServiceKey::new("stream");
 pub const TAG_MANAGER: ServiceKey = ServiceKey::new("tag-manager");
 pub const MEMORY_LITE: ServiceKey = ServiceKey::new("memory-lite");
 pub const TOOLS_METADATA: ServiceKey = ServiceKey::new("tools-metadata");
+pub const WORKTREE_NAMING: ServiceKey = ServiceKey::new("worktree-naming");
+pub const WORKTREE_MEMBER_STATE: ServiceKey = ServiceKey::new("worktree-member-state");
 pub const MANIFEST: ServiceKey = ServiceKey::new("manifest");
 pub const MANIFEST_FACTORIES: ServiceKey = ServiceKey::new("manifest-factories");
 pub const MANIFEST_REGISTRATION: ServiceKey = ServiceKey::new("manifest-registration");
