@@ -6,6 +6,7 @@
 pub mod advanced;
 pub mod base;
 pub mod runtime;
+pub mod workspace;
 
 #[cfg(test)]
 mod tests {
