@@ -93,6 +93,7 @@ use ah_plugins_subagent::SubagentPlugin;
 use ah_plugins_subagents::SubagentsPlugin;
 use ah_plugins_symphony::SymphonyPlugin;
 use ah_plugins_sysop::SysopPlugin;
+use ah_plugins_team_context::TeamContextPlugin;
 use ah_plugins_team_context_text::TeamContextTextPlugin;
 use ah_plugins_team_dispatch::TeamDispatchPlugin;
 use ah_plugins_team_i18n::TeamI18nPlugin;
@@ -376,6 +377,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-context-text",
             Arc::new(TeamContextTextPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-context",
+            Arc::new(TeamContextPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-external-format",

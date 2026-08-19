@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-team-context"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real team session context: session_id isolation primitives"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

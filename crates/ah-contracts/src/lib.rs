@@ -86,6 +86,7 @@ pub mod subagents;
 pub mod swarm;
 pub mod symphony;
 pub mod tag_manager;
+pub mod team_context;
 pub mod team_context_text;
 pub mod team_dispatch;
 pub mod team_i18n;
@@ -257,6 +258,9 @@ pub mod prelude {
     pub use crate::symphony::{
         Capability, CapabilityFingerprint, ExecutionStep, OrchestrationPlan, Symphony,
         SymphonyError,
+    };
+    pub use crate::team_context::{
+        LOG_DEFAULT_TRACE_ID, SessionToken, TeamContextError, TeamSessionContext,
     };
     pub use crate::team_monitor::{
         MemberInfo, MonitorError, MonitorEvent, MonitorEventType, TaskInfo, TeamInfo, TeamMonitor,

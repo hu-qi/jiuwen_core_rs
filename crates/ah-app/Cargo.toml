@@ -78,6 +78,7 @@ ah-plugins-timefmt = { workspace = true }
 ah-plugins-team-scheduler = { workspace = true }
 ah-plugins-roster-diff = { workspace = true }
 ah-plugins-team-i18n = { workspace = true }
+ah-plugins-team-context = { workspace = true }
 ah-plugins-team-context-text = { workspace = true }
 ah-plugins-external-format = { workspace = true }
 ah-plugins-interaction-router = { workspace = true }

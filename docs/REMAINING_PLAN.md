@@ -2,11 +2,16 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 1000+ tests / 100 crates,clippy -D warnings 0,fmt clean。
+> 当前 1000+ tests / 101 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 129 回合,协调者实现,partial 收尾推进):
+> - agent_teams/context → 90:ah-contracts team_context seam(TeamSessionContext/SessionToken/LOG_DEFAULT_TRACE_ID)+ ah-plugins-team-context(set/get/reset token 可逆,对齐 context.py 67 行);3 契约 + 3 插件测试
+> - rsi/config → 95:ah-plugins-rsi-config loader.rs(DEFAULT_CONFIG_TEMPLATE 嵌入默认模板/bootstrap 引导/缺失显式 FileNotFoundError/非 mapping 显式 ValueError/team_spec_config_ref 相对→绝对,对齐 loader.py 66 行 + orchestrating.default.yaml);5 新 loader 测试
+> - rsi/data_loader → 92:ah-plugins-data-loader BatchPlanStore(write_dataset_profile/write_batch_plan 真实 YAML 落盘,对齐 plan_store.py)+ json_to_yaml;2 新测试
 >
 > **账目更新**(第 128 回合,missing 11 → 0,协调者实现):
 > - 全部 11 个 missing 模块补到至少 partial / done:

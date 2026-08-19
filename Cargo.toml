@@ -40,6 +40,7 @@ members = [
     "crates/ah-plugins-team-scheduler",
     "crates/ah-plugins-roster-diff",
     "crates/ah-plugins-team-i18n",
+    "crates/ah-plugins-team-context",
     "crates/ah-plugins-team-context-text",
     "crates/ah-plugins-external-format",
     "crates/ah-plugins-interaction-router",
@@ -147,6 +148,7 @@ ah-plugins-timefmt = { path = "crates/ah-plugins-timefmt" }
 ah-plugins-team-scheduler = { path = "crates/ah-plugins-team-scheduler" }
 ah-plugins-roster-diff = { path = "crates/ah-plugins-roster-diff" }
 ah-plugins-team-i18n = { path = "crates/ah-plugins-team-i18n" }
+ah-plugins-team-context = { path = "crates/ah-plugins-team-context" }
 ah-plugins-team-context-text = { path = "crates/ah-plugins-team-context-text" }
 ah-plugins-external-format = { path = "crates/ah-plugins-external-format" }
 ah-plugins-interaction-router = { path = "crates/ah-plugins-interaction-router" }

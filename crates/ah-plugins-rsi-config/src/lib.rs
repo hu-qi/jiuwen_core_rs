@@ -12,6 +12,7 @@
 pub mod auto;
 pub mod core;
 pub mod extended;
+pub mod loader;
 pub mod scheduling;
 
 pub use auto::AutoCoordinatingHarnessConfig;
@@ -19,6 +20,10 @@ pub use core::{DataLoaderConfig, DatasetCurationConfig, ModelConfigs, SeedEvalua
 pub use extended::{
     DatasetGeneratorConfig, EvaluationResultAnalyzerConfig, EvaluatorConfig, MemberOptimizerConfig,
     OptimizationExperienceLearnerConfig, TeamSkillOptimizerConfig,
+};
+pub use loader::{
+    ConfigFs, DEFAULT_CONFIG_TEMPLATE, bootstrap_default_config, expanduser,
+    load_auto_coordinating_harness_config, parse_yaml,
 };
 pub use scheduling::OrchestratorSchedulingConfig;
 

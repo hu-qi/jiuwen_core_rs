@@ -11,6 +11,7 @@
 | --- | --- |
 | **总体对等度** | **≈ 53.1%**(按 Python 文件数加权;excluded 不参与计分) |
 | done / partial / missing / excluded | **5 / 90 / 0 / 2** |
+> 第 129 回合:context 90 / config 95 / data_loader 92(仍计 partial,未达 done 判定线 100 或 LLM 无缺) |
 | 上一基线(第 75 回合) | ≈ 31% |
 
 ## 1. 逐域对等度
@@ -92,7 +93,7 @@
 | agent | 85 | bridge compose/wrap、StreamController |
 | external | 85 | ExternalTeamClient(MCP 收件箱) |
 | reliability | 85 | DeepAgentRail/handler 接线 |
-| context | 80 | session-id 等价物 |
+| context | 90 | **已收尾(第 129 回合)**:ah-contracts team_context seam + ah-plugins-team-context(session_id set/get/reset token 可逆,对齐 context.py) |
 | monitor | 80 | stream_logger 分块摘要 |
 | prompts | 80 | plan-mode/bridge brief 模板 |
 | schema | 80 | blueprint/ssh_transport/task graph 规格 |
@@ -132,8 +133,8 @@
 
 | 模块 | pct | 主要缺口 |
 | --- | ---: | --- |
-| config | 90 | loader 文件加载/bootstrap |
-| data_loader | 85 | DataLoader、BatchPlanStore 落盘 |
+| config | 95 | **已收尾(第 129 回合)**:ah-plugins-rsi-config loader.rs(默认模板引导/缺失显式 FileNotFoundError/非 mapping 显式 ValueError/team_spec 路径绝对化,对齐 loader.py) |
+| data_loader | 92 | **已收尾(第 129 回合)**:ah-plugins-data-loader BatchPlanStore(dataset_profile.yaml/batch_plan.yaml 真实落盘,对齐 plan_store.py) |
 | single_harness | 40 | iterative 能力门禁/物化/verifier delta |
 | evaluation_result_analyzer | 30 | LLM 两阶段诊断、5 类 signal extractor |
 | team_skill_optimizer | 30 | LLM experience_optimizer、evolve_and_rebuild |

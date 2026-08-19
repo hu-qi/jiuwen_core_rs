@@ -610,3 +610,102 @@ mod tests3 {
         assert_eq!(payload["metadata"]["quality"], "normal");
     }
 }
+
+/// 批次计划落盘(对齐 `plan_store.BatchPlanStore`)。
+pub struct BatchPlanStore;
+
+impl BatchPlanStore {
+    /// 写入 `dataset_profile.yaml` 并返回绝对路径(对齐 write_dataset_profile)。
+    pub fn write_dataset_profile(
+        root: &std::path::Path,
+        profile: &DatasetProfile,
+    ) -> Result<String, String> {
+        let profile_path = root.join("dataset_profile.yaml");
+        let value = serde_json::to_value(profile).map_err(|e| e.to_string())?;
+        let yaml_text = json_to_yaml(&value)?;
+        std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
+        std::fs::write(&profile_path, yaml_text).map_err(|e| e.to_string())?;
+        Ok(profile_path.to_string_lossy().to_string())
+    }
+
+    /// 写入 `batch_plan.yaml` 并返回绝对路径(对齐 write_batch_plan)。
+    pub fn write_batch_plan(
+        root: &std::path::Path,
+        epoch: usize,
+        batch_size: usize,
+        balance_keys: &[String],
+        profile: &DatasetProfile,
+        batches: &[Vec<BTreeMap<String, Value>>],
+    ) -> Result<String, String> {
+        let plan_path = root.join("batch_plan.yaml");
+        let payload = batch_plan_payload(
+            &root.to_string_lossy(),
+            epoch,
+            batch_size,
+            balance_keys,
+            profile,
+            batches,
+        );
+        let yaml_text = json_to_yaml(&payload)?;
+        std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
+        std::fs::write(&plan_path, yaml_text).map_err(|e| e.to_string())?;
+        Ok(plan_path.to_string_lossy().to_string())
+    }
+}
+
+/// JSON Value → YAML 文本(对齐 yaml.safe_dump,allow_unicode/sort_keys=False)。
+pub fn json_to_yaml(value: &serde_json::Value) -> Result<String, String> {
+    let yaml_value: serde_yaml::Value = serde_yaml::to_value(value).map_err(|e| e.to_string())?;
+    serde_yaml::to_string(&yaml_value).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod store_tests {
+    use super::*;
+
+    #[test]
+    fn batch_plan_store_writes_yaml_files() {
+        let root = std::env::temp_dir().join(format!("ah-bps-{}", std::process::id()));
+        let profile = DatasetProfile {
+            total_cases: 2,
+            summary: BTreeMap::from([(
+                "difficulty".to_string(),
+                BTreeMap::from([("easy".to_string(), 2)]),
+            )]),
+            warnings: Vec::new(),
+            quality: "normal".to_string(),
+        };
+        let cases: Vec<BTreeMap<String, Value>> = vec![
+            BTreeMap::from([("case_id".to_string(), Value::String("c1".into()))]),
+            BTreeMap::from([("case_id".to_string(), Value::String("c2".into()))]),
+        ];
+        let batches = vec![cases];
+        let profile_path = BatchPlanStore::write_dataset_profile(&root, &profile).expect("profile");
+        let plan_path = BatchPlanStore::write_batch_plan(
+            &root,
+            1,
+            2,
+            &["difficulty".to_string()],
+            &profile,
+            &batches,
+        )
+        .expect("plan");
+
+        // 文件真实落盘。
+        assert!(std::path::Path::new(&profile_path).is_file());
+        assert!(std::path::Path::new(&plan_path).is_file());
+        let plan_text = std::fs::read_to_string(&plan_path).expect("read");
+        assert!(plan_text.contains("plan_id: batch_plan_epoch_001"));
+        assert!(plan_text.contains("strategy: curriculum_balanced"));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn json_to_yaml_serializes_mapping() {
+        let value = serde_json::json!({"a": 1, "b": ["x", "y"]});
+        let yaml = json_to_yaml(&value).expect("yaml");
+        assert!(yaml.contains("a: 1"));
+        assert!(yaml.contains("b:"));
+    }
+}

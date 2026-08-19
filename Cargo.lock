@@ -79,6 +79,7 @@ dependencies = [
  "ah-plugins-symphony",
  "ah-plugins-sysop",
  "ah-plugins-tag-manager",
+ "ah-plugins-team-context",
  "ah-plugins-team-context-text",
  "ah-plugins-team-dispatch",
  "ah-plugins-team-i18n",
@@ -303,6 +304,7 @@ dependencies = [
  "ah-hub",
  "serde",
  "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -752,6 +754,7 @@ dependencies = [
  "ah-hub",
  "serde",
  "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -943,6 +946,14 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-team-context"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
 ]
 
 [[package]]
