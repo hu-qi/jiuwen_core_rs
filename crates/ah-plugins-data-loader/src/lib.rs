@@ -481,3 +481,132 @@ mod tests2 {
         assert_eq!(case_id(&m), "custom");
     }
 }
+
+/// 解析 JSON 数据集文件内容为 cases 列表(对齐 _load_json_cases 的解析逻辑)。
+/// 支持:单个 case 对象 / case 列表 / {"cases": [...]}。
+pub fn parse_json_cases(data: &Value) -> Result<Vec<BTreeMap<String, Value>>, String> {
+    match data {
+        Value::Object(map) => {
+            if let Some(cases) = map.get("cases") {
+                match cases.as_array() {
+                    Some(arr) => arr
+                        .iter()
+                        .enumerate()
+                        .map(|(i, c)| {
+                            c.as_object()
+                                .map(|o| o.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                                .ok_or_else(|| format!("dataset case must be a mapping: #{i}"))
+                        })
+                        .collect(),
+                    None => Err("dataset cases must be a list".to_string()),
+                }
+            } else {
+                Ok(vec![
+                    map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+                ])
+            }
+        }
+        Value::Array(arr) => arr
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                c.as_object()
+                    .map(|o| o.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                    .ok_or_else(|| format!("dataset case must be a mapping: #{i}"))
+            })
+            .collect(),
+        _ => Err("dataset json must be a case object, case list, or object with cases".to_string()),
+    }
+}
+
+/// 组装批次计划 payload(对齐 BatchPlanStore.write_batch_plan 的 payload dict)。
+pub fn batch_plan_payload(
+    dataset_dir: &str,
+    epoch: usize,
+    batch_size: usize,
+    balance_keys: &[String],
+    profile: &DatasetProfile,
+    batches: &[Vec<BTreeMap<String, Value>>],
+) -> serde_json::Value {
+    let plan_entries: Vec<serde_json::Value> = batches
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let entry = batch_plan_item(b, i + 1);
+            serde_json::to_value(entry).unwrap_or(serde_json::Value::Null)
+        })
+        .collect();
+    let dir_name = dataset_dir.rsplit('/').next().unwrap_or(dataset_dir);
+    serde_json::json!({
+        "plan_id": format!("batch_plan_epoch_{epoch:03}"),
+        "dataset_dir": dataset_dir,
+        "strategy": "curriculum_balanced",
+        "epoch": epoch,
+        "seed": format!("{dir_name}:epoch_{epoch:03}"),
+        "batch_size": batch_size,
+        "balance_keys": balance_keys,
+        "profile_summary": profile.summary,
+        "batches": plan_entries,
+        "warnings": profile.warnings,
+        "metadata": { "quality": profile.quality },
+    })
+}
+
+#[cfg(test)]
+mod tests3 {
+    use super::*;
+
+    fn case(cid: &str, difficulty: &str, dimension: &str) -> BTreeMap<String, Value> {
+        let mut m = BTreeMap::new();
+        m.insert("case_id".to_string(), Value::String(cid.to_string()));
+        m.insert(
+            "difficulty".to_string(),
+            Value::String(difficulty.to_string()),
+        );
+        m.insert(
+            "dimension".to_string(),
+            Value::String(dimension.to_string()),
+        );
+        m
+    }
+
+    #[test]
+    fn parse_json_cases_handles_all_shapes() {
+        // single object
+        let single = serde_json::json!({"case_id": "a", "difficulty": "easy"});
+        let cases = parse_json_cases(&single).unwrap();
+        assert_eq!(cases.len(), 1);
+        // list
+        let list = serde_json::json!([{"case_id": "a"}, {"case_id": "b"}]);
+        assert_eq!(parse_json_cases(&list).unwrap().len(), 2);
+        // cases key
+        let wrapped = serde_json::json!({"cases": [{"case_id": "a"}]});
+        assert_eq!(parse_json_cases(&wrapped).unwrap().len(), 1);
+        // invalid
+        assert!(parse_json_cases(&serde_json::json!(42)).is_err());
+        assert!(parse_json_cases(&serde_json::json!({"cases": 42})).is_err());
+    }
+
+    #[test]
+    fn batch_plan_payload_assembles_full_plan() {
+        let batch = vec![case("x1", "easy", "code"), case("x2", "medium", "test")];
+        let batches = vec![batch];
+        let profile = DatasetProfiler::profile(&batches[0], &["difficulty".to_string()]);
+        let payload = batch_plan_payload(
+            "/data/ds",
+            1,
+            2,
+            &["difficulty".to_string()],
+            &profile,
+            &batches,
+        );
+        assert_eq!(payload["plan_id"], "batch_plan_epoch_001");
+        assert_eq!(payload["strategy"], "curriculum_balanced");
+        assert_eq!(payload["epoch"], 1);
+        assert_eq!(payload["batch_size"], 2);
+        assert!(payload["seed"].as_str().unwrap().contains("ds:epoch_001"));
+        assert_eq!(payload["batches"].as_array().unwrap().len(), 1);
+        assert_eq!(payload["batches"][0]["batch_id"], "batch_001");
+        assert_eq!(payload["metadata"]["quality"], "normal");
+    }
+}

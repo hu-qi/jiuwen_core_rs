@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 715 tests / 90 crates,clippy -D warnings 0,fmt clean。
+> 当前 717 tests / 90 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 94 回合,717 tests / clippy 0 / fmt clean,协调者实现):
+> - 数据集加载 ah-plugins-data-loader += parse_json_cases(对齐 loader._load_json_cases:单 case 对象/case 列表/cases 键,非法形状报错)+ batch_plan_payload(对齐 plan_store.write_batch_plan payload:plan_id/dataset_dir/strategy/seed/batch_size/balance_keys/profile_summary/batches(plan entries)/warnings/metadata,无文件 IO);2 测试
 >
 > **账目更新**(第 93 回合,715 tests / clippy 0 / fmt clean,协调者实现):
 > - 数据集画像 ah-plugins-data-loader += DatasetProfiler(1:1 对齐 rsi/data_loader/profiler.py):balance_keys 计数(排除 unknown,按键排序)+ 缺失字段警告(case_id + missing_fields)+ quality 分级(empty/normal/partial_metadata/low_quality_fallback,≥50% 缺失 → low_quality);case_id 完整版(case_id/id 优先,空 → path 文件名 + case_index);5 测试
