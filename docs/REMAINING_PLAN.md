@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 776 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 783 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 105 回合,783 tests / clippy 0 / fmt clean,协调者实现):
+> - 进化信号 ah-plugins-evolving += signal.rs(新模块文件,1:1 对齐 signal/base.py + from_eval.py):EvolutionCategory/EvolutionTarget 枚举 + EvolutionSignal(signal_type/section/excerpt/skill_name/context + to_dict(context 省略))+ make_evolution_signal(source/tool_name setdefault 归一化)+ get_signal_source + make_signal_fingerprint(signal_type/tool_name/skill_name/excerpt 前 200)+ from_evaluated_case(score>=threshold 过滤,score==0 → low_score 否则 evaluated,excerpt "score=X.XX",source=offline_evaluation)+ from_evaluated_cases(批量);7 测试(63 总)
 >
 > **账目更新**(第 104 回合,776 tests / clippy 0 / fmt clean,协调者实现):
 > - 数据集类型 ah-plugins-evolving += dataset.rs(新模块文件,1:1 对齐 agent_evolving/dataset 包):Case(inputs/label/tools/case_id 自动生成)+ ToolInfo(type 默认 function/name/description/parameters)+ EvaluatedCase(score 夹取 [0,1] + inputs/label/tools/case_id 访问器)+ clamp_score + shuffle_cases(seed 确定性 SplitMix64 Fisher-Yates,原列表不变)+ split_cases(ratio ∈ [0,1] 否则 Err "ratio must be in [0.0, 1.0], got X")+ CaseLoader(len/iter/get_cases/split(洗牌切分,seed 可复现));8 测试(56 总)
