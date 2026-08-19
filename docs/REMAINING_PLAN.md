@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 717 tests / 90 crates,clippy -D warnings 0,fmt clean。
+> 当前 723 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 95 回合,723 tests / clippy 0 / fmt clean,协调者实现):
+> - rsi 配置模型 ah-plugins-rsi-config(新 crate,1:1 对齐 rsi/config/config.py):rsi_config 契约(parse_int/parse_float/parse_bool/parse_string_list — bool 拒绝/识别值集/标量→单元素列表)+ DataLoaderConfig(file_pattern/batch_size/batch_balance_keys)+ DatasetCurationConfig(阈值/文件名/来源标签)+ ModelConfigs(7 个模型引用)+ SeedEvaluationConfig(阈值/max_cases)+ OrchestratorSchedulingConfig(固定策略校验 hybrid/team_first_single_pass/epoch_full_evaluation);6 测试;其余 7 个配置类留待后续
 >
 > **账目更新**(第 94 回合,717 tests / clippy 0 / fmt clean,协调者实现):
 > - 数据集加载 ah-plugins-data-loader += parse_json_cases(对齐 loader._load_json_cases:单 case 对象/case 列表/cases 键,非法形状报错)+ batch_plan_payload(对齐 plan_store.write_batch_plan payload:plan_id/dataset_dir/strategy/seed/batch_size/balance_keys/profile_summary/batches(plan entries)/warnings/metadata,无文件 IO);2 测试

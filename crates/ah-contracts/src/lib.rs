@@ -57,6 +57,7 @@ pub mod reward;
 pub mod rl_step;
 pub mod roster_diff;
 pub mod rsi;
+pub mod rsi_config;
 pub mod runner;
 pub mod sandbox;
 pub mod scheduler;

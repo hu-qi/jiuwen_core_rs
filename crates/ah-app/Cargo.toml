@@ -86,6 +86,7 @@ ah-plugins-tag-manager = { workspace = true }
 ah-plugins-memory-lite = { workspace = true }
 ah-plugins-tools-metadata = { workspace = true }
 ah-plugins-data-loader = { workspace = true }
+ah-plugins-rsi-config = { workspace = true }
 ah-plugins-reliability-burst = { workspace = true }
 ah-plugins-reliability-tools = { workspace = true }
 ah-plugins-reliability-monitor = { workspace = true }

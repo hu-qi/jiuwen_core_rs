@@ -1,0 +1,12 @@
+[package]
+name = "ah-plugins-rsi-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real rsi configuration models (dataclass configs + from_dict parsing helpers)"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -56,6 +56,7 @@ dependencies = [
  "ah-plugins-rl-step",
  "ah-plugins-roster-diff",
  "ah-plugins-rsi",
+ "ah-plugins-rsi-config",
  "ah-plugins-runner",
  "ah-plugins-sandbox",
  "ah-plugins-scheduler-render",
@@ -678,6 +679,16 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-rsi-config"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
