@@ -141,3 +141,109 @@ pub trait EvolvingRuntime: Seam {
     /// 检索与任务相关的经验(任务标题包含查询词)。
     fn search_experiences(&self, query: &str) -> Result<Vec<Experience>, EvolvingError>;
 }
+// ---------------------------------------------------------------------------
+// 进化更新契约(对齐 agent_evolving/types.py + protocols.py)
+// ---------------------------------------------------------------------------
+
+/// 更新模式(对齐 UpdateMode)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateMode {
+    Replace,
+    Append,
+    Merge,
+}
+
+impl UpdateMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UpdateMode::Replace => "replace",
+            UpdateMode::Append => "append",
+            UpdateMode::Merge => "merge",
+        }
+    }
+}
+
+/// 更新效果(对齐 UpdateEffect)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateEffect {
+    State,
+    PendingChange,
+}
+
+impl UpdateEffect {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UpdateEffect::State => "state",
+            UpdateEffect::PendingChange => "pending_change",
+        }
+    }
+}
+
+/// 结构化更新契约(对齐 UpdateValue)。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct UpdateValue {
+    pub payload: serde_json::Value,
+    pub mode: UpdateMode,
+    pub effect: UpdateEffect,
+    pub change_type: Option<String>,
+    pub metadata: serde_json::Map<String, serde_json::Value>,
+}
+
+impl UpdateValue {
+    pub fn new(payload: serde_json::Value) -> Self {
+        Self {
+            payload,
+            mode: UpdateMode::Replace,
+            effect: UpdateEffect::State,
+            change_type: None,
+            metadata: serde_json::Map::new(),
+        }
+    }
+
+    /// 旧值归一化(对齐 normalize_update_value):
+    /// - experiences 目标 → append + pending_change + skill_experience_entry;
+    /// - 其他 → replace + state。
+    pub fn normalize(value: serde_json::Value, target: Option<&str>) -> Self {
+        if target == Some("experiences") {
+            let mut metadata = serde_json::Map::new();
+            metadata.insert(
+                "change_type".to_string(),
+                serde_json::Value::String("skill_experience_entry".to_string()),
+            );
+            Self {
+                payload: value,
+                mode: UpdateMode::Append,
+                effect: UpdateEffect::PendingChange,
+                change_type: Some("skill_experience_entry".to_string()),
+                metadata,
+            }
+        } else {
+            Self::new(value)
+        }
+    }
+}
+
+/// 应用结果(对齐 ApplyResult)。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ApplyResult {
+    pub operator_id: String,
+    pub target: String,
+    pub applied: bool,
+    pub mode: UpdateMode,
+    pub effect: UpdateEffect,
+    pub value: Option<serde_json::Value>,
+    pub change_type: Option<String>,
+    pub errors: Vec<String>,
+    pub metadata: serde_json::Map<String, serde_json::Value>,
+}
+
+impl ApplyResult {
+    pub fn ok(&self) -> bool {
+        self.applied && self.errors.is_empty()
+    }
+}
+
+/// 更新键(operator_id, target)。
+pub type UpdateKey = (String, String);
