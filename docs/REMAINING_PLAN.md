@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 866 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 870 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 118 回合,870 tests / clippy 0 / fmt clean,协调者实现):
+> - 经验提交 ah-plugins-evolving += submission.rs(新模块文件,1:1 对齐 experience/submission.py 的 _build_record_from_evolve_item + 响应组装):BuiltEvolveRecord(id=ev_{8hex}/source/UTC ISO 时间戳/context=summary/score=0.6/append patch(target/section/content + 可选 script_*))+ build_record_from_evolve_item + to_record_view(供 PendingChange 载荷)+ build_evolve_submission_response(applied↔partial 状态、success、retry_request_id(partial 时)、record_ids 前 applied 条、计数/errors);store 校验留待集成;4 测试(131 总)
 >
 > **账目更新**(第 117 回合,866 tests / clippy 0 / fmt clean,协调者实现):
 > - 演进归档 ah-plugins-evolving += archive.rs(新模块文件,1:1 对齐 experience/archive.py 纯逻辑):EvolutionArchivePair(version + skill/evolution 归档文件名 + to_payload)+ normalize_version(空→None/latest 直通/SKILL. 前缀+ .md 后缀剥除/v 前缀校验)+ skill_archive_name(SKILL.{v}.md)/evolution_archive_name(evolutions.{v}.json)/version_from_skill_archive_name(非 v 前缀→None)+ list_pairs(字典序逆序,仅完整对)+ prune_count(保留最近 keep_latest,超出计数)+ next_pair_version(基础时间戳 + _NN 冲突后缀,exists 闭包注入);fs/目录解析留待集成;6 测试(127 总)

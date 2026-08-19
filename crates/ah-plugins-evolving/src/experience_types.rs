@@ -25,7 +25,7 @@ pub struct EvolutionContext {
 }
 
 /// UTC 时间生成(ISO-8601 近似:YYYY-MM-DDTHH:MM:SS.ffffff+00:00)。
-fn utc_iso_now() -> String {
+pub fn utc_iso_now() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_micros())
