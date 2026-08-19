@@ -108,6 +108,7 @@
 | update_execution(3) | ah-plugins-evolving | 更新归一化执行 + 结果聚合 | 已落地(本回合:normalize_updates(过滤 None,experiences → append+pending_change)+ execute_updates(operator 缺失 → errors["operator not found"],None 值 → errors["update value is None"])+ summarize_apply_results(total/applied/failed)) |
 | protocols(22) | ah-plugins-evolving | 协议字面量 + 值集校验 | 已落地(本回合:动作/模式/效果/目标/条目/信号常量 + EVOLUTION_TARGET_VALUES/EVOLUTION_SUBJECT_KIND_VALUES/SIMPLIFY_ACTION_VALUES/VALID_PATCH_ACTIONS/VALID_SECTIONS 值集 + is_evolution_target/is_evolution_subject_kind/is_simplify_action/is_valid_patch_action/is_valid_section 校验) |
 | constant(43) | ah-plugins-evolving | 超参默认值与边界 | 已落地(本回合:TuneConstant 默认值 + min/max 边界 + validate_num_parallel/validate_num_iterations/validate_example_num 校验(消息 "should be between")) |
+| prompts/sections(18) | ah-plugins-evolving | 演进协议提示 section | 已落地(本回合:EVOLUTION_PROTOCOL_PROMPT/TEAM_EVOLUTION_PROTOCOL_PROMPT 中英模板(脚本精确提取)+ build_evolution_protocol_section(priority 86)/build_team_evolution_protocol_section(priority 87)复用 PromptSection 契约);skill_creation section 留待后续 |
 | agent_rl(216) | ah-plugins-rl + `rl-step` seam + ah-plugins-rl-step | VERL/PPO、reward、LoRA、gateway | reward 已落地;训练步数学已落地(本回合:advantage(reward−value)/policy ratio/clipped PPO objective/value loss + 聚合,无效/非有限样本剔除);VERL 训练器/LoRA/gateway 留待后续 |
 | trainer/prompts/tools(3/18/23) | `trainer` seam + ah-plugins-trainer | 训练循环、prompt、工具 | 训练循环已落地(本回合:基线评估 → 每轮 train 前向 → Optimizer 文本梯度应用(经 OperatorRegistry)→ 验证门禁 → 改进推进 best → early stop);prompt/tools 组件留待后续 |
 

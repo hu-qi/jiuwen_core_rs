@@ -26,6 +26,7 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 
 pub mod constant;
+pub mod prompts_sections;
 pub mod protocols;
 pub mod trajectory_codec;
 pub mod updates;
