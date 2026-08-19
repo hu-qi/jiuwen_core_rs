@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 710 tests / 90 crates,clippy -D warnings 0,fmt clean。
+> 当前 715 tests / 90 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 93 回合,715 tests / clippy 0 / fmt clean,协调者实现):
+> - 数据集画像 ah-plugins-data-loader += DatasetProfiler(1:1 对齐 rsi/data_loader/profiler.py):balance_keys 计数(排除 unknown,按键排序)+ 缺失字段警告(case_id + missing_fields)+ quality 分级(empty/normal/partial_metadata/low_quality_fallback,≥50% 缺失 → low_quality);case_id 完整版(case_id/id 优先,空 → path 文件名 + case_index);5 测试
 >
 > **账目更新**(第 92 回合,710 tests / clippy 0 / fmt clean,协调者实现):
 > - 分批规划 ah-plugins-data-loader(新 crate,1:1 对齐 rsi/data_loader/batch_planner.py + profiler.py):case_value(顶层/metadata 嵌套读取,空→unknown)/case_id(case_id 或 id)+ BatchPlanner::plan(难度升序(easy/medium/hard)+ 组内维度轮转 + batch_size 分组)+ batch_plan_item(batch_id/cases 摘要(难度/维度/来源/类型/路径/索引)/difficulty_stage(主导难度)/dimensions);data_loader 契约(BatchPlanEntry/Case/Metadata);5 测试

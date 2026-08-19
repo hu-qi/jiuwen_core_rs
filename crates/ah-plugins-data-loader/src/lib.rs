@@ -54,14 +54,25 @@ fn non_empty_str(v: &Value) -> Option<String> {
     }
 }
 
-/// 稳定 case 标识(对齐 case_id:case_id 或 id,空 → unknown)。
+/// 稳定 case 标识(对齐 profiler.case_id:case_id 或 id,空 → path 文件名 + case_index)。
 pub fn case_id(case: &BTreeMap<String, Value>) -> String {
     for key in ["case_id", "id"] {
         if let Some(v) = case.get(key).and_then(non_empty_str) {
             return v;
         }
     }
-    UNKNOWN_VALUE.to_string()
+    let path = case
+        .get("case_path")
+        .and_then(Value::as_str)
+        .unwrap_or("case");
+    let basename = path.rsplit('/').next().unwrap_or(path);
+    let stem = match basename.rfind('.') {
+        Some(dot) => &basename[..dot],
+        None => basename,
+    }
+    .to_string();
+    let index = case.get("case_index").and_then(Value::as_u64).unwrap_or(0);
+    format!("{stem}#{index}")
 }
 
 /// 课程平衡分批规划器(对齐 BatchPlanner)。
@@ -309,5 +320,164 @@ mod tests {
             UNKNOWN_VALUE.to_string(),
         ];
         assert_eq!(dominant_difficulty(&mixed), "easy");
+    }
+}
+
+/// 数据集画像(对齐 DatasetProfiler.profile 的返回结构)。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DatasetProfile {
+    pub total_cases: usize,
+    /// balance_key -> 值计数(排除 unknown,按键排序)。
+    pub summary: BTreeMap<String, BTreeMap<String, usize>>,
+    pub warnings: Vec<MissingFieldWarning>,
+    pub quality: String,
+}
+
+/// 缺失字段警告(对齐 profiler warnings 条目)。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MissingFieldWarning {
+    pub case_id: String,
+    pub missing_fields: Vec<String>,
+}
+
+/// 数据集画像器(对齐 DatasetProfiler)。
+pub struct DatasetProfiler;
+
+impl DatasetProfiler {
+    /// 生成确定性摘要(对齐 profile:balance_keys 计数 + 缺失警告 + quality)。
+    pub fn profile(cases: &[BTreeMap<String, Value>], balance_keys: &[String]) -> DatasetProfile {
+        let mut summary: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
+        for key in balance_keys {
+            let mut counter: BTreeMap<String, usize> = BTreeMap::new();
+            for case in cases {
+                let v = case_value(case, key);
+                if v != UNKNOWN_VALUE {
+                    *counter.entry(v).or_insert(0) += 1;
+                }
+            }
+            summary.insert(key.clone(), counter);
+        }
+        let mut warnings = Vec::new();
+        for case in cases {
+            let missing: Vec<String> = balance_keys
+                .iter()
+                .filter(|k| case_value(case, k) == UNKNOWN_VALUE)
+                .cloned()
+                .collect();
+            if !missing.is_empty() {
+                warnings.push(MissingFieldWarning {
+                    case_id: case_id(case),
+                    missing_fields: missing,
+                });
+            }
+        }
+        let total = cases.len();
+        let quality = profile_quality(total, warnings.len());
+        DatasetProfile {
+            total_cases: total,
+            summary,
+            warnings,
+            quality,
+        }
+    }
+}
+
+/// 画像质量分级(对齐 _profile_quality)。
+fn profile_quality(total_cases: usize, warning_count: usize) -> String {
+    if total_cases == 0 {
+        return "empty".to_string();
+    }
+    if warning_count == 0 {
+        return "normal".to_string();
+    }
+    if warning_count as f64 / total_cases as f64 >= 0.5 {
+        return "low_quality_fallback".to_string();
+    }
+    "partial_metadata".to_string()
+}
+#[cfg(test)]
+mod tests2 {
+    use super::*;
+
+    fn case(cid: &str, difficulty: &str, dimension: &str) -> BTreeMap<String, Value> {
+        let mut m = BTreeMap::new();
+        m.insert("case_id".to_string(), Value::String(cid.to_string()));
+        m.insert(
+            "difficulty".to_string(),
+            Value::String(difficulty.to_string()),
+        );
+        m.insert(
+            "dimension".to_string(),
+            Value::String(dimension.to_string()),
+        );
+        m
+    }
+
+    #[test]
+    fn profile_counts_balance_keys_and_omits_unknown() {
+        let cases = vec![
+            case("a", "easy", "code"),
+            case("b", "easy", "test"),
+            case("c", "hard", "code"),
+        ];
+        let keys = vec!["difficulty".to_string(), "dimension".to_string()];
+        let profile = DatasetProfiler::profile(&cases, &keys);
+        assert_eq!(profile.total_cases, 3);
+        let diff = profile.summary.get("difficulty").unwrap();
+        assert_eq!(diff.get("easy"), Some(&2));
+        assert_eq!(diff.get("hard"), Some(&1));
+        assert_eq!(profile.quality, "normal");
+    }
+
+    #[test]
+    fn profile_warns_on_missing_fields_and_grades_quality() {
+        let mut c1 = BTreeMap::new();
+        c1.insert("case_id".to_string(), Value::String("x1".to_string()));
+        c1.insert("difficulty".to_string(), Value::String("easy".to_string()));
+        let cases = vec![c1];
+        let keys = vec!["difficulty".to_string(), "dimension".to_string()];
+        let profile = DatasetProfiler::profile(&cases, &keys);
+        assert_eq!(profile.warnings.len(), 1);
+        assert_eq!(profile.warnings[0].case_id, "x1");
+        assert_eq!(
+            profile.warnings[0].missing_fields,
+            vec!["dimension".to_string()]
+        );
+        // 1/1 = 100% missing -> low_quality_fallback (matches Python threshold >= 0.5)
+        assert_eq!(profile.quality, "low_quality_fallback");
+    }
+
+    #[test]
+    fn profile_quality_low_fallback_when_most_missing() {
+        let mut c1 = BTreeMap::new();
+        c1.insert("case_id".to_string(), Value::String("x1".to_string()));
+        let mut c2 = BTreeMap::new();
+        c2.insert("case_id".to_string(), Value::String("x2".to_string()));
+        let cases = vec![c1, c2];
+        let keys = vec!["dimension".to_string()];
+        let profile = DatasetProfiler::profile(&cases, &keys);
+        assert_eq!(profile.warnings.len(), 2);
+        assert_eq!(profile.quality, "low_quality_fallback");
+    }
+
+    #[test]
+    fn profile_empty_cases_is_empty_quality() {
+        let profile = DatasetProfiler::profile(&[], &["dimension".to_string()]);
+        assert_eq!(profile.total_cases, 0);
+        assert_eq!(profile.quality, "empty");
+    }
+
+    #[test]
+    fn case_id_falls_back_to_path_stem_and_index() {
+        let mut m = BTreeMap::new();
+        m.insert(
+            "case_path".to_string(),
+            Value::String("/data/bench.json".to_string()),
+        );
+        m.insert("case_index".to_string(), Value::from(3));
+        assert_eq!(case_id(&m), "bench#3");
+        // explicit case_id wins
+        m.insert("case_id".to_string(), Value::String("custom".to_string()));
+        assert_eq!(case_id(&m), "custom");
     }
 }
