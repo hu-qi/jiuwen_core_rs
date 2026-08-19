@@ -72,6 +72,7 @@ use ah_plugins_rsi::RsiPlugin;
 use ah_plugins_rsi::analyzer::AnalyzerPlugin;
 use ah_plugins_rsi::single_harness::SingleHarnessPlugin;
 use ah_plugins_rsi_config::RsiConfigPlugin;
+use ah_plugins_rsi_evaluator::RsiEvaluatorPlugin;
 use ah_plugins_runner::RunnerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
 use ah_plugins_scheduler_render::SchedulerRenderPlugin;
@@ -207,6 +208,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-rsi",
             Arc::new(RsiPlugin::new(workspace_root.join("rsi"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-rsi-evaluator",
+            Arc::new(RsiEvaluatorPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-rsi-analyzer",

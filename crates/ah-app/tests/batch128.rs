@@ -202,3 +202,32 @@ fn prompt_builder_devtools_mount_and_validate() {
     assert!(err.0.contains("cases cannot be empty"));
     drop(effects);
 }
+
+#[test]
+fn bridge_compose_and_rsi_evaluator_mount() {
+    let ctx = Context::new();
+    let plugins: Vec<DynPlugin> = vec![
+        Arc::new(ah_plugins_bridge_compose::BridgeComposePlugin),
+        Arc::new(ah_plugins_rsi_evaluator::RsiEvaluatorPlugin),
+    ];
+    let effects = mount(&ctx, plugins);
+    let compose = ctx
+        .service::<dyn ah_contracts::bridge_compose::BridgeCompose>(
+            &ah_contracts::keys::BRIDGE_COMPOSE,
+        )
+        .expect("bridge-compose");
+    let text = compose.compose_bridge_inbound("alice", "hi", "ok", "cn", None);
+    assert!(text.contains("[来自团队成员 alice 的消息]"));
+    let rsi = ctx
+        .service::<dyn ah_contracts::rsi_evaluator::RsiTrajectoryTools>(
+            &ah_contracts::keys::RSI_EVALUATOR,
+        )
+        .expect("rsi-evaluator");
+    let mut names = Vec::new();
+    rsi.collect_successful_tool_names(
+        &serde_json::json!({"steps": [{"detail": {"tool_name": "read_file"}}]}),
+        &mut names,
+    );
+    assert!(names.contains(&"read_file".to_string()));
+    drop(effects);
+}

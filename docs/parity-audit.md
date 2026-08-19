@@ -141,7 +141,7 @@
 | optimization_experience_learner | 25 | ExperienceStore/Extractor/Retriever |
 | team_skill_generator | 25 | LLM plan/create/repair、多文件生成 |
 | auto_harness | 20 | rails、LLM agent factory、pipelines、experience store |
-| evaluator | 20 | TeamEvaluator/CaseRunner/LLM judge/scoring |
+| evaluator | 32 | **trajectory 工具已收尾(第 131 回合)**:ah-contracts rsi_evaluator seam + ah-plugins-rsi-evaluator — bounded 轨迹(truncate_text/truncate_json_like/bounded_messages/tool_summary/safe_role_file_stem/bound_llm·tool_detail)+ usage 提取(collect_successful_tool·skill_names/canonical_tool_name/collect_pre_edit_successful_usage/is_persistent_edit_step),对齐 rsi/evaluator/trajectory_paths.py + trajectory_usage.py;LLM judge/TeamEvaluator 留待后续 |
 | member_optimizer | 20 | LLM role/mechanism 归因、action_groups、修复 agent |
 | dataset_generator | 15 | capability graph/case spec/维度/质量评审 |
 | orchestrator | 10 | 多阶段编排、usage ledger、run report |

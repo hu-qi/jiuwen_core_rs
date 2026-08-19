@@ -65,6 +65,7 @@ pub mod rl_step;
 pub mod roster_diff;
 pub mod rsi;
 pub mod rsi_config;
+pub mod rsi_evaluator;
 pub mod runner;
 pub mod sandbox;
 pub mod scheduler;
@@ -224,6 +225,14 @@ pub mod prelude {
     pub use crate::rl_step::{PpoParams, RlSample, RlStep, RlStepError, RlStepResult};
     pub use crate::rsi::{
         GeneratedDataset, RsiCase, RsiCheckpoint, RsiError, RsiReport, RsiRunOutcome, RsiRuntime,
+    };
+    pub use crate::rsi_evaluator::{
+        MAX_SAVED_LLM_MESSAGES, MAX_SAVED_TEXT_CHARS, MAX_SAVED_TOOL_RESULT_CHARS,
+        ROLE_TRAJECTORY_DIR_NAME, RsiTrajectoryTools, TRAJECTORY_EVENTS_FILE_NAME,
+        add_skill_name_from_args, bound_llm_detail, bound_tool_detail, bounded_messages,
+        bounded_trajectory_dict, canonical_tool_name, collect_pre_edit_successful_usage,
+        collect_successful_skill_names, collect_successful_tool_names, is_persistent_edit_step,
+        safe_role_file_stem, tool_summary, truncate_json_like, truncate_text,
     };
     pub use crate::runner::{
         CallbackChain, CallbackMetrics, ChainAction, ChainCallback, ChainContext, ChainResult,

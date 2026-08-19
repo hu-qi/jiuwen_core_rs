@@ -64,6 +64,7 @@ dependencies = [
  "ah-plugins-roster-diff",
  "ah-plugins-rsi",
  "ah-plugins-rsi-config",
+ "ah-plugins-rsi-evaluator",
  "ah-plugins-runner",
  "ah-plugins-sandbox",
  "ah-plugins-scheduler-render",
@@ -764,6 +765,15 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+]
+
+[[package]]
+name = "ah-plugins-rsi-evaluator"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]

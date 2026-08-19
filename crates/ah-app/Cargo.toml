@@ -39,6 +39,7 @@ ah-plugins-team-monitor = { workspace = true }
 ah-plugins-evolving = { workspace = true }
 ah-plugins-external = { workspace = true }
 ah-plugins-rsi = { workspace = true }
+ah-plugins-rsi-evaluator = { workspace = true }
 ah-plugins-context = { workspace = true }
 ah-plugins-context-evolver = { workspace = true }
 ah-plugins-controller = { workspace = true }
