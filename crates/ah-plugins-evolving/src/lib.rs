@@ -28,6 +28,7 @@ use serde_json::{Value, json};
 pub mod constant;
 pub mod dataset;
 pub mod draft_schema;
+pub mod experience_query;
 pub mod from_conv;
 pub mod prompts_sections;
 pub mod protocols;

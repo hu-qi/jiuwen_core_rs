@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 834 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 841 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 113 回合,841 tests / clippy 0 / fmt clean,协调者实现):
+> - 经验索引查询 ah-plugins-evolving += experience_query.rs(新模块文件,1:1 对齐 experience/query.py 纯逻辑):RecordView(id/summary/score/timestamp/target/section/content)+ split_experience_index_query_terms(小写/| 拆分/去空去重)+ filter_experience_index_records(target/section 精确 + query 任一命中(summary+id+target+section 拼接小写)+ score_desc(score,timestamp 双键降序)/updated_desc(timestamp 降序)/非法排序 Err "sort must be score_desc or updated_desc")+ paginate_experience_index(游标 start/end,next=end<len)+ to_index_item/to_read_item(content 截断 + content_truncated 标志);store 加载留待集成;7 测试(102 总)
 >
 > **账目更新**(第 112 回合,834 tests / clippy 0 / fmt clean,协调者实现):
 > - 进化草稿 schema ah-plugins-evolving += draft_schema.rs(新模块文件,1:1 对齐 experience/draft_schema.py):EvolutionSubject(kind/name/scope + to_payload)+ normalize_evolution_subject_kind(team-skill→swarm-skill)+ supported_experience_subject_kinds(skill/swarm-skill)+ normalize_subject(必填/枚举/scope 类型校验,错误消息对齐)+ EvolveDraft/SimplifyDraft(approval_view/persistence_view,persistence 去 source_refs)+ normalize_evolve_draft(summary ≤160 空格归一/content/target 枚举/section 默认(script→Scripts,description→Instructions,body→Troubleshooting)/script_filename 裸文件名校验/source_refs 列表)+ normalize_simplify_draft(action 大写枚举/REFINE·MERGE 前置校验/merge_remove_ids 去空去重禁 record_id)+ validate_simplify_record_refs(record 引用存在性);9 测试(95 总)
