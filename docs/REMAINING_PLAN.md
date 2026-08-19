@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 903 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 908 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 126 回合,908 tests / clippy 0 / fmt clean,协调者实现):
+> - 在线编排 ah-plugins-evolving += online_orchestrator.rs(新模块文件,1:1 对齐 experience/online_orchestrator.py 确定性部分):get_preferred_signal(首个 user_intent 信号优先,否则首个)+ get_signal_type/get_signal_source_of(经 preferred 派生)+ evolve_skip_guard(空输入/技能不存在/定义缺失 → (status, message) 守卫)+ EvolveOutcome(generation_failed/no_evolution/staged/auto_approved/persistence_failed)+ decide_evolve_outcome(生成错误→失败、预览空→无记录、需审批→staged、apply 失败→persistence_failed(错误 join "; "),否则 auto_approved);store/manager/updater 留待集成;5 测试(169 总)
 >
 > **账目更新**(第 125 回合,903 tests / clippy 0 / fmt clean,协调者实现):
 > - 训练进度 ah-plugins-evolving += trainer_progress.rs(新模块文件,1:1 对齐 trainer/progress.py):Progress 状态机(start/current/max_epoch(默认 3=TuneConstant)/批迭代(默认 1)/最优与当前轮分数)+ run_epoch(start_epoch+1 ..= max_epoch 逐轮更新 current_epoch,结束收敛到 max_epoch)+ run_batch(重置 best_batch_score,迭代 0..max_batch_iter)+ TrainCallbacks 生命周期钩子 trait(4 个默认空实现);6 测试(164 总)

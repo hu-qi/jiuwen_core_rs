@@ -35,6 +35,7 @@ pub mod experience_query;
 pub mod experience_types;
 pub mod from_conv;
 pub mod lifecycle;
+pub mod online_orchestrator;
 pub mod prompts_sections;
 pub mod protocols;
 pub mod rebuild;
