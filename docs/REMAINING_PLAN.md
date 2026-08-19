@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 886 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 890 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 123 回合,890 tests / clippy 0 / fmt clean,协调者实现):
+> - 经验展示跟踪 ah-plugins-evolving += tracker.rs(新模块文件,1:1 对齐 experience/tracker.py 的确定性部分):is_body_record(target==body)+ increment_presented_stats(times_presented+1,last_presented_at=now,其余字段保留)+ select_body_records(score ≥ min_score 且 body,取前 limit 条)+ consume_eval_state(counter+1 ≥ interval → 重置 0 并消费,否则递增);session/store/scorer 留待集成;4 测试(151 总)
 >
 > **账目更新**(第 122 回合,886 tests / clippy 0 / fmt clean,协调者实现):
 > - 经验管理器 ah-plugins-evolving += experience_manager.rs(新模块文件,1:1 对齐 skill_experience_manager.py 的纯逻辑):build_local_apply_preview(跳过未应用、lifecycle_stage 非 local_apply_completed → Err "unsupported apply lifecycle stage for {skill}: {stage}"、记录 JSON→RecordView 合并、change_type 最后非空者胜)+ make_pending_change_from_preview(request_id_prefix → change_id 前缀覆盖、change_type 覆盖、shared 标记);store/operator 留待集成;4 测试(147 总)

@@ -45,6 +45,7 @@ pub mod submission;
 pub mod team_signal;
 pub mod tool_call_chain;
 pub mod tool_metadata;
+pub mod tracker;
 pub mod trajectory_codec;
 pub mod updates;
 pub mod utils;
