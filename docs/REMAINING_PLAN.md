@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 728 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 736 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 97 回合,736 tests / clippy 0 / fmt clean,协调者实现):
+> - 自进化工具函数 ah-plugins-evolving += utils.rs(新模块文件,1:1 对齐 agent_evolving/utils.py):SkillReferenceScore(ranking_key tool>path>legacy)+ extract_skill_tool_name(payload dict/JSON 字符串)+ find_skill_tool_mentions(手写扫描 skill_tool(skill_name=...))+ infer_skill_from_texts(三源命中统计最优)+ scan_skill_path/scan_legacy_skill_md(手写路径扫描)+ parse_top_level_frontmatter(顶层标量,跳过缩进/list)+ validate_digital_parameter(数值边界)+ convert_dict_to_string(k:v |)+ parse_json_from_llm_response(围栏/原始)+ parse_list_from_llm_response(list 块);8 测试
 >
 > **账目更新**(第 96 回合,728 tests / clippy 0 / fmt clean,协调者实现):
 > - rsi 配置补齐 + 模块拆分 ah-plugins-rsi-config += EvaluatorConfig/DatasetGeneratorConfig/EvaluationResultAnalyzerConfig/TeamSkillOptimizerConfig/OptimizationExperienceLearnerConfig/MemberOptimizerConfig(20 字段)/AutoCoordinatingHarnessConfig(顶层聚合 15 子配置);代码按职责拆分 5 个文件(lib.rs 声明 + core.rs 基础配置 + scheduling.rs 调度/插件 + extended.rs 扩展配置 + auto.rs 顶层聚合);5 测试(11 总)

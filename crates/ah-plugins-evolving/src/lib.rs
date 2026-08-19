@@ -26,6 +26,7 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 
 pub mod trajectory_codec;
+pub mod utils;
 
 /// 真实 evolving 运行时:轨迹抽取 + 本地判据评估 + 优化建议。
 pub struct EvolvingRuntimeImpl {
