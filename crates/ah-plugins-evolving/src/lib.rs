@@ -33,6 +33,7 @@ pub mod experience_types;
 pub mod from_conv;
 pub mod prompts_sections;
 pub mod protocols;
+pub mod rebuild;
 pub mod signal;
 pub mod skill_creation;
 pub mod skill_creation_sections;

@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 846 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 852 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 115 回合,852 tests / clippy 0 / fmt clean,协调者实现):
+> - 经验重建上下文 ah-plugins-evolving += rebuild.rs(新模块文件,1:1 对齐 experience/rebuild.py 纯逻辑):RebuildRecord(id/summary/score/timestamp/target/section/content/skip_reason)+ filter_rebuild_records(score ≥ min_score 且无 skip_reason)+ build_rebuild_context_payload((score,timestamp) 双键降序排序 → 记录数上限裁剪 → 字符预算逐条裁剪(剩余 0 → 当前与后续全进溢出)+ overflow_index 溢出索引)+ to_rebuild_item/to_index_item;store 加载与归档留待集成;6 测试(113 总)
 >
 > **账目更新**(第 114 回合,846 tests / clippy 0 / fmt clean,协调者实现):
 > - 在线经验类型 ah-plugins-evolving += experience_types.rs(新模块文件,1:1 对齐 experience/types.py + lifecycle.py 结果工厂):EvolutionContext(canonical 输入)+ PendingChange(make:operator_id=skill_experience_{skill},change_type=skill_experience_entry,created_at=UTC ISO(自实现 civil date 转换),change_id=skill_evolve_{8hex};make_for_shared_records)+ ExperienceProposal(record_count)+ HostFacingExperienceResult(pending_approval(effect=pending_change)/persisted(partial↔persisted)/rejected(effect=state))+ ExperienceApplyResult(ok=无错误且无 pending;to_host_result 纯拒绝→rejected 否则 persisted/partial)+ OnlineEvolutionStatus(8 态 as_str)+ ONLINE_EVOLUTION_OUTCOME_STATUSES(4)+ request_for_online_evolution_result(终结态除 persistence_failed 不暴露)+ ExperienceApprovalRequest(to_host_result);5 测试(107 总)
