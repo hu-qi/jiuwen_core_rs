@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 897 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 903 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 125 回合,903 tests / clippy 0 / fmt clean,协调者实现):
+> - 训练进度 ah-plugins-evolving += trainer_progress.rs(新模块文件,1:1 对齐 trainer/progress.py):Progress 状态机(start/current/max_epoch(默认 3=TuneConstant)/批迭代(默认 1)/最优与当前轮分数)+ run_epoch(start_epoch+1 ..= max_epoch 逐轮更新 current_epoch,结束收敛到 max_epoch)+ run_batch(重置 best_batch_score,迭代 0..max_batch_iter)+ TrainCallbacks 生命周期钩子 trait(4 个默认空实现);6 测试(164 总)
 >
 > **账目更新**(第 124 回合,897 tests / clippy 0 / fmt clean,协调者实现):
 > - 存储投影 ah-plugins-evolving += store_projection.rs(新模块文件,1:1 对齐 checkpointing/store_projection.py 的确定性部分):section_filename(小写/空格→_)+ normalize_summary_text(去标题前缀/|→空格/空白折叠/96 截断)+ record_summary(summary→script_purpose→内容首行→id)+ format_experience_index_table(timestamp→score→section 稳定排序 + Markdown 表 + 详情链接)+ format_script_assets_table(脚本资产表)+ extract_description_from_skill_md(frontmatter description)+ format_desc_experience_text(分数降序 - 行)+ format_body_experience_text(编号 section)+ projection_record_from_json(记录 JSON→视图);文件渲染/store 留待集成;7 测试(158 总)
