@@ -15,6 +15,7 @@ use ah_plugins_agent_loop::AgentLoopPlugin;
 use ah_plugins_agentbuilder::AgentBuilderPlugin;
 use ah_plugins_anthropic::AnthropicPlugin;
 use ah_plugins_autoharness::AutoHarnessPlugin;
+use ah_plugins_bridge_compose::BridgeComposePlugin;
 use ah_plugins_checkpointer::CheckpointerPlugin;
 use ah_plugins_ci::CiPlugin;
 use ah_plugins_cli::CliPlugin;
@@ -494,6 +495,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-agentbuilder",
             Arc::new(AgentBuilderPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-bridge-compose",
+            Arc::new(BridgeComposePlugin) as DynPlugin,
         ),
         (
             "ah-plugins-symphony",

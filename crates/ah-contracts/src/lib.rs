@@ -14,6 +14,7 @@ pub mod agent;
 pub mod agent_builder;
 pub mod analyzer;
 pub mod autoharness;
+pub mod bridge_compose;
 pub mod checkpointer;
 pub mod ci;
 pub mod cli;
@@ -123,6 +124,10 @@ pub mod prelude {
     };
     pub use crate::autoharness::{
         AutoHarness, AutoHarnessConfig, AutoHarnessError, CycleResult, StageKind, StageResult,
+    };
+    pub use crate::bridge_compose::{
+        BridgeCompose, BridgeMailboxInjectMode, REMOTE_UNAVAILABLE_SENTINEL, TeamRole,
+        compose_bridge_inbound, wrap_outbound_to_remote,
     };
     pub use crate::checkpointer::{
         Checkpointer, CheckpointerError, CheckpointerProvider, INTERACTIVE_INPUT,
@@ -248,6 +253,7 @@ pub mod prelude {
     pub use crate::store::{
         BaseKVStore, BaseMessageStore, KvEntry, StoreError, StoreProvider, StoredMessage,
     };
+    pub use crate::stream::{TaggedChunk, tag_chunk};
     pub use crate::subagent::{SubagentError, SubagentResult, SubagentRuntime, SubagentSpec};
     pub use crate::subagents::{SubagentKind, SubagentProfile, TypedSubagentError, TypedSubagents};
     pub use crate::swarm::{

@@ -90,7 +90,7 @@
 
 | 模块 | pct | 主要缺口 |
 | --- | ---: | --- |
-| agent | 85 | bridge compose/wrap、StreamController |
+| agent | 90 | **bridge compose/wrap 已收尾(第 130 回合)**:ah-contracts bridge_compose seam(TeamRole/BridgeMailboxInjectMode/compose_bridge_inbound/wrap_outbound_to_remote 双语纯函数)+ ah-plugins-bridge-compose;StreamController _tag_chunk 决策已补(ah-contracts stream.rs tag_chunk) |
 | external | 85 | ExternalTeamClient(MCP 收件箱) |
 | reliability | 85 | DeepAgentRail/handler 接线 |
 | context | 90 | **已收尾(第 129 回合)**:ah-contracts team_context seam + ah-plugins-team-context(session_id set/get/reset token 可逆,对齐 context.py) |

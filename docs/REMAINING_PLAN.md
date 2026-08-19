@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 130 回合,协调者实现,partial 收尾推进):
+> - agent_teams/agent → 90:ah-contracts bridge_compose seam(TeamRole/BridgeMailboxInjectMode/compose_bridge_inbound/wrap_outbound_to_remote — PASSTHROUGH/REPHRASE 双语纯函数,对齐 agent/bridge_inbound_compose.py + bridge_outbound_wrap.py)+ ah-plugins-bridge-compose;StreamController._tag_chunk 决策补入 stream 契约(tag_chunk:升级/匹配透传/更新标记);5 契约 + 3 tag_chunk + 2 插件测试;接线 ah-app + dev/prod profiles(101 插件)
+>
 > **账目更新**(第 129 回合,协调者实现,partial 收尾推进):
 > - agent_teams/context → 90:ah-contracts team_context seam(TeamSessionContext/SessionToken/LOG_DEFAULT_TRACE_ID)+ ah-plugins-team-context(set/get/reset token 可逆,对齐 context.py 67 行);3 契约 + 3 插件测试
 > - rsi/config → 95:ah-plugins-rsi-config loader.rs(DEFAULT_CONFIG_TEMPLATE 嵌入默认模板/bootstrap 引导/缺失显式 FileNotFoundError/非 mapping 显式 ValueError/team_spec_config_ref 相对→绝对,对齐 loader.py 66 行 + orchestrating.default.yaml);5 新 loader 测试

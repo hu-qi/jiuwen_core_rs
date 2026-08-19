@@ -128,6 +128,7 @@ pub const OAUTH: ServiceKey = ServiceKey::new("oauth");
 
 /// `agent-builder` seam 服务键(NL → 设计 → DSL → 执行)。
 pub const AGENT_BUILDER: ServiceKey = ServiceKey::new("agent-builder");
+pub const BRIDGE_COMPOSE: ServiceKey = ServiceKey::new("bridge-compose");
 
 /// `symphony` seam 服务键(能力编排)。
 pub const SYMPHONY: ServiceKey = ServiceKey::new("symphony");
