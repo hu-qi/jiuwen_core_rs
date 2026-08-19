@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 860 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 866 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 117 回合,866 tests / clippy 0 / fmt clean,协调者实现):
+> - 演进归档 ah-plugins-evolving += archive.rs(新模块文件,1:1 对齐 experience/archive.py 纯逻辑):EvolutionArchivePair(version + skill/evolution 归档文件名 + to_payload)+ normalize_version(空→None/latest 直通/SKILL. 前缀+ .md 后缀剥除/v 前缀校验)+ skill_archive_name(SKILL.{v}.md)/evolution_archive_name(evolutions.{v}.json)/version_from_skill_archive_name(非 v 前缀→None)+ list_pairs(字典序逆序,仅完整对)+ prune_count(保留最近 keep_latest,超出计数)+ next_pair_version(基础时间戳 + _NN 冲突后缀,exists 闭包注入);fs/目录解析留待集成;6 测试(127 总)
 >
 > **账目更新**(第 116 回合,860 tests / clippy 0 / fmt clean,协调者实现):
 > - 经验生命周期 ah-plugins-evolving += lifecycle.rs(新模块文件,1:1 对齐 experience/lifecycle.py 类型 + common.py 提交/精简逻辑):LocalApplyPreview(change_type 默认 skill_experience_entry,lifecycle_stage=local_apply_completed)+ PendingCommitResult(applied/pending/rejected/errors)+ commit_pending_change(逐条 append(闭包注入):approved_record_ids 过滤→拒绝集,失败记录及其后保留 pending 供重试,清空后移除 change_id,未知 change_id/类型 Err)+ execute_simplify_actions(delete/merge/refine 闭包注入,DELETE 删 0 条/merge·refine false/未知动作/异常均计 errors,返回 deleted/merged/refined/kept/errors 计数);8 测试(121 总)
