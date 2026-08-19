@@ -41,6 +41,7 @@ pub mod skill_creation;
 pub mod skill_creation_sections;
 pub mod submission;
 pub mod team_signal;
+pub mod tool_call_chain;
 pub mod tool_metadata;
 pub mod trajectory_codec;
 pub mod updates;
