@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 756 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 760 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 102 回合,760 tests / clippy 0 / fmt clean,协调者实现):
+> - 技能沉淀提示 ah-plugins-evolving += skill_creation_sections.rs(新模块文件,1:1 对齐 prompts/sections/skill_creation.py,模板经脚本从 Python 源码精确提取):SKILL_CREATION_GUIDANCE(中/英,技能沉淀自检)+ TEAM_SKILL_CREATION_GUIDANCE(中/英,团队技能沉淀自检)+ TEAM_SKILL_CREATION_NUDGE(中/英,{skills_dir} 占位)+ build_skill_creation_guidance_section/build_team_skill_creation_guidance_section(双语言,priority=88)+ build_team_skill_creation_nudge_section(skills_dir 替换,priority=89);4 测试(40 总)
 >
 > **账目更新**(第 101 回合,756 tests / clippy 0 / fmt clean,协调者实现):
 > - 进化协议提示 ah-plugins-evolving += prompts_sections.rs(新模块文件,1:1 对齐 prompts/sections/evolution.py,模板经脚本从 Python 源码精确提取):EVOLUTION_PROTOCOL_PROMPT(中/英,技能演进自检:判断场景/用户意图信号/回复与确认规则/工具执行)+ TEAM_EVOLUTION_PROTOCOL_PROMPT(中/英,团队 Skill 演进自检)+ pick_prompt(缺失回退 cn)+ build_evolution_protocol_section(name=evolution_protocol,priority=86)/build_team_evolution_protocol_section(name=evolution_team_protocol,priority=87)(复用 ah-contracts PromptSection 契约);5 测试(36 总)
