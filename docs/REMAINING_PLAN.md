@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 740 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 746 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 99 回合,746 tests / clippy 0 / fmt clean,协调者实现):
+> - 进化协议字面量 ah-plugins-evolving += protocols.rs(新模块文件,1:1 对齐 agent_evolving/protocols.py):动作(approve/reject/retry)+ 模式(append/merge/replace)+ 效果(state/pending_change)+ 目标/条目(experiences/experience_entry/skill_experience_entry/local_apply_completed)+ 信号(conversation_review/execution_failure/tool_failure/trajectory_issue/user_intent)+ 值集(EVOLUTION_TARGET_VALUES(description/body/script)/EVOLUTION_SUBJECT_KIND_VALUES(skill/team-skill/swarm-skill)/SIMPLIFY_ACTION_VALUES(DELETE/MERGE/REFINE/KEEP)/VALID_PATCH_ACTIONS(append/merge/replace/skip)/VALID_SECTIONS(8 章节))+ 5 个值集校验函数;6 测试(26 总)
 >
 > **账目更新**(第 98 回合,740 tests / clippy 0 / fmt clean,协调者实现):
 > - 更新执行 ah-plugins-evolving += updates.rs(新模块文件,1:1 对齐 agent_evolving/update_execution.py)+ evolving 契约扩展(UpdateMode(Replace/Append/Merge)/UpdateEffect(State/PendingChange)/UpdateValue(new/normalize:experiences → append+pending_change+skill_experience_entry)/ApplyResult(ok())/UpdateKey);normalize_updates(过滤 None)+ execute_updates(operator 缺失 → errors["operator not found: X"],None 值 → errors["update value is None"])+ summarize_apply_results(total/applied/failed);4 测试(20 总)

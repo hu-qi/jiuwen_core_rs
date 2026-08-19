@@ -25,6 +25,7 @@ use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
+pub mod protocols;
 pub mod trajectory_codec;
 pub mod updates;
 pub mod utils;
