@@ -109,6 +109,7 @@
 | protocols(22) | ah-plugins-evolving | 协议字面量 + 值集校验 | 已落地(本回合:动作/模式/效果/目标/条目/信号常量 + EVOLUTION_TARGET_VALUES/EVOLUTION_SUBJECT_KIND_VALUES/SIMPLIFY_ACTION_VALUES/VALID_PATCH_ACTIONS/VALID_SECTIONS 值集 + is_evolution_target/is_evolution_subject_kind/is_simplify_action/is_valid_patch_action/is_valid_section 校验) |
 | constant(43) | ah-plugins-evolving | 超参默认值与边界 | 已落地(本回合:TuneConstant 默认值 + min/max 边界 + validate_num_parallel/validate_num_iterations/validate_example_num 校验(消息 "should be between")) |
 | prompts/sections(18) | ah-plugins-evolving | 演进/沉淀提示 section | 已落地(本回合:SKILL_CREATION_GUIDANCE/TEAM_SKILL_CREATION_GUIDANCE/TEAM_SKILL_CREATION_NUDGE 中英模板(脚本精确提取,{skills_dir} 替换)+ 3 个构建函数(priority 88/88/89));演进协议 section 前回合已落地 |
+| prompts/tools(23) | ah-plugins-evolving | 进化工具元数据提供器 | 已落地(本回合:subject schema + 6 工具描述/输入参数 JSON(枚举引用 protocols 值集)+ 注册表查找(未知 → Err "not registered. Available: ...")+ ToolCard 构建(id= tool_id_agent_id 或 tool_id_hex)) |
 | agent_rl(216) | ah-plugins-rl + `rl-step` seam + ah-plugins-rl-step | VERL/PPO、reward、LoRA、gateway | reward 已落地;训练步数学已落地(本回合:advantage(reward−value)/policy ratio/clipped PPO objective/value loss + 聚合,无效/非有限样本剔除);VERL 训练器/LoRA/gateway 留待后续 |
 | trainer/prompts/tools(3/18/23) | `trainer` seam + ah-plugins-trainer | 训练循环、prompt、工具 | 训练循环已落地(本回合:基线评估 → 每轮 train 前向 → Optimizer 文本梯度应用(经 OperatorRegistry)→ 验证门禁 → 改进推进 best → early stop);prompt/tools 组件留待后续 |
 

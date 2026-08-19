@@ -29,6 +29,7 @@ pub mod constant;
 pub mod prompts_sections;
 pub mod protocols;
 pub mod skill_creation_sections;
+pub mod tool_metadata;
 pub mod trajectory_codec;
 pub mod updates;
 pub mod utils;
