@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 798 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 806 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 108 回合,806 tests / clippy 0 / fmt clean,协调者实现):
+> - 技能创建信号 ah-plugins-evolving += skill_creation.rs(新模块文件,1:1 对齐 signal/skill_creation.py):SKILL_CREATION_SIGNAL_PROMPT_ELIGIBLE/SKILL_TOOL_COVER + 阈值常量(首次 6 迭代/10 调用,再次 2 迭代/4 调用)+ normalize_tool_name(命名空间取末段)+ is_effective_task_tool(排除 12 工具名/5 关键词)+ iter_tool_calls/tool_call_name(function.name 优先)/tool_call_id + collect_metrics(watermark 窗口:skill_tool 覆盖标志/有效调用计数/迭代计数(带 tool_call_id 关联回退))+ SkillCreationSignalDetector(skill_tool_used → cover;无快照 → first_prompt_threshold;有快照 → reprompt_threshold 增量)+ SkillStepView(Tool/Llm);8 测试(86 总)
 >
 > **账目更新**(第 107 回合,798 tests / clippy 0 / fmt clean,协调者实现):
 > - 团队信号 ah-plugins-evolving += team_signal.rs(新模块文件,1:1 对齐 signal/team.py):TeamSignalType(user_intent/user_request/trajectory_issue)+ UserIntent/TrajectoryIssue(severity 默认 medium)+ TeamStepView(Tool/Llm 步骤视图)+ build_team_trajectory_summary(关键工具 spawn_member/create_task/build_team/view_task/send_message 更长预算(500/500 vs 150/200)+ tool 20000/llm 10000 字符预算截断带标记)+ make_team_user_intent_signal(source=explicit_request)+ make_team_trajectory_signal(context 携带 trajectory_issues/skill_content,source=passive_trajectory)+ get_team_trajectory_issues(仅 object 项)/get_team_signal_skill_content;7 测试(78 总)
