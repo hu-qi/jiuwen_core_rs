@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 880 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 882 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 121 回合,882 tests / clippy 0 / fmt clean,协调者实现):
+> - 检查点类型补全 ah-plugins-evolving checkpoint_types.rs 重写(1:1 对齐 checkpointing/types.py):EvolutionPatch(action ∈ append/merge/replace/skip 校验/target ∈ description/body/script 归一/skip 动作豁免 section 校验/section ∈ VALID_SECTIONS;to_dict 可选字段非空带出/from_dict 默认 target=body·section=Troubleshooting·action=append)+ EvolutionRecord(make:id=ev_{8hex}/UTC ISO/usage_stats 默认/is_pending/to_dict(from_dict 默认 source=unknown·score=0.6·applied=false))+ EvolutionLog.entries 改类型化 Vec<EvolutionRecord>(pending_entries 按 is_pending);6 测试(143 总)
 >
 > **账目更新**(第 120 回合,880 tests / clippy 0 / fmt clean,协调者实现):
 > - 检查点类型 ah-plugins-evolving += checkpoint_types.rs(新模块文件,1:1 对齐 checkpointing/types.py 的 UsageStats/EvolutionLog):UsageStats(times_presented/used/positive/negative + last_*_at,to_dict 省略空 Option/from_dict 缺失取 0)+ EvolutionLog(skill_id/version=1.0.0 默认/updated_at=UTC ISO/entries JSON,pending_entries(applied==false 过滤),to_dict/from_dict/empty);完整 EvolutionRecord/EvolutionPatch 类型留待后续;4 测试(141 总)
