@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 791 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 798 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 107 回合,798 tests / clippy 0 / fmt clean,协调者实现):
+> - 团队信号 ah-plugins-evolving += team_signal.rs(新模块文件,1:1 对齐 signal/team.py):TeamSignalType(user_intent/user_request/trajectory_issue)+ UserIntent/TrajectoryIssue(severity 默认 medium)+ TeamStepView(Tool/Llm 步骤视图)+ build_team_trajectory_summary(关键工具 spawn_member/create_task/build_team/view_task/send_message 更长预算(500/500 vs 150/200)+ tool 20000/llm 10000 字符预算截断带标记)+ make_team_user_intent_signal(source=explicit_request)+ make_team_trajectory_signal(context 携带 trajectory_issues/skill_content,source=passive_trajectory)+ get_team_trajectory_issues(仅 object 项)/get_team_signal_skill_content;7 测试(78 总)
 >
 > **账目更新**(第 106 回合,791 tests / clippy 0 / fmt clean,协调者实现):
 > - 对话信号检测 ah-plugins-evolving += from_conv.rs(新模块文件,1:1 对齐 signal/from_conv.py 确定性部分):失败关键词手写扫描(error 排除后随 = None)+ 用户纠正模式手写展开(中文短语/应该(是用改换)/重新(来做执行尝试)/that's wrong/should be/actually,/no, wait/correct:/fix:)+ skill_md_name(name/SKILL.md 路径提取)+ tool_schema 模式 + ConversationSignalDetector(技能读取历史 → 活跃技能/待定脚本 → script_artifact(代码>20 字符,失败时跳过)/执行失败(数据获取工具跳过,摘录前后 300 字符)/指纹去重 + 默认信号类型过滤 + 无 LLM 用户反馈 fallback);8 测试(71 总)
