@@ -26,6 +26,7 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 
 pub mod archive;
+pub mod checkpoint_types;
 pub mod constant;
 pub mod dataset;
 pub mod draft_schema;

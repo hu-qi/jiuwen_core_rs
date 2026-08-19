@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 876 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 880 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 120 回合,880 tests / clippy 0 / fmt clean,协调者实现):
+> - 检查点类型 ah-plugins-evolving += checkpoint_types.rs(新模块文件,1:1 对齐 checkpointing/types.py 的 UsageStats/EvolutionLog):UsageStats(times_presented/used/positive/negative + last_*_at,to_dict 省略空 Option/from_dict 缺失取 0)+ EvolutionLog(skill_id/version=1.0.0 默认/updated_at=UTC ISO/entries JSON,pending_entries(applied==false 过滤),to_dict/from_dict/empty);完整 EvolutionRecord/EvolutionPatch 类型留待后续;4 测试(141 总)
 >
 > **账目更新**(第 119 回合,876 tests / clippy 0 / fmt clean,协调者实现):
 > - 工具调用链 ah-plugins-evolving += tool_call_chain.rs(新模块文件,1:1 对齐 optimizer/skill_call/tool_call_chain.py):extract_message_text(字符串/list 文本块/其他)+ summarize_tool_result(空→(空/EMPTY,空/(empty))、失败关键词→失败/FAIL 否则 OK、单行归一 + 100 字符截断)+ build_tool_call_chain(assistant 工具调用行(args 字典 JSON 化,120 字符截断)/tool·function 结果行(name/tool_name)/user 纠正行(150 字符预览,复用 from_conv correction_found)/max_events 上限、空消息与无调用回退文案);6 测试(137 总)
