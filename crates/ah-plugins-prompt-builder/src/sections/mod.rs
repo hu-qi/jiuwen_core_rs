@@ -7,6 +7,7 @@ pub mod advanced;
 pub mod base;
 pub mod context;
 pub mod runtime;
+pub mod tools;
 pub mod workspace;
 
 #[cfg(test)]
