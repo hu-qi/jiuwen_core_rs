@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 852 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 860 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 116 回合,860 tests / clippy 0 / fmt clean,协调者实现):
+> - 经验生命周期 ah-plugins-evolving += lifecycle.rs(新模块文件,1:1 对齐 experience/lifecycle.py 类型 + common.py 提交/精简逻辑):LocalApplyPreview(change_type 默认 skill_experience_entry,lifecycle_stage=local_apply_completed)+ PendingCommitResult(applied/pending/rejected/errors)+ commit_pending_change(逐条 append(闭包注入):approved_record_ids 过滤→拒绝集,失败记录及其后保留 pending 供重试,清空后移除 change_id,未知 change_id/类型 Err)+ execute_simplify_actions(delete/merge/refine 闭包注入,DELETE 删 0 条/merge·refine false/未知动作/异常均计 errors,返回 deleted/merged/refined/kept/errors 计数);8 测试(121 总)
 >
 > **账目更新**(第 115 回合,852 tests / clippy 0 / fmt clean,协调者实现):
 > - 经验重建上下文 ah-plugins-evolving += rebuild.rs(新模块文件,1:1 对齐 experience/rebuild.py 纯逻辑):RebuildRecord(id/summary/score/timestamp/target/section/content/skip_reason)+ filter_rebuild_records(score ≥ min_score 且无 skip_reason)+ build_rebuild_context_payload((score,timestamp) 双键降序排序 → 记录数上限裁剪 → 字符预算逐条裁剪(剩余 0 → 当前与后续全进溢出)+ overflow_index 溢出索引)+ to_rebuild_item/to_index_item;store 加载与归档留待集成;6 测试(113 总)
