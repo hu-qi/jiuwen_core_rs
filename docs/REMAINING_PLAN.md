@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 890 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 897 tests / 91 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 124 回合,897 tests / clippy 0 / fmt clean,协调者实现):
+> - 存储投影 ah-plugins-evolving += store_projection.rs(新模块文件,1:1 对齐 checkpointing/store_projection.py 的确定性部分):section_filename(小写/空格→_)+ normalize_summary_text(去标题前缀/|→空格/空白折叠/96 截断)+ record_summary(summary→script_purpose→内容首行→id)+ format_experience_index_table(timestamp→score→section 稳定排序 + Markdown 表 + 详情链接)+ format_script_assets_table(脚本资产表)+ extract_description_from_skill_md(frontmatter description)+ format_desc_experience_text(分数降序 - 行)+ format_body_experience_text(编号 section)+ projection_record_from_json(记录 JSON→视图);文件渲染/store 留待集成;7 测试(158 总)
 >
 > **账目更新**(第 123 回合,890 tests / clippy 0 / fmt clean,协调者实现):
 > - 经验展示跟踪 ah-plugins-evolving += tracker.rs(新模块文件,1:1 对齐 experience/tracker.py 的确定性部分):is_body_record(target==body)+ increment_presented_stats(times_presented+1,last_presented_at=now,其余字段保留)+ select_body_records(score ≥ min_score 且 body,取前 limit 条)+ consume_eval_state(counter+1 ≥ interval → 重置 0 并消费,否则递增);session/store/scorer 留待集成;4 测试(151 总)

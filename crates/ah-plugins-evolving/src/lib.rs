@@ -41,6 +41,7 @@ pub mod rebuild;
 pub mod signal;
 pub mod skill_creation;
 pub mod skill_creation_sections;
+pub mod store_projection;
 pub mod submission;
 pub mod team_signal;
 pub mod tool_call_chain;
