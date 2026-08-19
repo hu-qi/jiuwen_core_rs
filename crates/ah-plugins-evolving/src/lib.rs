@@ -29,6 +29,7 @@ pub mod constant;
 pub mod dataset;
 pub mod draft_schema;
 pub mod experience_query;
+pub mod experience_types;
 pub mod from_conv;
 pub mod prompts_sections;
 pub mod protocols;
