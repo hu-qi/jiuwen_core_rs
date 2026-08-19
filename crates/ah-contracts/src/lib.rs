@@ -35,6 +35,7 @@ pub mod interaction_router;
 pub mod json_parser;
 pub mod keys;
 pub mod llm;
+pub mod manifest;
 pub mod mcp;
 pub mod member_optimizer;
 pub mod memory;
@@ -150,6 +151,12 @@ pub mod prelude {
     pub use crate::llm::{
         ChatMessage, ChatRole, ModelChunk, ModelError, ModelProvider, ModelRequest, ModelResponse,
         ToolCall, ToolCallDelta, ToolSchema,
+    };
+    pub use crate::manifest::{
+        ConstructionInputModel, ElementFactory, ElementKind, HarnessElementDescriptor,
+        InputFieldSpec, InputSource, InterfaceMethod, ManifestCatalog, ManifestContext,
+        ManifestError, ManifestFactoryRegistry, ManifestRegistration, MapManifestContext,
+        default_interface_methods, factory_ref,
     };
     pub use crate::mcp::{McpClient, McpContent, McpError, McpInfo, McpTool, McpToolResult};
     pub use crate::member_optimizer::{

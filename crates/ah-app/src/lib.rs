@@ -22,6 +22,7 @@ use ah_plugins_context::ContextPlugin;
 use ah_plugins_context_evolver::ContextEvolverPlugin;
 use ah_plugins_controller::ControllerPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
+use ah_plugins_data_loader::DataLoaderPlugin;
 use ah_plugins_dataset_curator::DatasetCuratorPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
 use ah_plugins_experience_scorer::ExperienceScorerPlugin;
@@ -32,9 +33,11 @@ use ah_plugins_graph_memory::GraphMemoryPlugin;
 use ah_plugins_inbound_render::InboundRenderPlugin;
 use ah_plugins_interaction_router::InteractionRouterPlugin;
 use ah_plugins_json_parser::JsonParserPlugin;
+use ah_plugins_manifest::ManifestPlugin;
 use ah_plugins_mcp::McpPlugin;
 use ah_plugins_member_optimizer::MemberOptimizerPlugin;
 use ah_plugins_memory::MemoryPlugin;
+use ah_plugins_memory_lite::MemoryLitePlugin;
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_model_allocator::ModelAllocatorPlugin;
 use ah_plugins_model_catalog::ModelCatalogPlugin;
@@ -46,12 +49,6 @@ use ah_plugins_pregel::PregelPlugin;
 use ah_plugins_prompt::PromptPlugin;
 use ah_plugins_prompt_attachment::PromptAttachmentPlugin;
 use ah_plugins_prompt_builder::PromptBuilderPlugin;
-use ah_plugins_stream::StreamPlugin;
-use ah_plugins_tag_manager::TagManagerPlugin;
-use ah_plugins_memory_lite::MemoryLitePlugin;
-use ah_plugins_tools_metadata::ToolsMetadataPlugin;
-use ah_plugins_data_loader::DataLoaderPlugin;
-use ah_plugins_rsi_config::RsiConfigPlugin;
 use ah_plugins_queue::QueuePlugin;
 use ah_plugins_queue::redis_queue::RedisQueuePlugin;
 use ah_plugins_rails::{
@@ -68,11 +65,15 @@ use ah_plugins_roster_diff::RosterDiffPlugin;
 use ah_plugins_rsi::RsiPlugin;
 use ah_plugins_rsi::analyzer::AnalyzerPlugin;
 use ah_plugins_rsi::single_harness::SingleHarnessPlugin;
+use ah_plugins_rsi_config::RsiConfigPlugin;
 use ah_plugins_runner::RunnerPlugin;
 use ah_plugins_sandbox::{SandboxPlugin, SandboxRailPlugin};
 use ah_plugins_scheduler_render::SchedulerRenderPlugin;
+use ah_plugins_stream::StreamPlugin;
+use ah_plugins_tag_manager::TagManagerPlugin;
 use ah_plugins_team_join_descriptor::TeamJoinDescriptorPlugin;
 use ah_plugins_team_task_status::TeamTaskStatusPlugin;
+use ah_plugins_tools_metadata::ToolsMetadataPlugin;
 
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
@@ -129,6 +130,7 @@ pub fn plugin_catalog(
             Arc::new(CredentialsPlugin::default()) as DynPlugin,
         ),
         ("ah-plugins-tools", Arc::new(ToolsPlugin) as DynPlugin),
+        ("ah-plugins-manifest", Arc::new(ManifestPlugin) as DynPlugin),
         (
             "ah-plugins-tokenizer",
             Arc::new(TokenizerPlugin) as DynPlugin,
@@ -383,10 +385,7 @@ pub fn plugin_catalog(
             "ah-plugins-prompt-builder",
             Arc::new(PromptBuilderPlugin) as DynPlugin,
         ),
-        (
-            "ah-plugins-stream",
-            Arc::new(StreamPlugin) as DynPlugin,
-        ),
+        ("ah-plugins-stream", Arc::new(StreamPlugin) as DynPlugin),
         (
             "ah-plugins-tag-manager",
             Arc::new(TagManagerPlugin) as DynPlugin,

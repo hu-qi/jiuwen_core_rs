@@ -80,7 +80,7 @@
 | rails(143/57 文件) | 事件监听器(waterfall) | 规划/完成/心跳/重试/LSP/MCP/渐进工具 等 | ShellGuard + PathGuard + ToolBudget + 渐进披露 ApprovalRail(本回合,tool-approval seam,批准集持久化)已落地;其余按需补充 |
 | subagents(24/8 文件) | `subagents` seam + ah-plugins-subagents | code/research/plan/verify + browser/mobile | code/research/plan/verify 已落地(本回合:类型提示 + 工具白名单真实强制);browser/mobile 留待后续 |
 | cli(113/19 文件) | ah-plugins-cli | REPL、会话存储、渲染 | 已落地(本回合:Claude Code 风格渲染器 ● Tool(args)/⎿ 摘要/☑☐ todo checkbox/⚙ 消息,事件→块投影,CLI 实时渲染;REPL+会话存储先前已落地)
-| workspace/goal/manifest(本回合已落地:workspace.json + 目标状态机)/ resources/schema/security/prompts/kv_cache/lsp | 各插件 | 对应功能 | 逐模块对等;workspace 已实现 |
+| workspace/goal/manifest(本回合已落地:workspace.json + 目标状态机;manifest 已落地:描述符目录/工厂注册表/kind 路由注册)/ resources/schema/security/prompts/kv_cache/lsp | 各插件 | 对应功能 | 逐模块对等;workspace 已实现;manifest 已实现(本回合:ah-contracts manifest seam + ah-plugins-manifest — HarnessElementDescriptor/ElementKind/InterfaceMethod/ConstructionInputModel(field 源标签+JSON schema)/factory_ref·resolve_factory(可逆工厂注册表)/add_descriptor 重名拒绝+Effect 回滚/list_elements JSON 导出/default_interface_methods(kind)/register_from_catalog kind 路由(TOOL/RAIL/SUBAGENT provider 表)+ 类 builder 适配;5 契约测试 + 8 插件测试 + 4 集成测试) |
 
 ### 2.3 agent_teams(1104 符号)
 
@@ -125,7 +125,7 @@
 | team_skill_generator/optimizer(26/8) | `team-skill` seam + ah-plugins-team-skill + `signals` seam + ah-plugins-signals | 技能生成与演化 | 生成已落地(任务 → 确定性计划(关键词→能力/步骤)+ 注册 skill seam + 源任务验证(子代理+evolving)+ 修复重试);演化信号映射已落地(本回合:分析器问题 → trajectory_issue 信号 — 类型归因(attribution.target_ref+category 关键词→routing_policy/handoff_protocol/shared_context_contract/final_answer_verification/stop_condition/team_coordination)+ 归一化(severity 规整/description/affected_role)+ 摘录截断 + issue_ids + 用户查询构建 + 批量 build_signals(上下文携带 source/trajectory_issues/skill_content/路径));LLM 演化管线留待后续 |
 | single_harness(72+12) | `single-harness` seam + ah-plugins-rsi-single-harness | 迭代编排、候选门禁 | 已落地(本回合:train/holdout 拆分 + 每 epoch 评测→精化→候选 holdout 门禁(严格优于才接受)+ best/checkpoint JSONL 落盘 + 中断续跑) |
 | auto_harness(65 文件) | ah-plugins-autoharness | assess/plan/implement/verify/commit/publish + 真实 git/CI | 编排已落地(本回合:六阶段真实执行,git 提交+分支);远端 PR/GitCode 留待后续 |
-| storage/resource/config/schema | ah-plugins-rsi | 持久化、资源记账、配置、类型 | 现 in-memory
+| storage/resource/config/schema | ah-plugins-rsi | 持久化、资源记账、配置、类型 | 现 in-memory;resource/storage 判 **excluded**(Python 侧 `rsi/resource/manager.py`、`rsi/storage/store.py` 均为 NotImplementedError TODO 桩,无真实功能,Rust 不硬造) |
 
 ### 2.6 extensions(340 符号) + providers
 

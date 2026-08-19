@@ -16,6 +16,7 @@
 | [architecture.md](architecture.md) | 架构约束:理念、分层、硬性规则 | 所有贡献者 |
 | [hub-primer.md](hub-primer.md) | 内核语义入门:注册表/事件/Effect/Plugin/Profile | 写插件或改内核者 |
 | [capability-map.md](capability-map.md) | 能力地图:agent-core 全功能 → seam/插件/工作包 | 规划与验收 |
+| [parity-audit.md](parity-audit.md) | 对等审计基线:7 域 97 子模块 done/partial/missing + file:line 证据 | 规划与验收 |
 | [agent-guide.md](agent-guide.md) | 生成参考:面向 AI 代理的任务配方与验证命令 | 编码代理 |
 
 ### 参考(按需)

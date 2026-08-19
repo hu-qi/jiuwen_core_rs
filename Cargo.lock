@@ -30,6 +30,7 @@ dependencies = [
  "ah-plugins-inbound-render",
  "ah-plugins-interaction-router",
  "ah-plugins-json-parser",
+ "ah-plugins-manifest",
  "ah-plugins-mcp",
  "ah-plugins-member-optimizer",
  "ah-plugins-memory",
@@ -388,6 +389,15 @@ dependencies = [
 
 [[package]]
 name = "ah-plugins-json-parser"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-manifest"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",

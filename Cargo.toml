@@ -76,6 +76,7 @@ members = [
     "crates/ah-plugins-session-log",
     "crates/ah-plugins-workflow",
     "crates/ah-plugins-memory",
+    "crates/ah-plugins-manifest",
     "crates/ah-plugins-mcp",
     "crates/ah-plugins-member-optimizer",
     "crates/ah-plugins-credentials",
@@ -175,6 +176,7 @@ ah-plugins-rails = { path = "crates/ah-plugins-rails" }
 ah-plugins-session-log = { path = "crates/ah-plugins-session-log" }
 ah-plugins-workflow = { path = "crates/ah-plugins-workflow" }
 ah-plugins-memory = { path = "crates/ah-plugins-memory" }
+ah-plugins-manifest = { path = "crates/ah-plugins-manifest" }
 ah-plugins-mcp = { path = "crates/ah-plugins-mcp" }
 ah-plugins-member-optimizer = { path = "crates/ah-plugins-member-optimizer" }
 ah-plugins-credentials = { path = "crates/ah-plugins-credentials" }

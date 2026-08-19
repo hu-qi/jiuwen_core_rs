@@ -2,7 +2,7 @@
 
 > 等价 DSH 的 module-graph:登记 crate 布局与依赖规则。新增 crate 时必须更新本文件。
 
-## 1. 当前 crate 依赖(全部 50 crates)
+## 1. 当前 crate 依赖(全部 92 crates)
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -54,6 +54,7 @@
 
 [工具与执行]
 ├─> ah-plugins-tools        (真实工具注册表,pre/post-execute 管线)      ──> ah-hub, ah-contracts
+├─> ah-plugins-manifest     (真实 harness 元素 manifest:描述符目录/工厂注册表/kind 路由注册) ──> ah-hub, ah-contracts
 ├─> ah-plugins-sysop        (真实受限 fs/shell + read_file/run_shell 工具) ──> ah-hub, ah-contracts
 ├─> ah-plugins-code         (python3 子进程执行)                        ──> ah-hub, ah-contracts
 ├─> ah-plugins-sandbox      (策略沙箱 + tools/pre-execute rail)         ──> ah-hub, ah-contracts
@@ -126,6 +127,7 @@ ah-plugins-credentials       (已实现)env provider 凭据引用(openai.api_key
 
 [工具与执行](全部已实现)
 ah-plugins-tools             (已实现)真实工具注册表 + pre/post-execute 管线
+ah-plugins-manifest          (已实现)真实 harness 元素 manifest:描述符目录/工厂注册表/kind 路由注册
 ah-plugins-sysop             (已实现)受限 fs/shell + read_file/write_file/list_dir/run_shell 工具
 ah-plugins-code              (已实现)python3 子进程代码执行
 ah-plugins-sandbox           (已实现)策略沙箱 + tools/pre-execute rail

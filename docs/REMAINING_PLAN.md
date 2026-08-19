@@ -2,11 +2,15 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 908 tests / 91 crates,clippy -D warnings 0,fmt clean。
+> 当前 925 tests / 92 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 127 回合,925 tests / 92 crates / clippy 0 / fmt clean,协调者实现):
+> - rsi/resource + rsi/storage 判 **excluded**:Python 侧 `rsi/resource/manager.py:14-20` 与 `rsi/storage/store.py:14-32` 均为 NotImplementedError TODO 桩(无真实功能),Rust 不硬造;parity-audit.md §3/§3b 已标注
+> - harness/manifest ah-plugins-manifest(新 crate,1:1 对齐 harness/manifest/{models,catalog,inputs,introspect,registration}.py 确定性部分):ah-contracts manifest seam(HarnessElementDescriptor/ElementKind/InterfaceMethod/ConstructionInputModel(InputFieldSpec 源标签:params·context_attr·resolver_ref + json_schema 生成)/ManifestError/ManifestCatalog/ManifestFactoryRegistry/ManifestRegistration/ElementFactory/ManifestContext/MapManifestContext/factory_ref/default_interface_methods);插件真实实现 — Catalog(add_descriptor 重名拒绝 `Duplicate harness element name: ".."` + Effect 回滚/get/list/list_elements JSON 导出)/FactoryRegistry(factory_ref→工厂可逆注册/resolve)/Registration(register_{tool,rail,subagent}_provider 幂等覆盖 + register_from_catalog kind 路由,未解析工厂显式 Err)/ModelElementFactory(params/context 双源 resolve,None 丢弃落默认,解析器经注册表解析);5 契约测试 + 8 插件测试 + 4 集成测试(ah-app/tests/manifest.rs 真实挂载全链路);接线 ah-app + dev/prod profiles
 >
 > **账目更新**(第 126 回合,908 tests / clippy 0 / fmt clean,协调者实现):
 > - 在线编排 ah-plugins-evolving += online_orchestrator.rs(新模块文件,1:1 对齐 experience/online_orchestrator.py 确定性部分):get_preferred_signal(首个 user_intent 信号优先,否则首个)+ get_signal_type/get_signal_source_of(经 preferred 派生)+ evolve_skip_guard(空输入/技能不存在/定义缺失 → (status, message) 守卫)+ EvolveOutcome(generation_failed/no_evolution/staged/auto_approved/persistence_failed)+ decide_evolve_outcome(生成错误→失败、预览空→无记录、需审批→staged、apply 失败→persistence_failed(错误 join "; "),否则 auto_approved);store/manager/updater 留待集成;5 测试(169 总)
