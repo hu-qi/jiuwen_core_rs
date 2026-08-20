@@ -10,6 +10,7 @@
 //! - 插件之间不允许直接依赖彼此的具体类型,只允许依赖本 crate 的契约;
 //! - 机制类型([`Effect`]、[`ServiceKey`])也定义在此层,供 seam 接口使用。
 
+pub mod a2a;
 pub mod agent;
 pub mod agent_builder;
 pub mod analyzer;
@@ -122,6 +123,15 @@ pub mod worktree;
 pub use effect::Effect;
 
 pub mod prelude {
+    pub use crate::a2a::{
+        A2aError, A2aInterface, A2aPartView, AgentResultView, ArtifactView,
+        a2a_artifact_to_artifact, a2a_message_to_result, a2a_status_to_ojw, a2a_task_to_result,
+        build_agent_result, build_description, build_interfaces, from_struct, merge_agent_results,
+        merge_metadata, message_to_payload, normalize_jsonrpc_interface_url,
+        normalize_jsonrpc_route_path, resolve_session_id, resolve_transport_protocols,
+        serialize_param_payload, to_a2a_agent_card, to_a2a_part, to_a2a_request, to_struct,
+        with_session_id,
+    };
     pub use crate::agent::AgentStep;
     pub use crate::agent_builder::{AgentBuilder, AgentDesign, BuildError};
     pub use crate::analyzer::{

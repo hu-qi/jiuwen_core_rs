@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "ah-plugins-a2a",
  "ah-plugins-agent-loop",
  "ah-plugins-agentbuilder",
  "ah-plugins-anthropic",
@@ -134,6 +135,15 @@ dependencies = [
  "serde",
  "tokio",
  "toml",
+]
+
+[[package]]
+name = "ah-plugins-a2a"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]

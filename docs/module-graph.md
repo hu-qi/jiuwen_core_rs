@@ -2,7 +2,7 @@
 
 > 等价 DSH 的 module-graph:登记 crate 布局与依赖规则。新增 crate 时必须更新本文件。
 
-## 1. 当前 crate 依赖(全部 106 crates)
+## 1. 当前 crate 依赖(全部 107 crates)
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -65,6 +65,7 @@
 ├─> ah-plugins-mcp          (真实 MCP stdio transport;注入 mcp_call_tool 到 tools seam) ──> ah-hub, ah-contracts
 ├─> ah-plugins-web          (ureq HTTP 客户端)                          ──> ah-hub, ah-contracts
 ├─> ah-plugins-transport    (A2A 风格 JSON-RPC over HTTP)               ──> ah-hub, ah-contracts
+├─> ah-plugins-a2a          (A2A 协议转换/AgentCard 适配/客户端聚合/URL 归一化,对齐 extensions/a2a) ──> ah-hub, ah-contracts
 ├─> ah-plugins-git          (真实 git 子进程操作)                        ──> ah-hub, ah-contracts
 ├─> ah-plugins-ci           (子进程 CI gate 运行器)                      ──> ah-hub, ah-contracts
 
@@ -93,7 +94,7 @@
 ## 2. 规划:完整插件布局(源自 capability-map.md)
 
 ```text
-ah-contracts                契约层:seam / 事件 / effect / 类型(106 crates 之一)
+ah-contracts                契约层:seam / 事件 / effect / 类型(107 crates 之一)
 ah-hub                      内核:Context / EventBus / Plugin 生命周期
 ah-app                      boot 入口 + demo(main)+ ah-cli(交互 CLI,消费会话管理)
 

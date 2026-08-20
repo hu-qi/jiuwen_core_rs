@@ -11,6 +11,7 @@ use ah_contracts::session::SessionManager;
 use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
+use ah_plugins_a2a::A2APlugin;
 use ah_plugins_agent_loop::AgentLoopPlugin;
 use ah_plugins_agentbuilder::AgentBuilderPlugin;
 use ah_plugins_anthropic::AnthropicPlugin;
@@ -505,6 +506,7 @@ pub fn plugin_catalog(
             "ah-plugins-agentbuilder",
             Arc::new(AgentBuilderPlugin) as DynPlugin,
         ),
+        ("ah-plugins-a2a", Arc::new(A2APlugin) as DynPlugin),
         (
             "ah-plugins-bridge-compose",
             Arc::new(BridgeComposePlugin) as DynPlugin,

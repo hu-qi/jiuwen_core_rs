@@ -114,6 +114,7 @@ ah-plugins-oauth = { workspace = true }
 ah-plugins-operator = { workspace = true }
 ah-plugins-optimizer = { workspace = true }
 ah-plugins-agentbuilder = { workspace = true }
+ah-plugins-a2a = { workspace = true }
 ah-plugins-bridge-compose = { workspace = true }
 ah-plugins-symphony = { workspace = true }
 ah-plugins-anthropic = { workspace = true }

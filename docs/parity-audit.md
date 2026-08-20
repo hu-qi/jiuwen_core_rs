@@ -1,7 +1,7 @@
 # 对等审计基线(parity-audit.md)
 
 > 生成时间:第 127 回合;审计基线:`b5c3548`(92 crates / 925 tests)。
-> 当前(第 137 回合):106 crates;本回合新增 ah-contracts team_prompts 7 测试 + ah-plugins-team-prompts 3 测试。
+> 当前(第 138 回合):107 crates;本回合新增 ah-contracts team_prompts 7 测试 + ah-plugins-team-prompts 3 测试。
 > 方法:7 域 97 个子模块,逐模块读 Python 源码(类/函数签名)对照 Rust crate 源码(`pub fn/struct/enum/trait` + `impl`),带 file:line 证据。
 > 判定标准(严格):`done` = 全部核心功能点**含 LLM 驱动能力**(LLM judge/生成/诊断、梯度优化器、embedding/reranker、多后端/多 provider/多拓扑)在 Rust 1:1 对等;Python 是 LLM 驱动而 Rust 只有确定性规则/字符串匹配/简化循环 → `partial`;Rust 无实现 → `missing`。
 > 此表衡量**行为对等度**(含 LLM 能力),不是"有代码就算完成"的功能覆盖率。
@@ -151,7 +151,7 @@
 
 | 模块 | pct | 主要缺口 |
 | --- | ---: | --- |
-| a2a | 70 | SSE/流式、加密、AgentCard 适配/转换器 |
+| a2a | 78 | **转换器/AgentCard 适配/客户端聚合已收尾(第 138 回合)**:ah-contracts a2a seam(to_a2a_request(openjiuwen dict→SendMessageRequest,conversation_id/sessionId→context_id,metadata 过滤 null·排除 query)、message_to_payload、a2a_status_to_ojw(A2A TaskState 九态映射)、a2a_part↔A2A part 转换(data dict→struct_value/标量→string_value)、a2a_artifact_to_artifact、a2a_task/message_to_result、merge_agent_results(artifacts 拼接/metadata 合并/状态优先级)+ with_session_id、resolve_session_id、normalize_jsonrpc_route_path/interface_url(尾斜杠)、resolve_transport_protocols(gRPC 显式拒绝)、to_a2a_agent_card(描述拼接 [input_params]/[output_params]+ interfaces 构建),对齐 a2a_transformer.py/a2a_agentcard_adapter.py/a2a_client.py/a2a_server.py 确定性部分)+ ah-plugins-a2a(A2AAdapter 门面);SSE 流式/加密传输留待 transport 扩展 |
 | tracer_otel | 65 | redaction、span manager、rail 集成、WorkflowHandler |
 | external_provider | 55 | 多 provider 注册表、多模型目录 |
 | message_queue | 55 | Pulsar 后端 |
