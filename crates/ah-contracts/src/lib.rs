@@ -120,8 +120,9 @@ pub mod prelude {
     pub use crate::agent::AgentStep;
     pub use crate::agent_builder::{AgentBuilder, AgentDesign, BuildError};
     pub use crate::analyzer::{
-        AnalysisArtifact, AnalysisSignal, AnalyzerCase, AnalyzerError, EvaluationAnalyzer,
-        EvidenceRef, SignalKind, TeamIssue,
+        AnalysisArtifact, AnalysisSignal, AnalyzerCase, AnalyzerError, CaseAnalysisInput,
+        DeterministicSignals, EvaluationAnalyzer, EvaluationSummaryInput, EvidenceRef, SignalKind,
+        TeamIssue, extract_generic_signals, fingerprint_error,
     };
     pub use crate::autoharness::{
         AutoHarness, AutoHarnessConfig, AutoHarnessError, CycleResult, StageKind, StageResult,

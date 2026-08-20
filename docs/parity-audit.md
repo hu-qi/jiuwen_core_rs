@@ -136,7 +136,7 @@
 | config | 95 | **已收尾(第 129 回合)**:ah-plugins-rsi-config loader.rs(默认模板引导/缺失显式 FileNotFoundError/非 mapping 显式 ValueError/team_spec 路径绝对化,对齐 loader.py) |
 | data_loader | 92 | **已收尾(第 129 回合)**:ah-plugins-data-loader BatchPlanStore(dataset_profile.yaml/batch_plan.yaml 真实落盘,对齐 plan_store.py) |
 | single_harness | 40 | iterative 能力门禁/物化/verifier delta |
-| evaluation_result_analyzer | 30 | LLM 两阶段诊断、5 类 signal extractor |
+| evaluation_result_analyzer | 42 | **信号提取已收尾(第 132 回合)**:ah-contracts analyzer 补充 fingerprint_error(ts/uuid/path/hex/:N 五模式替换+空白归一,对齐 signal_extractor.py)+ extract_generic_signals(exec/judge 失败/错误聚类/expected mismatch/missing reference,对齐 GenericSignalExtractor)+ EvaluationSummaryInput/CaseAnalysisInput/DeterministicSignals 类型;ah-plugins-rsi analyzer 集成 error_clusters;LLM 两阶段诊断/Pytest/Reward/Atomic/LlmJudge 提取器留待后续 |
 | team_skill_optimizer | 30 | LLM experience_optimizer、evolve_and_rebuild |
 | optimization_experience_learner | 25 | ExperienceStore/Extractor/Retriever |
 | team_skill_generator | 25 | LLM plan/create/repair、多文件生成 |

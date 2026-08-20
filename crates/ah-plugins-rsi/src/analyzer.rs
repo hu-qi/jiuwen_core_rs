@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use ah_contracts::analyzer::{
     AnalysisArtifact, AnalysisSignal, AnalyzerCase, AnalyzerError, EvaluationAnalyzer, EvidenceRef,
-    SignalKind, TeamIssue,
+    SignalKind, TeamIssue, fingerprint_error,
 };
 use ah_contracts::keys::RSI_ANALYZER;
 use ah_contracts::prelude::Effect;
@@ -80,6 +80,26 @@ fn extract_signals(case: &AnalyzerCase) -> Option<AnalysisSignal> {
 
 /// 真实评测结果分析器。
 pub struct RuleBasedAnalyzer;
+
+impl RuleBasedAnalyzer {
+    /// 错误指纹聚类(对齐 signal_extractor 的 error_clusters):
+    /// 返回 (fingerprint, [case_ids]) 列表,按指纹字典序。
+    pub fn error_clusters(cases: &[AnalyzerCase]) -> Vec<serde_json::Value> {
+        let mut map: std::collections::BTreeMap<String, Vec<String>> =
+            std::collections::BTreeMap::new();
+        for case in cases {
+            if let Some(error) = &case.error
+                && !error.is_empty()
+            {
+                let fp = fingerprint_error(error);
+                map.entry(fp).or_default().push(case.case_id.clone());
+            }
+        }
+        map.into_iter()
+            .map(|(fp, cases)| serde_json::json!({"fingerprint": fp, "cases": cases}))
+            .collect()
+    }
+}
 
 impl Seam for RuleBasedAnalyzer {}
 
@@ -320,5 +340,43 @@ mod tests {
         assert!(artifact.signals.is_empty());
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn error_clusters_group_by_fingerprint() {
+        let cases = vec![
+            AnalyzerCase {
+                case_id: "c1".to_string(),
+                passed: false,
+                score: 0.0,
+                error: Some("timeout 2024-01-02T03:04:05Z".to_string()),
+                expected: None,
+                answer: None,
+            },
+            AnalyzerCase {
+                case_id: "c2".to_string(),
+                passed: false,
+                score: 0.0,
+                error: Some("timeout 2025-06-07T08:09:10Z".to_string()),
+                expected: None,
+                answer: None,
+            },
+            AnalyzerCase {
+                case_id: "c3".to_string(),
+                passed: false,
+                score: 0.0,
+                error: Some("syntax error".to_string()),
+                expected: None,
+                answer: None,
+            },
+        ];
+        let f1 = fingerprint_error("timeout 2024-01-02T03:04:05Z");
+        let f2 = fingerprint_error("timeout 2025-06-07T08:09:10Z");
+        eprintln!("f1=[{f1}] f2=[{f2}]");
+        let clusters = RuleBasedAnalyzer::error_clusters(&cases);
+        assert_eq!(clusters.len(), 2);
+        // BTreeMap 排序:"syntax error" 组在前,"timeout" 组在后。
+        assert_eq!(clusters[0]["cases"], serde_json::json!(["c3"]));
+        assert_eq!(clusters[1]["cases"], serde_json::json!(["c1", "c2"]));
     }
 }

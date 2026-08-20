@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 132 回合,协调者实现,partial 收尾推进):
+> - rsi/evaluation_result_analyzer → 42:ah-contracts analyzer 补充 fingerprint_error(时间戳→uuid→路径→hex→行号 五模式严格替换+空白归一,手写扫描器,对齐 signal_extractor.py `_fingerprint_error`)+ extract_generic_signals(exec_failures/judge_failures/error_clusters 指纹聚类/expected_mismatch/missing_reference,对齐 GenericSignalExtractor)+ EvaluationSummaryInput/CaseAnalysisInput/DeterministicSignals 类型;ah-plugins-rsi analyzer 集成 error_clusters(BTreeMap 指纹聚类);4 契约 + 1 插件测试;LLM 两阶段诊断与 Pytest/Reward/Atomic/LlmJudge 提取器留待后续
+>
 > **账目更新**(第 131 回合,协调者实现,partial 收尾推进):
 > - rsi/evaluator → 32:ah-contracts rsi_evaluator seam + ah-plugins-rsi-evaluator — bounded 轨迹工具(truncate_text/truncate_json_like(递归)/bounded_messages(头尾各半+省略计数)/tool_summary/safe_role_file_stem/bound_llm_detail(omitted_message_count)/bound_tool_detail(tool_schema→omitted))+ usage 提取(collect_successful_tool·skill_names(仅成功完成)/canonical_tool_name(strip+lower+`-`→`_`+去`_tool`)/collect_pre_edit_successful_usage(首次持久编辑前)/is_persistent_edit_step),1:1 对齐 rsi/evaluator/trajectory_paths.py + trajectory_usage.py;8 契约 + 3 插件测试 + 集成;接线 ah-app + dev/prod profiles(102 插件)
 >
