@@ -139,7 +139,7 @@
 | evaluation_result_analyzer | 42 | **信号提取已收尾(第 132 回合)**:ah-contracts analyzer 补充 fingerprint_error(ts/uuid/path/hex/:N 五模式替换+空白归一,对齐 signal_extractor.py)+ extract_generic_signals(exec/judge 失败/错误聚类/expected mismatch/missing reference,对齐 GenericSignalExtractor)+ EvaluationSummaryInput/CaseAnalysisInput/DeterministicSignals 类型;ah-plugins-rsi analyzer 集成 error_clusters;LLM 两阶段诊断/Pytest/Reward/Atomic/LlmJudge 提取器留待后续 |
 | team_skill_optimizer | 30 | LLM experience_optimizer、evolve_and_rebuild |
 | optimization_experience_learner | 25 | ExperienceStore/Extractor/Retriever |
-| team_skill_generator | 25 | LLM plan/create/repair、多文件生成 |
+| team_skill_generator | 40 | **确定性归一化已收尾(第 133 回合)**:ah-contracts team_skill_generator seam(plan_slugify/single_line/string_list/normalize_roles(≥2 角色/id 去重/kind 校验/缺省回退)/normalize_workflow_steps(executor 校验+默认两步)/normalize_team_skill_plan(team_name/description/acceptance 回退)/write_skill_md 骨架,对齐 generator.py 确定性部分)+ ah-plugins-team-skill-generator;LLM plan/create/repair、多文件生成、验证留待后续 |
 | auto_harness | 20 | rails、LLM agent factory、pipelines、experience store |
 | evaluator | 32 | **trajectory 工具已收尾(第 131 回合)**:ah-contracts rsi_evaluator seam + ah-plugins-rsi-evaluator — bounded 轨迹(truncate_text/truncate_json_like/bounded_messages/tool_summary/safe_role_file_stem/bound_llm·tool_detail)+ usage 提取(collect_successful_tool·skill_names/canonical_tool_name/collect_pre_edit_successful_usage/is_persistent_edit_step),对齐 rsi/evaluator/trajectory_paths.py + trajectory_usage.py;LLM judge/TeamEvaluator 留待后续 |
 | member_optimizer | 20 | LLM role/mechanism 归因、action_groups、修复 agent |

@@ -104,6 +104,7 @@ use ah_plugins_team_monitor::TeamMonitorPlugin;
 use ah_plugins_team_pool::TeamPoolPlugin;
 use ah_plugins_team_scheduler::TeamSchedulerPlugin;
 use ah_plugins_team_skill::TeamSkillPlugin;
+use ah_plugins_team_skill_generator::TeamSkillGeneratorPlugin;
 use ah_plugins_team_status::TeamStatusPlugin;
 use ah_plugins_team_verdict::TeamVerdictPlugin;
 use ah_plugins_teams::{SqliteTeamsPlugin, SwarmflowPlugin, TeamsPlugin};
@@ -512,6 +513,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-skill",
             Arc::new(TeamSkillPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-skill-generator",
+            Arc::new(TeamSkillGeneratorPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sandbox-rail",

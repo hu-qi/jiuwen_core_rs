@@ -102,6 +102,7 @@ members = [
     "crates/ah-plugins-telemetry",
     "crates/ah-plugins-symphony",
     "crates/ah-plugins-team-skill",
+    "crates/ah-plugins-team-skill-generator",
     "crates/ah-app",
 ]
 
@@ -212,4 +213,5 @@ ah-plugins-external = { path = "crates/ah-plugins-external" }
 ah-plugins-rsi = { path = "crates/ah-plugins-rsi" }
 ah-plugins-symphony = { path = "crates/ah-plugins-symphony" }
 ah-plugins-team-skill = { path = "crates/ah-plugins-team-skill" }
+ah-plugins-team-skill-generator = { path = "crates/ah-plugins-team-skill-generator" }
 ah-app = { path = "crates/ah-app" }

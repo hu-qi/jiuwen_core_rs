@@ -91,6 +91,7 @@ dependencies = [
  "ah-plugins-team-pool",
  "ah-plugins-team-scheduler",
  "ah-plugins-team-skill",
+ "ah-plugins-team-skill-generator",
  "ah-plugins-team-status",
  "ah-plugins-team-task-status",
  "ah-plugins-team-verdict",
@@ -1068,6 +1069,15 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "ah-plugins-team-skill-generator"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
 ]
 
 [[package]]

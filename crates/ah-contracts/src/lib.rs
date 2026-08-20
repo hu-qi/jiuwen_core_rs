@@ -97,6 +97,7 @@ pub mod team_message;
 pub mod team_monitor;
 pub mod team_pool;
 pub mod team_skill;
+pub mod team_skill_generator;
 pub mod team_status;
 pub mod team_task_status;
 pub mod team_verdict;
@@ -284,6 +285,10 @@ pub mod prelude {
     };
     pub use crate::team_skill::{
         GenerateTeamSkillRequest, GenerateTeamSkillResult, TeamSkillError, TeamSkillGenerator,
+    };
+    pub use crate::team_skill_generator::{
+        SkillGenError, TeamSkillPlanNormalizer, normalize_roles, normalize_team_skill_plan,
+        normalize_workflow_steps, plan_slugify, single_line, string_list, write_skill_md,
     };
     pub use crate::teams::{
         TeamError, TeamMemberSpec, TeamMessage, TeamRunResult, TeamRuntime, TeamSpec, TeamTask,

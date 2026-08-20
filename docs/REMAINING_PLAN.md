@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 133 回合,协调者实现,partial 收尾推进):
+> - rsi/team_skill_generator → 40:ah-contracts team_skill_generator seam(plan_slugify/single_line/string_list 辅助 + normalize_roles(非 dict 跳过/id 去重 Err/kind∈{ai_agent,human_agent} 非法回退 ai_agent/10 字段缺省回退)+ normalize_workflow_steps(executor 非 leader 且不在 role_ids → leader,空→默认两步)+ normalize_team_skill_plan(team_skill_plan 嵌套/team_name·description·acceptance 回退/≥2 角色校验)+ write_skill_md 骨架,对齐 generator.py 确定性部分)+ ah-plugins-team-skill-generator;9 契约 + 2 插件测试;LLM plan/create/repair 与验证留待后续
+>
 > **账目更新**(第 132 回合,协调者实现,partial 收尾推进):
 > - rsi/evaluation_result_analyzer → 42:ah-contracts analyzer 补充 fingerprint_error(时间戳→uuid→路径→hex→行号 五模式严格替换+空白归一,手写扫描器,对齐 signal_extractor.py `_fingerprint_error`)+ extract_generic_signals(exec_failures/judge_failures/error_clusters 指纹聚类/expected_mismatch/missing_reference,对齐 GenericSignalExtractor)+ EvaluationSummaryInput/CaseAnalysisInput/DeterministicSignals 类型;ah-plugins-rsi analyzer 集成 error_clusters(BTreeMap 指纹聚类);4 契约 + 1 插件测试;LLM 两阶段诊断与 Pytest/Reward/Atomic/LlmJudge 提取器留待后续
 >
