@@ -58,6 +58,7 @@ pub mod prompt_builder_devtools;
 pub mod queue;
 pub mod reliability_config;
 pub mod reliability_detectors;
+pub mod reliability_rail;
 pub mod rerank;
 pub mod resources;
 pub mod retrieval;
@@ -220,6 +221,13 @@ pub mod prelude {
     };
     pub use crate::prompt::{PromptError, PromptRegistry, PromptTemplate, RenderedPrompt};
     pub use crate::queue::{MessageQueue, QueueError, QueueMessage};
+    pub use crate::reliability_rail::{
+        DetectorSpec, LocalSink, PolicyView, ReliabilityFactory, ReliabilityHandler,
+        ReliabilityRail, RouteDecision, after_model_call_signal, after_tool_call_signal,
+        args_as_dict, before_model_call_signal, before_tool_call_signal, error_text,
+        format_anomaly, format_anomaly_event, measure_response, member_detector_specs,
+        model_exception_signal, route_decision, severity_value, tool_exception_signal,
+    };
     pub use crate::rerank::{RerankConfig, RerankError, RerankedHit, Reranker};
     pub use crate::resources::{
         AgentTemplateSpec, BuiltinToolSpec, ExtensionParts, LoadRecord, McpServerSpec, PluginSpec,

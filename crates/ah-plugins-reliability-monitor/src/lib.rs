@@ -23,14 +23,21 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use ah_contracts::keys::{RELIABILITY_MONITOR, RELIABILITY_POLICY, RELIABILITY_REPORTER};
+use ah_contracts::keys::{
+    RELIABILITY_FACTORY, RELIABILITY_HANDLER, RELIABILITY_MONITOR, RELIABILITY_POLICY,
+    RELIABILITY_RAIL, RELIABILITY_REPORTER,
+};
 use ah_contracts::prelude::Effect;
 use ah_contracts::reliability_config::{RemediationAction, RemediationPolicyConfig};
 use ah_contracts::reliability_detectors::{Anomaly, AnomalyKind, Detector, Severity, Signal};
+use ah_contracts::reliability_rail::PolicyView;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
+
+mod rail;
+pub use rail::{LeaderReliabilityHandler, MemberReliabilityRail, ReliabilityAssembly};
 
 /// `AnomalyKind` 的 snake_case 标识(与契约 serde rename_all 一致;steer 文案使用)。
 fn kind_value(kind: AnomalyKind) -> &'static str {
@@ -335,7 +342,8 @@ impl Seam for ReliabilityMonitor {}
 
 // --- plugin registration ---
 
-/// reliability-monitor 插件:注册默认策略 + 本地上报器 + 空检测器 monitor(可查)。
+/// reliability-monitor 插件:注册默认策略 + 本地上报器 + 空检测器 monitor(可查)
+/// + rail / handler / factory 装配 seam。
 ///
 /// 检测器由各检测插件提供、monitor 由团队装配侧(rail/factory)按成员构建;
 /// 此处注册框架级默认服务,消费方按契约键取回。
@@ -351,6 +359,9 @@ impl Plugin for ReliabilityMonitorPlugin {
             RELIABILITY_MONITOR,
             RELIABILITY_POLICY,
             RELIABILITY_REPORTER,
+            RELIABILITY_RAIL,
+            RELIABILITY_HANDLER,
+            RELIABILITY_FACTORY,
         ]
     }
 
@@ -364,10 +375,25 @@ impl Plugin for ReliabilityMonitorPlugin {
             reporter.clone(),
             policy.clone(),
         ));
+        // rail/handler/factory:默认装配(空检测器 monitor + 默认策略),供
+        // 团队装配侧取回按成员扩展;handler 持策略视图做路由决策 + 格式化。
+        let rail = Arc::new(MemberReliabilityRail::new(
+            monitor.clone(),
+            "",
+            None,
+            Some(reporter.clone()),
+        ));
+        let handler = Arc::new(LeaderReliabilityHandler::new(PolicyView::from_config(
+            &RemediationPolicyConfig::default(),
+        )));
+        let factory = Arc::new(ReliabilityAssembly);
         Ok(vec![
             ctx.register(RELIABILITY_POLICY, policy),
             ctx.register(RELIABILITY_REPORTER, reporter),
             ctx.register(RELIABILITY_MONITOR, monitor),
+            ctx.register(RELIABILITY_RAIL, rail),
+            ctx.register(RELIABILITY_HANDLER, handler),
+            ctx.register(RELIABILITY_FACTORY, factory),
         ])
     }
 }

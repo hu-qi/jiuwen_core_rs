@@ -200,3 +200,6 @@ pub const RELIABILITY_TOOLS: ServiceKey = ServiceKey::new("reliability-tools");
 pub const RELIABILITY_MONITOR: ServiceKey = ServiceKey::new("reliability-monitor");
 pub const RELIABILITY_POLICY: ServiceKey = ServiceKey::new("reliability-policy");
 pub const RELIABILITY_REPORTER: ServiceKey = ServiceKey::new("reliability-reporter");
+pub const RELIABILITY_RAIL: ServiceKey = ServiceKey::new("reliability-rail");
+pub const RELIABILITY_HANDLER: ServiceKey = ServiceKey::new("reliability-handler");
+pub const RELIABILITY_FACTORY: ServiceKey = ServiceKey::new("reliability-factory");
