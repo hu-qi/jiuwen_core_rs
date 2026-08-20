@@ -104,6 +104,7 @@ dependencies = [
  "ah-plugins-tokenizer",
  "ah-plugins-tools",
  "ah-plugins-tools-metadata",
+ "ah-plugins-tracer-otel",
  "ah-plugins-trainer",
  "ah-plugins-transport",
  "ah-plugins-tune",
@@ -1203,6 +1204,15 @@ dependencies = [
 
 [[package]]
 name = "ah-plugins-tools-metadata"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-tracer-otel"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",

@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-tracer-otel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real OTel tracer extension: config/redaction/semconv/span-manager/setup decisions + attribute mapping facade"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"

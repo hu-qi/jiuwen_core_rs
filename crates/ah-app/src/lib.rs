@@ -116,6 +116,7 @@ use ah_plugins_telemetry::TelemetryPlugin;
 use ah_plugins_timefmt::TimefmtPlugin;
 use ah_plugins_tokenizer::TokenizerPlugin;
 use ah_plugins_tools::ToolsPlugin;
+use ah_plugins_tracer_otel::OtelTracerPlugin;
 use ah_plugins_trainer::TrainerPlugin;
 use ah_plugins_transport::TransportPlugin;
 use ah_plugins_tune::TunePlugin;
@@ -495,6 +496,10 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-pregel", Arc::new(PregelPlugin) as DynPlugin),
         ("ah-plugins-tune", Arc::new(TunePlugin) as DynPlugin),
+        (
+            "ah-plugins-tracer-otel",
+            Arc::new(OtelTracerPlugin) as DynPlugin,
+        ),
         ("ah-plugins-trainer", Arc::new(TrainerPlugin) as DynPlugin),
         ("ah-plugins-oauth", Arc::new(OAuthPlugin) as DynPlugin),
         ("ah-plugins-operator", Arc::new(OperatorPlugin) as DynPlugin),

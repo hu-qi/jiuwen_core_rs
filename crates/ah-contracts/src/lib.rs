@@ -112,6 +112,7 @@ pub mod timefmt;
 pub mod tokenizer;
 pub mod tool_approval;
 pub mod tools;
+pub mod tracer_otel;
 pub mod trainer;
 pub mod transport;
 pub mod tune;
@@ -338,6 +339,25 @@ pub mod prelude {
     pub use crate::tokenizer::{Token, Tokenizer, TokenizerError};
     pub use crate::tool_approval::{ToolApproval, ToolApprovalError};
     pub use crate::tools::{Tool, ToolError, ToolRegistry};
+    pub use crate::tracer_otel::{
+        ExporterPlan, GEN_AI_COMPLETION, GEN_AI_OPERATION_NAME, GEN_AI_PROMPT,
+        GEN_AI_REQUEST_MODEL, GEN_AI_SYSTEM, GEN_AI_SYSTEM_VALUE, GEN_AI_TOOL_NAME,
+        GEN_AI_USAGE_COMPLETION_TOKENS, GEN_AI_USAGE_PROMPT_TOKENS, LLM_SUBSTRINGS,
+        OJ_AGENT_ERROR_MESSAGE, OJ_AGENT_INPUTS, OJ_AGENT_INVOKE_TYPE, OJ_AGENT_NAME,
+        OJ_AGENT_OUTPUTS, OJ_CHILD_INVOKE_IDS, OJ_ELAPSED_TIME, OJ_END_TIME, OJ_ERROR,
+        OJ_INNER_ERROR, OJ_INTERACTIVE_INPUTS, OJ_INVOKE_ID, OJ_META_DATA, OJ_PARENT_INVOKE_ID,
+        OJ_PARENT_NODE_ID, OJ_SESSION_ID, OJ_SOURCE_IDS, OJ_START_TIME, OJ_STATUS,
+        OJ_STREAM_INPUTS, OJ_STREAM_OUTPUTS, OJ_TRACE_ID, OJ_WORKFLOW_COMPONENT_ID,
+        OJ_WORKFLOW_COMPONENT_NAME, OJ_WORKFLOW_COMPONENT_TYPE, OJ_WORKFLOW_ERROR_MESSAGE,
+        OJ_WORKFLOW_EXECUTION_ID, OJ_WORKFLOW_ID, OJ_WORKFLOW_INPUTS, OJ_WORKFLOW_INVOKE_DATA,
+        OJ_WORKFLOW_LOOP_INDEX, OJ_WORKFLOW_LOOP_NODE_ID, OJ_WORKFLOW_NAME, OJ_WORKFLOW_OUTPUTS,
+        OJ_WORKFLOW_VERSION, OtelAgentSpanManager, OtelSpanKind, OtelSpanState, OtelTracer,
+        OtelTracerConfig, OtelTracerError, OtelWorkflowSpanManager, ParentContextRef,
+        REDACTED_PREFIX, TOOL_SUBSTRINGS, TRUNCATED_SUFFIX, format_elapsed, hash_value,
+        is_llm_component, is_tool_component, is_workflow_root, redact, resolve_exporter,
+        resolve_parent_context, serialize_value, should_redact, span_kind_for_component, truncate,
+        validate_sample_rate, workflow_attrs, workflow_call_start_attrs, workflow_span_name,
+    };
     pub use crate::trainer::{TrainEpoch, TrainRequest, TrainResult, Trainer, TrainerError};
     pub use crate::transport::{
         AgentCard, AgentHandler, AgentMessage, AgentTransport, TransportError,

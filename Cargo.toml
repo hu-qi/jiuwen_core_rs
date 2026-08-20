@@ -67,6 +67,7 @@ members = [
     "crates/ah-plugins-skill-creator",
     "crates/ah-plugins-pregel",
     "crates/ah-plugins-tune",
+    "crates/ah-plugins-tracer-otel",
     "crates/ah-plugins-trainer",
     "crates/ah-plugins-anthropic",
     "crates/ah-plugins-oauth",
@@ -181,6 +182,7 @@ ah-plugins-skill = { path = "crates/ah-plugins-skill" }
 ah-plugins-skill-creator = { path = "crates/ah-plugins-skill-creator" }
 ah-plugins-pregel = { path = "crates/ah-plugins-pregel" }
 ah-plugins-tune = { path = "crates/ah-plugins-tune" }
+ah-plugins-tracer-otel = { path = "crates/ah-plugins-tracer-otel" }
 ah-plugins-trainer = { path = "crates/ah-plugins-trainer" }
 ah-plugins-anthropic = { path = "crates/ah-plugins-anthropic" }
 ah-plugins-oauth = { path = "crates/ah-plugins-oauth" }

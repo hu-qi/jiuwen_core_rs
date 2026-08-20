@@ -2,7 +2,7 @@
 
 > 等价 DSH 的 module-graph:登记 crate 布局与依赖规则。新增 crate 时必须更新本文件。
 
-## 1. 当前 crate 依赖(全部 107 crates)
+## 1. 当前 crate 依赖(全部 108 crates)
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -81,7 +81,8 @@
 ├─> ah-plugins-workspace    (工作区清单/目标状态机)                      ──> ah-hub, ah-contracts
 
 [遥测]
-└─> ah-plugins-telemetry    (span 记录 + JSONL 导出;监听 agent/step + tools/post-execute) ──> ah-hub, ah-contracts
+├─> ah-plugins-telemetry    (span 记录 + JSONL 导出;监听 agent/step + tools/post-execute) ──> ah-hub, ah-contracts
+└─> ah-plugins-tracer-otel  (OTel 追踪:配置/脱敏/semconv/span 管理器/导出器决策/属性映射,对齐 extensions/tracer_otel 确定性部分) ──> ah-hub, ah-contracts
 ```
 
 依赖方向(单向、禁止环):
@@ -94,7 +95,7 @@
 ## 2. 规划:完整插件布局(源自 capability-map.md)
 
 ```text
-ah-contracts                契约层:seam / 事件 / effect / 类型(107 crates 之一)
+ah-contracts                契约层:seam / 事件 / effect / 类型(108 crates 之一)
 ah-hub                      内核:Context / EventBus / Plugin 生命周期
 ah-app                      boot 入口 + demo(main)+ ah-cli(交互 CLI,消费会话管理)
 
