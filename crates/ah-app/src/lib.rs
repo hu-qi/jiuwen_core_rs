@@ -81,6 +81,7 @@ use ah_plugins_stream::StreamPlugin;
 use ah_plugins_tag_manager::TagManagerPlugin;
 use ah_plugins_team_join_descriptor::TeamJoinDescriptorPlugin;
 use ah_plugins_team_prompts::TeamPromptsPlugin;
+use ah_plugins_team_schema::TeamSchemaPlugin;
 use ah_plugins_team_task_status::TeamTaskStatusPlugin;
 use ah_plugins_tools_metadata::ToolsMetadataPlugin;
 
@@ -523,6 +524,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-prompts",
             Arc::new(TeamPromptsPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-schema",
+            Arc::new(TeamSchemaPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sandbox-rail",

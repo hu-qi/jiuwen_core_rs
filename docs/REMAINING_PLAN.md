@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 1000+ tests / 105 crates,clippy -D warnings 0,fmt clean。
+> 当前 1000+ tests / 106 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 137 回合,协调者实现,partial 收尾推进):
+> - agent_teams/schema → 86:ah-contracts team_schema seam(SshTransportConfig(host/port 22/username/key_file/password/agent/known_hosts/disable_host_key_check/connect_timeout_s 15)+ validate_ssh_auth(无认证方式显式 Err,对齐 ssh_transport.py `_require_auth`);TaskOpResult(success/fail+data)/TaskCreateResult(ok=task 非 None)/TaskSummary/TaskDetail/TaskListResult/TaskGraphSpec(批量依赖边)/TaskGraphResult(原子批量)/NewTaskSpec(initial_status+reviewer JSON)/GraphMutationResult(refreshed_tasks),对齐 task.py;InfraRegistry transport/storage 注册表(register→Effect 可逆/ensure_builtin 惰性播种 inprocess·pyzmq·hybrid + sqlite·postgresql·mysql·memory/resolve 注入 backend·db_type 未知类型显式 Err,对齐 blueprint.py `register_transport/register_storage/_ensure_builtin_infra_registered/TransportSpec.build/StorageSpec.build`)+ transport/storage_merged_params + 装配期校验(validate_pool_router_exclusive 互斥/validate_external_cli_unique 去重/validate_review_settings (0,1]·≥1·>0/validate_stall_settings >0/validate_swarmflow_budget ≥1/validate_reserved_names(leader 豁免 team_leader)/validate_hitt·bridge_consistency 能力上限))+ ah-plugins-team-schema(InfraRegistryImpl Arc<Mutex> 可逆 + TeamSchemaFacade 门面);10 契约 + 4 插件测试;接线 ah-app + dev/prod profiles(106 插件);TeamAgentSpec.build()/DeepAgentSpec 运行时装配留待后续
 >
 > **账目更新**(第 136 回合,协调者实现,partial 收尾推进):
 > - agent_teams/reliability → 90:ah-contracts reliability_rail seam(error_text(空/None→"error")/args_as_dict(dict/JSON 字符串→object,其余 None)/measure_response(文本/思考长度)纯辅助,对齐 rail.py `_error_text/_args_as_dict/_measure_response`;6 个 hook 信号构造 before/after_tool_call·tool/model_exception·before/after_model_call;format_anomaly_event/format_anomaly(`[severity] member: summary (detector=..)` 一行摘要,对齐 handler.py `_format/_format_anomaly`;route_decision(ESCALATE_USER 优先,其次 REPORT_LEADER,对齐 `_route`);member_detector_specs(enabled 装配决策,对齐 factory.py `build_member_detectors`)+ PolicyView + ReliabilityRail/ReliabilityHandler/ReliabilityFactory seam)+ ah-plugins-reliability-monitor rail.rs(MemberReliabilityRail:hook→monitor.feed→LocalAutoRemediator.steer_message 纠偏消息,bind_local_sink 本地上报;LeaderReliabilityHandler:策略路由决策+格式;ReliabilityAssembly:规格+策略视图);注册 reliability-rail/handler/factory 三键;8 契约 + 5 插件测试;事件订阅/投递留待协调运行时

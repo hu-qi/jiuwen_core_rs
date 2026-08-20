@@ -203,3 +203,5 @@ pub const RELIABILITY_REPORTER: ServiceKey = ServiceKey::new("reliability-report
 pub const RELIABILITY_RAIL: ServiceKey = ServiceKey::new("reliability-rail");
 pub const RELIABILITY_HANDLER: ServiceKey = ServiceKey::new("reliability-handler");
 pub const RELIABILITY_FACTORY: ServiceKey = ServiceKey::new("reliability-factory");
+pub const TEAM_SCHEMA: ServiceKey = ServiceKey::new("team-schema");
+pub const INFRA_REGISTRY: ServiceKey = ServiceKey::new("infra-registry");

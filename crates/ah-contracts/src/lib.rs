@@ -99,6 +99,7 @@ pub mod team_message;
 pub mod team_monitor;
 pub mod team_pool;
 pub mod team_prompts;
+pub mod team_schema;
 pub mod team_skill;
 pub mod team_skill_generator;
 pub mod team_status;
@@ -302,6 +303,15 @@ pub mod prelude {
         TeamPromptLoader, TeamPrompts, build_bridge_brief, build_enter_plan_mode_status,
         build_plan_file_info, build_team_plan_mode_prompt, build_team_plan_mode_section,
         get_team_plan_mode_prompt, resolve_language,
+    };
+    pub use crate::team_schema::{
+        DEFAULT_LEADER_MEMBER_NAME, GraphMutationResult, InfraRegistry, NewTaskSpec,
+        RESERVED_MEMBER_NAMES, RegistryError, SchemaError, SshTransportConfig, TaskCreateResult,
+        TaskDetail, TaskGraphResult, TaskGraphSpec, TaskListResult, TaskOpResult, TaskSummary,
+        USER_PSEUDO_MEMBER_NAME, storage_merged_params, transport_merged_params,
+        validate_bridge_consistency, validate_external_cli_unique, validate_hitt_consistency,
+        validate_pool_router_exclusive, validate_reserved_names, validate_review_settings,
+        validate_ssh_auth, validate_stall_settings, validate_swarmflow_budget,
     };
     pub use crate::team_skill::{
         GenerateTeamSkillRequest, GenerateTeamSkillResult, TeamSkillError, TeamSkillGenerator,

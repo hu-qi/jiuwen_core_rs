@@ -91,6 +91,7 @@ dependencies = [
  "ah-plugins-team-pool",
  "ah-plugins-team-prompts",
  "ah-plugins-team-scheduler",
+ "ah-plugins-team-schema",
  "ah-plugins-team-skill",
  "ah-plugins-team-skill-generator",
  "ah-plugins-team-status",
@@ -1062,6 +1063,15 @@ dependencies = [
 
 [[package]]
 name = "ah-plugins-team-scheduler"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-team-schema"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",
