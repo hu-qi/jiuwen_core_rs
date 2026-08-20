@@ -174,6 +174,7 @@ pub const ROSTER_DIFF: ServiceKey = ServiceKey::new("roster-diff");
 pub const TEAM_I18N: ServiceKey = ServiceKey::new("team-i18n");
 pub const TEAM_CONTEXT_TEXT: ServiceKey = ServiceKey::new("team-context-text");
 pub const TEAM_CONTEXT: ServiceKey = ServiceKey::new("team-context");
+pub const TEAM_PROMPTS: ServiceKey = ServiceKey::new("team-prompts");
 pub const EXTERNAL_FORMAT: ServiceKey = ServiceKey::new("external-format");
 pub const INTERACTION_ROUTER: ServiceKey = ServiceKey::new("interaction-router");
 pub const SCHEDULER_RENDER: ServiceKey = ServiceKey::new("scheduler-render");

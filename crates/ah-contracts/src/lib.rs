@@ -96,6 +96,7 @@ pub mod team_join_descriptor;
 pub mod team_message;
 pub mod team_monitor;
 pub mod team_pool;
+pub mod team_prompts;
 pub mod team_skill;
 pub mod team_skill_generator;
 pub mod team_status;
@@ -282,6 +283,12 @@ pub mod prelude {
     pub use crate::team_monitor::{
         MemberInfo, MonitorError, MonitorEvent, MonitorEventType, TaskInfo, TeamInfo, TeamMonitor,
         status_label,
+    };
+    pub use crate::team_prompts::{
+        MemberSummary, TEAM_PLAN_MODE_PROMPT_CN, TEAM_PLAN_MODE_PROMPT_EN, TeamPrompts,
+        build_bridge_brief, build_enter_plan_mode_status, build_plan_file_info,
+        build_team_plan_mode_prompt, build_team_plan_mode_section, get_team_plan_mode_prompt,
+        resolve_language,
     };
     pub use crate::team_skill::{
         GenerateTeamSkillRequest, GenerateTeamSkillResult, TeamSkillError, TeamSkillGenerator,

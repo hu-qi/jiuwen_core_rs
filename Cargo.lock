@@ -89,6 +89,7 @@ dependencies = [
  "ah-plugins-team-message",
  "ah-plugins-team-monitor",
  "ah-plugins-team-pool",
+ "ah-plugins-team-prompts",
  "ah-plugins-team-scheduler",
  "ah-plugins-team-skill",
  "ah-plugins-team-skill-generator",
@@ -1038,6 +1039,14 @@ dependencies = [
 
 [[package]]
 name = "ah-plugins-team-pool"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+]
+
+[[package]]
+name = "ah-plugins-team-prompts"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",

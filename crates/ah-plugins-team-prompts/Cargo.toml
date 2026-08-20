@@ -1,0 +1,10 @@
+[package]
+name = "ah-plugins-team-prompts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real agent-team prompt assembly: team.plan mode + bridge brief/overview pure functions"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }

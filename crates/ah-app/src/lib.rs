@@ -79,6 +79,7 @@ use ah_plugins_scheduler_render::SchedulerRenderPlugin;
 use ah_plugins_stream::StreamPlugin;
 use ah_plugins_tag_manager::TagManagerPlugin;
 use ah_plugins_team_join_descriptor::TeamJoinDescriptorPlugin;
+use ah_plugins_team_prompts::TeamPromptsPlugin;
 use ah_plugins_team_task_status::TeamTaskStatusPlugin;
 use ah_plugins_tools_metadata::ToolsMetadataPlugin;
 
@@ -517,6 +518,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-skill-generator",
             Arc::new(TeamSkillGeneratorPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-team-prompts",
+            Arc::new(TeamPromptsPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-sandbox-rail",

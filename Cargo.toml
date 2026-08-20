@@ -74,6 +74,7 @@ members = [
     "crates/ah-plugins-optimizer",
     "crates/ah-plugins-agentbuilder",
     "crates/ah-plugins-bridge-compose",
+    "crates/ah-plugins-team-prompts",
     "crates/ah-plugins-cli",
     "crates/ah-plugins-mock",
     "crates/ah-plugins-tools",
@@ -185,6 +186,7 @@ ah-plugins-operator = { path = "crates/ah-plugins-operator" }
 ah-plugins-optimizer = { path = "crates/ah-plugins-optimizer" }
 ah-plugins-agentbuilder = { path = "crates/ah-plugins-agentbuilder" }
 ah-plugins-bridge-compose = { path = "crates/ah-plugins-bridge-compose" }
+ah-plugins-team-prompts = { path = "crates/ah-plugins-team-prompts" }
 ah-plugins-cli = { path = "crates/ah-plugins-cli" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }
 ah-plugins-tools = { path = "crates/ah-plugins-tools" }

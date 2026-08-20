@@ -105,6 +105,7 @@ ah-plugins-skill = { workspace = true }
 ah-plugins-skill-creator = { workspace = true }
 ah-plugins-team-skill = { workspace = true }
 ah-plugins-team-skill-generator = { workspace = true }
+ah-plugins-team-prompts = { workspace = true }
 ah-plugins-pregel = { workspace = true }
 ah-plugins-tune = { workspace = true }
 ah-plugins-trainer = { workspace = true }

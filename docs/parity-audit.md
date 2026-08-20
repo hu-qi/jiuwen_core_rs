@@ -1,6 +1,7 @@
 # 对等审计基线(parity-audit.md)
 
 > 生成时间:第 127 回合;审计基线:`b5c3548`(92 crates / 925 tests)。
+> 当前(第 134 回合):105 crates;本回合新增 ah-contracts team_prompts 7 测试 + ah-plugins-team-prompts 3 测试。
 > 方法:7 域 97 个子模块,逐模块读 Python 源码(类/函数签名)对照 Rust crate 源码(`pub fn/struct/enum/trait` + `impl`),带 file:line 证据。
 > 判定标准(严格):`done` = 全部核心功能点**含 LLM 驱动能力**(LLM judge/生成/诊断、梯度优化器、embedding/reranker、多后端/多 provider/多拓扑)在 Rust 1:1 对等;Python 是 LLM 驱动而 Rust 只有确定性规则/字符串匹配/简化循环 → `partial`;Rust 无实现 → `missing`。
 > 此表衡量**行为对等度**(含 LLM 能力),不是"有代码就算完成"的功能覆盖率。
@@ -95,7 +96,7 @@
 | reliability | 85 | DeepAgentRail/handler 接线 |
 | context | 90 | **已收尾(第 129 回合)**:ah-contracts team_context seam + ah-plugins-team-context(session_id set/get/reset token 可逆,对齐 context.py) |
 | monitor | 80 | stream_logger 分块摘要 |
-| prompts | 80 | plan-mode/bridge brief 模板 |
+| prompts | 88 | **plan-mode/bridge brief 已收尾(第 134 回合)**:ah-contracts team_prompts seam + ah-plugins-team-prompts — team_plan_mode 双语模板渲染(build_team_plan_mode_section MODE_INSTRUCTIONS priority=85,对齐 team_plan_mode.py)+ bridge brief(双语简报/名册概览,对齐 bridge_remote_brief.py);messages/sections 装配留待后续 |
 | schema | 80 | blueprint/ssh_transport/task graph 规格 |
 | workflow | 80 | avatar session 后端/concurrency governor |
 | interaction | 75 | UserInbox 持久信箱、bridge 适配 |

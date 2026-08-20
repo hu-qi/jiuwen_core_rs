@@ -2,11 +2,14 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 1000+ tests / 101 crates,clippy -D warnings 0,fmt clean。
+> 当前 1000+ tests / 105 crates,clippy -D warnings 0,fmt clean。
 >
 > **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
+>
+> **账目更新**(第 134 回合,协调者实现,partial 收尾推进):
+> - agent_teams/prompts → 88:ah-contracts team_prompts seam(team_plan_mode 双语模板常量 TEAM_PLAN_MODE_PROMPT_CN/EN + get_team_plan_mode_prompt + build_enter_plan_mode_status(bool(plan_path) 四分支,对齐 `_build_enter_plan_mode_status`)+ build_plan_file_info(空路径无 plan 文案/存在性四分支,`plan_path.exists()` 由调用方经 FS seam 判定)+ build_team_plan_mode_prompt(`{enter_plan_mode_status}`/`{plan_file_info}` 单花括号替换,对齐 Python `.format()`)+ build_team_plan_mode_section(MODE_INSTRUCTIONS + content={lang: content} + priority=85)+ bridge brief(build_bridge_brief 双语执行者简报/build_team_overview 名册概览,对齐 bridge_remote_brief.py))+ ah-plugins-team-prompts;TeamRole 补全 bridge_agent/worker 两值(5/5 对齐 schema/team.py);7 契约 + 3 插件测试;接线 ah-app + dev/prod profiles(104 插件)
 >
 > **账目更新**(第 133 回合,协调者实现,partial 收尾推进):
 > - rsi/team_skill_generator → 40:ah-contracts team_skill_generator seam(plan_slugify/single_line/string_list 辅助 + normalize_roles(非 dict 跳过/id 去重 Err/kind∈{ai_agent,human_agent} 非法回退 ai_agent/10 字段缺省回退)+ normalize_workflow_steps(executor 非 leader 且不在 role_ids → leader,空→默认两步)+ normalize_team_skill_plan(team_skill_plan 嵌套/team_name·description·acceptance 回退/≥2 角色校验)+ write_skill_md 骨架,对齐 generator.py 确定性部分)+ ah-plugins-team-skill-generator;9 契约 + 2 插件测试;LLM plan/create/repair 与验证留待后续

@@ -21,6 +21,8 @@ pub enum TeamRole {
     Leader,
     Teammate,
     HumanAgent,
+    BridgeAgent,
+    Worker,
 }
 
 impl TeamRole {
@@ -30,6 +32,8 @@ impl TeamRole {
             Self::Leader => "leader",
             Self::Teammate => "teammate",
             Self::HumanAgent => "human_agent",
+            Self::BridgeAgent => "bridge_agent",
+            Self::Worker => "worker",
         }
     }
 }
