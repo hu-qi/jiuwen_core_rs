@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 135 回合,协调者实现,partial 收尾推进):
+> - agent_teams/external → 90:ah-contracts external_client seam(InboxView/InboxMessage(is_empty 双字段)/compose_inbox_text(非空段 "\n\n" 连接,全空 "(inbox empty)")/BROADCAST_TARGET/ExternalInboxSource(未读 direct·broadcast/mark_read/list_tasks/get_task/get_member)/ExternalTeamClientFactory(按 TeamJoinDescriptor 构建)/ExternalTeamClient(描述符投影 session·language·member·team·is_leader·is_human_agent·scope + 幂等 connect/close + bind_session_context + fetch_inbox(mark_read)+ read_inbox + watch))+ ah-plugins-external client.rs(真实实现:connect 经 team-context 绑定 session + team-i18n 设语言,read_inbox 逐消息 reply hint + 模板展开 + 看板组合;watch 因缺 messager 订阅显式报错);prompts → 90:TeamPromptLoader seam + EmbeddedTeamPromptLoader(嵌入 scheduler_task_start/start_plan/review_request/renudge/rework/verified_report 双语模板,对齐 loader.py load_template);team-i18n 补 dispatcher.leader_task_board/teammate_task_list/task_unassigned_marker 三键;6 契约 + 6 插件测试(含模板展开真实路径);接线 ah-app 目录末尾(依赖 seam 后挂载)
+>
 > **账目更新**(第 134 回合,协调者实现,partial 收尾推进):
 > - agent_teams/prompts → 88:ah-contracts team_prompts seam(team_plan_mode 双语模板常量 TEAM_PLAN_MODE_PROMPT_CN/EN + get_team_plan_mode_prompt + build_enter_plan_mode_status(bool(plan_path) 四分支,对齐 `_build_enter_plan_mode_status`)+ build_plan_file_info(空路径无 plan 文案/存在性四分支,`plan_path.exists()` 由调用方经 FS seam 判定)+ build_team_plan_mode_prompt(`{enter_plan_mode_status}`/`{plan_file_info}` 单花括号替换,对齐 Python `.format()`)+ build_team_plan_mode_section(MODE_INSTRUCTIONS + content={lang: content} + priority=85)+ bridge brief(build_bridge_brief 双语执行者简报/build_team_overview 名册概览,对齐 bridge_remote_brief.py))+ ah-plugins-team-prompts;TeamRole 补全 bridge_agent/worker 两值(5/5 对齐 schema/team.py);7 契约 + 3 插件测试;接线 ah-app + dev/prod profiles(104 插件)
 >

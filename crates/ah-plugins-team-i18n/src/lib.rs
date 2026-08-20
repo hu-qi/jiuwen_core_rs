@@ -60,6 +60,25 @@ const STRINGS: &[(&str, (&str, &str))] = &[
             "[Member Event] Member {target_id} is online",
         ),
     ),
+    // agent/dispatcher.py — 任务看板(外部收件箱 read_inbox 渲染用)
+    (
+        "dispatcher.leader_task_board",
+        (
+            "当前任务看板如下，请审查：\n- 是否需要调整任务（增删、修改、调整依赖）\n- 就绪任务是否需要指派给 teammate\n- 整体进度是否符合预期",
+            "Current task board — please review:\n- Whether any tasks need adjustment (add/remove/edit/dependencies)\n- Whether ready tasks should be assigned to a teammate\n- Whether the overall progress matches expectations",
+        ),
+    ),
+    (
+        "dispatcher.teammate_task_list",
+        (
+            "以下是当前可处理的任务：\n- 未指派的 pending 任务可由你认领\n- 已指派给你的任务请先用 view_task 查看详情，再按任务工具推进",
+            "Tasks available to work on:\n- Unassigned pending tasks may be claimed by you\n- For tasks already assigned to you, use view_task for details and proceed with the task tools",
+        ),
+    ),
+    (
+        "dispatcher.task_unassigned_marker",
+        (" (待领取)", " (unassigned)"),
+    ),
     // timefmt.py — 未知时间(测试用补充键,无占位)
     ("time.unknown", ("时间未知", "unknown time")),
 ];

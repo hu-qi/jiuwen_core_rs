@@ -20,6 +20,28 @@ use crate::prompt_builder::section_name::MODE_INSTRUCTIONS;
 use crate::seam::Seam;
 use std::collections::BTreeMap;
 
+/// 模板加载错误(对齐 Python `load_template` 的文件缺失语义)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptLoadError(pub String);
+
+impl core::fmt::Display for PromptLoadError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for PromptLoadError {}
+
+/// 团队提示模板加载 Seam(Service Definition)。
+///
+/// 对齐 `agent_teams/prompts/loader.py` 的 `load_template(name, language)`:
+/// 加载 `prompts/<lang>/<name>.md` 模板正文;缺失/不支持 → 显式 `Err`
+/// (不静默回退)。模板正文是代码资产,实现方(插件)以嵌入常量或配置目录提供。
+pub trait TeamPromptLoader: Seam {
+    /// 加载模板正文(语言代码 "cn"/"en")。
+    fn load(&self, name: &str, language: &str) -> Result<String, PromptLoadError>;
+}
+
 /// 语言解析(对齐 `resolve_language` 的确定性投影:仅 "en"/"cn" 受支持,
 /// 其余回退默认 "cn";环境变量与配置解析属调用方职责)。
 pub fn resolve_language(language: &str) -> &'static str {
@@ -356,6 +378,13 @@ mod tests {
         assert_eq!(resolve_language("en"), "en");
         assert_eq!(resolve_language("cn"), "cn");
         assert_eq!(resolve_language("fr"), "cn");
+    }
+
+    #[test]
+    fn prompt_load_error_is_display_and_error() {
+        let err = PromptLoadError("template 'x' not found".to_string());
+        assert_eq!(err.to_string(), "template 'x' not found");
+        let _: &dyn std::error::Error = &err;
     }
 
     #[test]

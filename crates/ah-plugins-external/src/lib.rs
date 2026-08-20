@@ -10,6 +10,13 @@
 //!
 //! 两者共用启动知识 CliAgentAdapter(input framing / completion / flags),
 //! 子进程真实拉起、真实管道读写、真实超时与 kill。
+//!
+//! 另提供 `external-client` seam(对齐 agent_teams/external/client.py):
+//! ExternalTeamClient 进程边界成员客户端 — 描述符投影 / 幂等 connect·close /
+//! fetch_inbox / read_inbox / watch(见 client.rs)。
+
+mod client;
+pub use client::{ExternalClientFactory, ExternalClientPlugin, ExternalTeamClientImpl};
 
 use std::collections::VecDeque;
 use std::process::Stdio;

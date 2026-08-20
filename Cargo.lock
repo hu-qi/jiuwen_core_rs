@@ -360,6 +360,13 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "ah-plugins-external-format",
+ "ah-plugins-inbound-render",
+ "ah-plugins-team-context",
+ "ah-plugins-team-i18n",
+ "ah-plugins-team-message",
+ "ah-plugins-team-prompts",
+ "ah-plugins-timefmt",
  "async-trait",
  "serde_json",
  "tokio",

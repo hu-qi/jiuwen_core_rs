@@ -28,6 +28,7 @@ pub mod effect;
 pub mod event;
 pub mod evolving;
 pub mod external;
+pub mod external_client;
 pub mod external_format;
 pub mod fs;
 pub mod git;
@@ -163,6 +164,10 @@ pub mod prelude {
         CliAgentAdapter, CompletionStrategy, ExternalCliError, ExternalCliRuntime, ExternalCliTurn,
         InputFormat, TeamJoinDescriptor, codex_narration, codex_proto_line,
     };
+    pub use crate::external_client::{
+        BROADCAST_TARGET, ExternalClientError, ExternalInboxSource, ExternalTeamClient,
+        InboxObserver, InboxView, compose_inbox_text,
+    };
     pub use crate::fs::{FsError, FsProvider};
     pub use crate::git::{GitCommit, GitError, GitProvider, GitStatusEntry};
     pub use crate::graph_memory::{
@@ -285,10 +290,10 @@ pub mod prelude {
         status_label,
     };
     pub use crate::team_prompts::{
-        MemberSummary, TEAM_PLAN_MODE_PROMPT_CN, TEAM_PLAN_MODE_PROMPT_EN, TeamPrompts,
-        build_bridge_brief, build_enter_plan_mode_status, build_plan_file_info,
-        build_team_plan_mode_prompt, build_team_plan_mode_section, get_team_plan_mode_prompt,
-        resolve_language,
+        MemberSummary, PromptLoadError, TEAM_PLAN_MODE_PROMPT_CN, TEAM_PLAN_MODE_PROMPT_EN,
+        TeamPromptLoader, TeamPrompts, build_bridge_brief, build_enter_plan_mode_status,
+        build_plan_file_info, build_team_plan_mode_prompt, build_team_plan_mode_section,
+        get_team_plan_mode_prompt, resolve_language,
     };
     pub use crate::team_skill::{
         GenerateTeamSkillRequest, GenerateTeamSkillResult, TeamSkillError, TeamSkillGenerator,

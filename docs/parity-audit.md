@@ -92,11 +92,11 @@
 | 模块 | pct | 主要缺口 |
 | --- | ---: | --- |
 | agent | 90 | **bridge compose/wrap 已收尾(第 130 回合)**:ah-contracts bridge_compose seam(TeamRole/BridgeMailboxInjectMode/compose_bridge_inbound/wrap_outbound_to_remote 双语纯函数)+ ah-plugins-bridge-compose;StreamController _tag_chunk 决策已补(ah-contracts stream.rs tag_chunk) |
-| external | 85 | ExternalTeamClient(MCP 收件箱) |
+| external | 90 | **ExternalTeamClient 已收尾(第 135 回合)**:ah-contracts external_client seam(InboxView/InboxMessage/compose_inbox_text/ExternalInboxSource/ExternalTeamClientFactory/ExternalTeamClient — 描述符投影/session 绑定/幂等 connect·close/未连接显式报错/fetch_inbox/read_inbox,对齐 client.py)+ ah-plugins-external client.rs;read_inbox 组合 external-format + team-message 模板展开 + team-i18n 看板文案;watch(messager 订阅)留待 messager seam |
 | reliability | 85 | DeepAgentRail/handler 接线 |
 | context | 90 | **已收尾(第 129 回合)**:ah-contracts team_context seam + ah-plugins-team-context(session_id set/get/reset token 可逆,对齐 context.py) |
 | monitor | 80 | stream_logger 分块摘要 |
-| prompts | 88 | **plan-mode/bridge brief 已收尾(第 134 回合)**:ah-contracts team_prompts seam + ah-plugins-team-prompts — team_plan_mode 双语模板渲染(build_team_plan_mode_section MODE_INSTRUCTIONS priority=85,对齐 team_plan_mode.py)+ bridge brief(双语简报/名册概览,对齐 bridge_remote_brief.py);messages/sections 装配留待后续 |
+| prompts | 90 | **loader.py 已收尾(第 135 回合)**:ah-contracts team_prompts 增 TeamPromptLoader seam + ah-plugins-team-prompts EmbeddedTeamPromptLoader(嵌入 scheduler_* 双语模板,缺失显式 Err,对齐 loader.py load_template);plan-mode/bridge brief 已收尾(第 134 回合):team_plan_mode 双语模板渲染 + bridge brief;messages/sections 装配留待后续 |
 | schema | 80 | blueprint/ssh_transport/task graph 规格 |
 | workflow | 80 | avatar session 后端/concurrency governor |
 | interaction | 75 | UserInbox 持久信箱、bridge 适配 |

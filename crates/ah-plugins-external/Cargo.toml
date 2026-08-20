@@ -3,7 +3,7 @@ name = "ah-plugins-external"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Real external CLI agent runtime: spawn third-party CLIs as team members (streaming stdin + re-invoke-per-turn flavors)"
+description = "Real external agent runtime: third-party CLI member processes + ExternalTeamClient (inbox/fetch/read)"
 
 [dependencies]
 ah-contracts = { workspace = true }
@@ -11,3 +11,12 @@ ah-hub = { workspace = true }
 async-trait = "0.1"
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "macros", "process", "io-util", "time", "sync"] }
+
+[dev-dependencies]
+ah-plugins-external-format = { workspace = true }
+ah-plugins-inbound-render = { workspace = true }
+ah-plugins-team-context = { workspace = true }
+ah-plugins-team-i18n = { workspace = true }
+ah-plugins-team-message = { workspace = true }
+ah-plugins-team-prompts = { workspace = true }
+ah-plugins-timefmt = { workspace = true }

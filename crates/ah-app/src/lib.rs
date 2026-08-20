@@ -29,6 +29,7 @@ use ah_plugins_dataset_curator::DatasetCuratorPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
 use ah_plugins_experience_scorer::ExperienceScorerPlugin;
 use ah_plugins_external::ExternalCliPlugin;
+use ah_plugins_external::ExternalClientPlugin;
 use ah_plugins_external_format::ExternalFormatPlugin;
 use ah_plugins_git::GitPlugin;
 use ah_plugins_graph_memory::GraphMemoryPlugin;
@@ -567,6 +568,13 @@ pub fn plugin_catalog(
         (
             "ah-plugins-agent-loop",
             Arc::new(AgentLoopPlugin::default()) as DynPlugin,
+        ),
+        (
+            // 真实外部成员客户端工厂(ExternalTeamClient):依赖 external-format /
+            // team-message / team-i18n / team-context / timefmt / inbound-render
+            // / team-prompt-loader seam,须排在它们之后挂载(apply 时解析,缺失显式报错)。
+            "ah-plugins-external-client",
+            Arc::new(ExternalClientPlugin) as DynPlugin,
         ),
     ];
     // 惰性解析:apply 时先查 credentials seam(openai.api_key),再 fallback 到
