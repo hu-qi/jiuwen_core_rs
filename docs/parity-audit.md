@@ -10,9 +10,9 @@
 
 | 指标 | 值 |
 | --- | --- |
-| **总体对等度** | **≈ 59.5%**(按 Python 文件数加权;excluded 不参与计分) |
+| **总体对等度** | **≈ 62.5%**(按 Python 文件数加权;excluded 不参与计分) |
 | done / partial / missing / excluded | **6 / 89 / 0 / 2** |
-> 第 142 回合:harness/security 的 Shell AST 保守回退扫描器 + 文件路径防护(file_guard)收尾(25→48);其余不变。
+> 第 143 回合:harness/schema 停止条件收尾(35→45)+ agent_teams/schema 事件主题收尾(86→89)+ rsi/optimization_experience_learner 索引检索/净化/状态机收尾(25→50)+ core/workflow ComponentAbility(85→86);harness/security Shell AST + file_guard(第 142 回合,25→48)。
 > 第 141 回合:core/operator 收尾 done;harness/prompts 附件 CRUD/XML 渲染/注入收尾(55→68);harness/workspace 目录构建器/校验/schema 语言变体收尾(40→55);agent_teams/monitor 的 TeamStreamLogger 收尾(80→95)。
 > 第 129 回合:context 90 / config 95 / data_loader 92(仍计 partial,未达 done 判定线 100 或 LLM 无缺) |
 | 上一基线(第 75 回合) | ≈ 31% |
@@ -57,7 +57,7 @@
 
 | 模块 | pct | 主要缺口 |
 | --- | ---: | --- |
-| workflow | 85 | STREAM/TRANSFORM/COLLECT 流式组件能力 |
+| workflow | 86 | STREAM/TRANSFORM/COLLECT 流式组件能力(ComponentAbility 已收尾,第 143 回合:invoke/stream/collect/transform 四能力名+描述,对齐 base.py);流式执行管线留待后续 |
 | controller | 65 | LLM 意图识别(现关键字匹配) |
 | graph | 60 | StreamActor 流式、可视化 |
 | multi_agent | 55 | 消息总线/订阅拓扑、handoff 编排 |
@@ -79,7 +79,7 @@
 | --- | ---: | --- |
 | prompts | 68 | **附件 CRUD/XML 渲染/注入已收尾(第 141 回合)**:ah-contracts prompt_attachment 补渲染纯函数(xml_text/xml_attr/kind_value/stable_sort_key/is_expired/render(DEFAULT_MAX_PROMPT_ATTACHMENT_CHARS=12000/DEFAULT_MAX_RENDERED_CHARS=48000,`<system-reminder>` 块/单附件超限截断标记/总量截断)/inject_messages)+ PromptAttachmentStore seam(add_section/clear_section/get_by_id/update_by_id/remove_by_id/list_by_filter/remove_by_filter(无过滤+allow_all=false 显式错误)/clear_session/clear_all/collect_for_session(过期剔除)),对齐 prompt_attachment_manager.py:74-661;ah-plugins-prompt-attachment InMemoryPromptAttachmentStore(真实实现:section_id 净化/id=session.{safe}.{safe}/metadata 合并 {section,source}/normalize_for_write(UTC 时间戳+内容 sha256+metadata.section)/update 不可变字段回写/稳定排序 (priority,source,section));XML 转义/CRUD/过滤/过期/排序/注入 6 契约 + 6 插件测试;PromptAttachmentContextWriter(上下文会话绑定)与 make_window_mutator 留待上下文接线 |
 | workspace | 55 | **目录构建器/校验/schema 语言变体已收尾(第 141 回合)**:ah-contracts workspace 补 workspace_schema(cn/en 双语言,对齐 DEFAULT_WORKSPACE_SCHEMA/_EN,含 context 节点)+ validate_directory_node(非 dict/name 空·含分隔符/path·description 类型/is_file·default_content 类型/children 递归,对齐 _validate_directory_node)+ node_full_path(顶层路径拼接,对齐 get_node_path)+ set_directory(同名替换,对齐 set_directory)+ is_safe_relative_path(绝对/盘符/UNC/.. 越级拒绝,对齐 directory_builder.py `_is_safe_path`);ah-plugins-workspace DirectoryBuilder(真实递归建目录+`.workspace` 标记+文件默认内容,不安全路径显式 `Unsafe path detected` 不落盘);4 契约 + 3 插件测试;链接管理(.team/.worktree 软链)与语言感知默认内容留待后续 |
-| schema | 35 | DeepAgentSpec/交互/停止条件/事件模型 |
+| schema | 45 | **停止条件已收尾(第 143 回合)**:ah-contracts harness_schema(StopEvaluationContext(iteration/token_usage/elapsed_seconds/last_result/extra)+ MaxRoundsEvaluator(iteration>=max)/TokenBudgetEvaluator(token_usage>=max)/TimeoutEvaluator(elapsed>=timeout)/CompletionPromiseEvaluator(连续确认计数,notify_fulfilled·notify_absent 打断·reset·get_state/load_state(fulfilled = count>=required 或已有 fulfilled),对齐 stop_condition.py:20-223));5 契约测试;DeepAgentSpec/交互/事件模型留待后续 |
 | task_loop | 35 | 事件管理器/协调器/控制器/执行器 |
 | cli | 35 | chat/run 交互、auto_harness 子命令 |
 | rails | 30 | 任务完成/规划/重试等 LLM 型 rail |
@@ -98,7 +98,7 @@
 | reliability | 90 | **rail/handler/factory 已收尾(第 136 回合)**:ah-contracts reliability_rail seam(error_text/args_as_dict/measure_response 纯辅助 + 6 个 hook 信号构造 + format_anomaly_event/format_anomaly 一行摘要 + route_decision 策略路由决策 + member_detector_specs enabled 装配决策 + ReliabilityRail/ReliabilityHandler/ReliabilityFactory seam,对齐 rail.py/handler.py/factory.py 确定性部分)+ ah-plugins-reliability-monitor rail.rs(MemberReliabilityRail hook→monitor→LocalAutoRemediator 纠偏 + bind_local_sink 本地上报;LeaderReliabilityHandler 路由+格式;ReliabilityAssembly 规格+策略视图);事件订阅/投递(协调运行时)留待后续 |
 | context | 90 | **已收尾(第 129 回合)**:ah-contracts team_context seam + ah-plugins-team-context(session_id set/get/reset token 可逆,对齐 context.py) |
 | prompts | 90 | **loader.py 已收尾(第 135 回合)**:ah-contracts team_prompts 增 TeamPromptLoader seam + ah-plugins-team-prompts EmbeddedTeamPromptLoader(嵌入 scheduler_* 双语模板,缺失显式 Err,对齐 loader.py load_template);plan-mode/bridge brief 已收尾(第 134 回合):team_plan_mode 双语模板渲染 + bridge brief;messages/sections 装配留待后续 |
-| schema | 86 | **ssh_transport/task graph/blueprint 校验已收尾(第 137 回合)**:ah-contracts team_schema seam(SshTransportConfig + validate_ssh_auth 认证校验;TaskOpResult/TaskCreateResult/TaskSummary/TaskDetail/TaskListResult/TaskGraphSpec/TaskGraphResult/NewTaskSpec/GraphMutationResult 纯模型;InfraRegistry transport/storage 注册表 + transport/storage_merged_params backend/db_type 注入;validate_pool_router_exclusive/external_cli_unique/review_settings/stall_settings/swarmflow_budget/reserved_names/hitt·bridge_consistency 装配期校验,对齐 ssh_transport.py/task.py/blueprint.py 确定性部分)+ ah-plugins-team-schema(InfraRegistry 可逆注册 + 内置类型惰性播种);TeamAgentSpec.build()/DeepAgentSpec 运行时装配留待后续 |
+| schema | 89 | **事件主题/消息 topic 已收尾(第 143 回合)**:ah-contracts team_schema 补 TeamTopic(team/task/message + build `session:{sid}:team:{team}:{topic}`)+ swarmflow_human_reply_topic(run_id 作用域/legacy)+ format/parse_swarmflow_human_reply_target(冒号数区分 run-scoped vs legacy,对齐 events.py:24-90);ssh_transport/task graph/blueprint 校验已收尾(第 137 回合):ah-contracts team_schema seam(SshTransportConfig + validate_ssh_auth 认证校验;TaskOpResult/TaskCreateResult/TaskSummary/TaskDetail/TaskListResult/TaskGraphSpec/TaskGraphResult/NewTaskSpec/GraphMutationResult 纯模型;InfraRegistry transport/storage 注册表 + transport/storage_merged_params backend/db_type 注入;validate_pool_router_exclusive/external_cli_unique/review_settings/stall_settings/swarmflow_budget/reserved_names/hitt·bridge_consistency 装配期校验,对齐 ssh_transport.py/task.py/blueprint.py 确定性部分)+ ah-plugins-team-schema(InfraRegistry 可逆注册 + 内置类型惰性播种);TeamAgentSpec.build()/DeepAgentSpec 运行时装配留待后续 |
 | monitor | 95 | **stream_logger 已收尾(第 141 回合)**:TeamStreamLogger 1:1(见 §2);TeamMonitor 只读视图精简:缺 get_members/get_member/get_task 单查 + MessageInfo(broadcast/is_read)+ get_messages to/from/hide_dm 过滤,留待后续 |
 | workflow | 80 | avatar session 后端/concurrency governor |
 | interaction | 75 | UserInbox 持久信箱、bridge 适配 |
@@ -141,7 +141,7 @@
 | single_harness | 40 | iterative 能力门禁/物化/verifier delta |
 | evaluation_result_analyzer | 42 | **信号提取已收尾(第 132 回合)**:ah-contracts analyzer 补充 fingerprint_error(ts/uuid/path/hex/:N 五模式替换+空白归一,对齐 signal_extractor.py)+ extract_generic_signals(exec/judge 失败/错误聚类/expected mismatch/missing reference,对齐 GenericSignalExtractor)+ EvaluationSummaryInput/CaseAnalysisInput/DeterministicSignals 类型;ah-plugins-rsi analyzer 集成 error_clusters;LLM 两阶段诊断/Pytest/Reward/Atomic/LlmJudge 提取器留待后续 |
 | team_skill_optimizer | 30 | LLM experience_optimizer、evolve_and_rebuild |
-| optimization_experience_learner | 25 | ExperienceStore/Extractor/Retriever |
+| optimization_experience_learner | 50 | **索引检索/净化/状态机已收尾(第 143 回合)**:ah-contracts rsi_learner seam(VALID_STATUSES/DEFAULT_RETRIEVAL_STATUSES/SENSITIVE_KEYS 常量 + confidence_score/truncate(`...\[truncated\]`)/bounded_list/string_list/status_value/safe_name/sanitize_value(sk-·Bearer→[redacted],敏感键剔除)/first_mapping/first_text/merge_dicts/allowed_statuses/entry_matches_query,对齐 learner.py:26-36+687-801)+ ah-plugins-rsi experience_learner.rs(ExperienceRetriever:index.yaml 真实 YAML 加载/状态·类型·阶段·角色·候选模块·失败签名·机制类型过滤/(confidence,created_at) 降序/limit 截断/summary 预算截断 bounded_match(读 stage YAML 组装扁平视图)/read_structured(json/yaml),对齐 learner.py:515-628+655-694);7 契约 + 4 插件测试;LLM 驱动的 learn/ExperienceExtractor 提取与 ExperienceStore 写路径留待后续 |
 | team_skill_generator | 40 | **确定性归一化已收尾(第 133 回合)**:ah-contracts team_skill_generator seam(plan_slugify/single_line/string_list/normalize_roles(≥2 角色/id 去重/kind 校验/缺省回退)/normalize_workflow_steps(executor 校验+默认两步)/normalize_team_skill_plan(team_name/description/acceptance 回退)/write_skill_md 骨架,对齐 generator.py 确定性部分)+ ah-plugins-team-skill-generator;LLM plan/create/repair、多文件生成、验证留待后续 |
 | auto_harness | 20 | rails、LLM agent factory、pipelines、experience store |
 | evaluator | 32 | **trajectory 工具已收尾(第 131 回合)**:ah-contracts rsi_evaluator seam + ah-plugins-rsi-evaluator — bounded 轨迹(truncate_text/truncate_json_like/bounded_messages/tool_summary/safe_role_file_stem/bound_llm·tool_detail)+ usage 提取(collect_successful_tool·skill_names/canonical_tool_name/collect_pre_edit_successful_usage/is_persistent_edit_step),对齐 rsi/evaluator/trajectory_paths.py + trajectory_usage.py;LLM judge/TeamEvaluator 留待后续 |

@@ -774,6 +774,7 @@ dependencies = [
  "ah-plugins-tools",
  "async-trait",
  "serde_json",
+ "serde_yaml",
  "tokio",
 ]
 

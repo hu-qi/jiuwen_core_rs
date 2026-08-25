@@ -110,3 +110,65 @@ pub trait WorkflowEngine: Seam {
         checkpoint_path: &std::path::Path,
     ) -> Result<CheckpointedOutput, WorkflowError>;
 }
+
+// ---------------------------------------------------------------------------
+// 组件能力(对齐 core/workflow/components/base.py ComponentAbility)
+// ---------------------------------------------------------------------------
+
+/// 组件 I/O 能力(对齐 ComponentAbility)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ComponentAbility {
+    /// 同步批量处理:批量进、批量出。
+    Invoke,
+    /// 批量进、流式出。
+    Stream,
+    /// 流式进、批量出。
+    Collect,
+    /// 流式进、流式出。
+    Transform,
+}
+
+impl ComponentAbility {
+    /// 能力名(对齐 `ComponentAbility.name`)。
+    pub fn name(self) -> &'static str {
+        match self {
+            ComponentAbility::Invoke => "invoke",
+            ComponentAbility::Stream => "stream",
+            ComponentAbility::Collect => "collect",
+            ComponentAbility::Transform => "transform",
+        }
+    }
+
+    /// 能力描述(对齐 `ComponentAbility.desc`)。
+    pub fn desc(self) -> &'static str {
+        match self {
+            ComponentAbility::Invoke => "batch in, batch out",
+            ComponentAbility::Stream => "batch in, stream out",
+            ComponentAbility::Collect => "stream in, batch out",
+            ComponentAbility::Transform => "stream in, stream out",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn component_ability_names_and_descs() {
+        assert_eq!(ComponentAbility::Invoke.name(), "invoke");
+        assert_eq!(ComponentAbility::Stream.name(), "stream");
+        assert_eq!(ComponentAbility::Collect.name(), "collect");
+        assert_eq!(ComponentAbility::Transform.name(), "transform");
+        assert_eq!(ComponentAbility::Invoke.desc(), "batch in, batch out");
+        assert_eq!(ComponentAbility::Stream.desc(), "batch in, stream out");
+        assert_eq!(ComponentAbility::Collect.desc(), "stream in, batch out");
+        assert_eq!(ComponentAbility::Transform.desc(), "stream in, stream out");
+        assert_eq!(
+            serde_json::to_value(ComponentAbility::Stream).unwrap(),
+            json!("stream")
+        );
+    }
+}

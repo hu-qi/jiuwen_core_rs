@@ -713,3 +713,132 @@ mod tests {
         assert!(validate_bridge_consistency(false, &[]).is_ok());
     }
 }
+
+// ---------------------------------------------------------------------------
+// 团队事件主题(对齐 agent_teams/schema/events.py 确定性部分)
+// ---------------------------------------------------------------------------
+
+/// 团队事件主题类别(对齐 TeamTopic)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TeamTopic {
+    Team,
+    Task,
+    Message,
+}
+
+impl TeamTopic {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TeamTopic::Team => "team",
+            TeamTopic::Task => "task",
+            TeamTopic::Message => "message",
+        }
+    }
+
+    /// 构建主题串(对齐 `TeamTopic.build`):
+    /// `session:{session_id}:team:{team_name}:{topic}`。
+    pub fn build(self, session_id: &str, team_name: &str) -> String {
+        format!("session:{session_id}:team:{team_name}:{}", self.as_str())
+    }
+}
+
+/// swarmflow 人工回复主题(对齐 `swarmflow_human_reply_topic`)。
+pub fn swarmflow_human_reply_topic(
+    session_id: &str,
+    team_name: &str,
+    run_id: Option<&str>,
+) -> String {
+    match run_id {
+        Some(run_id) => {
+            format!("session:{session_id}:team:{team_name}:run:{run_id}:swarmflow_human_reply")
+        }
+        None => format!("session:{session_id}:team:{team_name}:swarmflow_human_reply"),
+    }
+}
+
+/// 构建 swarmflow 人工回复目标(对齐 `format_swarmflow_human_reply_target`)。
+pub fn format_swarmflow_human_reply_target(correlation_id: &str, run_id: Option<&str>) -> String {
+    match run_id {
+        Some(run_id) => format!("swarmflow:{run_id}:{correlation_id}"),
+        None => format!("swarmflow:{correlation_id}"),
+    }
+}
+
+/// 解析 `swarmflow:` 之后的正文为 (run_id, correlation_id)
+/// (对齐 `parse_swarmflow_human_reply_target`)。
+///
+/// 引擎 correlation id 形如 `{phase}:{label}:{turn}`(两个冒号);run-scoped
+/// 目标前置 `<run_id>:`(run id 不含冒号)。按 `rest` 冒号数区分:
+/// 0 或 2 个冒号 → legacy,整个 rest 是 correlation id;
+/// 1 或 ≥3 个冒号 → run-scoped,`split(":", 1)`。
+pub fn parse_swarmflow_human_reply_target(rest: &str) -> (Option<String>, String) {
+    let colon_count = rest.matches(':').count();
+    if (colon_count == 1 || colon_count >= 3)
+        && let Some((run_id, corr)) = rest.split_once(':')
+    {
+        return (Some(run_id.to_string()), corr.to_string());
+    }
+    (None, rest.to_string())
+}
+#[cfg(test)]
+mod team_topic_tests {
+    use super::*;
+
+    #[test]
+    fn team_topic_build_format() {
+        assert_eq!(
+            TeamTopic::Team.build("s1", "alpha"),
+            "session:s1:team:alpha:team"
+        );
+        assert_eq!(
+            TeamTopic::Task.build("s1", "alpha"),
+            "session:s1:team:alpha:task"
+        );
+        assert_eq!(
+            TeamTopic::Message.build("s1", "alpha"),
+            "session:s1:team:alpha:message"
+        );
+        assert_eq!(TeamTopic::Task.as_str(), "task");
+    }
+
+    #[test]
+    fn swarmflow_reply_topic_run_scoped_and_legacy() {
+        assert_eq!(
+            swarmflow_human_reply_topic("s1", "alpha", None),
+            "session:s1:team:alpha:swarmflow_human_reply"
+        );
+        assert_eq!(
+            swarmflow_human_reply_topic("s1", "alpha", Some("run1")),
+            "session:s1:team:alpha:run:run1:swarmflow_human_reply"
+        );
+    }
+
+    #[test]
+    fn swarmflow_reply_target_format_and_parse() {
+        assert_eq!(
+            format_swarmflow_human_reply_target("phase:label:turn", None),
+            "swarmflow:phase:label:turn"
+        );
+        assert_eq!(
+            format_swarmflow_human_reply_target("phase:label:turn", Some("run1")),
+            "swarmflow:run1:phase:label:turn"
+        );
+
+        // legacy:0 或 2 个冒号 → 整个 rest 是 correlation id。
+        let (run_id, corr) = parse_swarmflow_human_reply_target("simple");
+        assert_eq!(run_id, None);
+        assert_eq!(corr, "simple");
+        let (run_id, corr) = parse_swarmflow_human_reply_target("phase:label:turn");
+        assert_eq!(run_id, None);
+        assert_eq!(corr, "phase:label:turn");
+
+        // run-scoped:1 或 ≥3 个冒号 → split(":", 1)。
+        let (run_id, corr) = parse_swarmflow_human_reply_target("run1:phase");
+        assert_eq!(run_id.as_deref(), Some("run1"));
+        assert_eq!(corr, "phase");
+        let (run_id, corr) = parse_swarmflow_human_reply_target("run1:phase:label:turn");
+        assert_eq!(run_id.as_deref(), Some("run1"));
+        assert_eq!(corr, "phase:label:turn");
+    }
+}
