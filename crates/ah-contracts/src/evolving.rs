@@ -234,7 +234,16 @@ pub struct ApplyResult {
     pub mode: UpdateMode,
     pub effect: UpdateEffect,
     pub value: Option<serde_json::Value>,
+    /// 应用的记录列表(对齐 ApplyResult.records)。
+    #[serde(default)]
+    pub records: Vec<serde_json::Value>,
     pub change_type: Option<String>,
+    /// 生命周期阶段(对齐 ApplyResult.lifecycle_stage,如 local_apply_completed)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle_stage: Option<String>,
+    /// 关联 pending change id(对齐 ApplyResult.pending_change_id)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_change_id: Option<String>,
     pub errors: Vec<String>,
     pub metadata: serde_json::Map<String, serde_json::Value>,
 }

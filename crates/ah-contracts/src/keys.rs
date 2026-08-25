@@ -187,6 +187,7 @@ pub const MODEL_ALLOCATOR: ServiceKey = ServiceKey::new("model-allocator");
 pub const TEAM_JOIN_DESCRIPTOR: ServiceKey = ServiceKey::new("team-join-descriptor");
 pub const TEAM_TASK_STATUS: ServiceKey = ServiceKey::new("team-task-status");
 pub const PROMPT_ATTACHMENT: ServiceKey = ServiceKey::new("prompt-attachment");
+pub const PROMPT_ATTACHMENT_STORE: ServiceKey = ServiceKey::new("prompt-attachment-store");
 pub const PROMPT_BUILDER: ServiceKey = ServiceKey::new("prompt-builder");
 pub const PROMPT_BUILDER_DEVTOOLS: ServiceKey = ServiceKey::new("prompt-builder-devtools");
 pub const STREAM: ServiceKey = ServiceKey::new("stream");

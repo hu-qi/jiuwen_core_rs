@@ -135,6 +135,77 @@ pub trait PromptAttachmentApi: Seam {
     fn safe_id_part(&self, value: Option<&str>, fallback: &str) -> String;
 }
 
+/// 附件存储查询过滤(对齐 `list_by_filter` / `remove_by_filter` 参数)。
+#[derive(Debug, Clone, Default)]
+pub struct AttachmentFilter {
+    pub session_id: Option<String>,
+    pub section: Option<String>,
+    pub kind: Option<PromptAttachmentKind>,
+    pub source: Option<String>,
+}
+
+/// prompt 附件管理 Seam(对齐 `PromptAttachmentManager` 的确定性 CRUD 部分)。
+///
+/// 存储为内存态(session_id → section → 附件),所有写路径统一走
+/// `_normalize_for_write`(时间戳/内容哈希/metadata.section 注入),id 固定为
+/// `session.{safe(session_id)}.{safe(section)}`。
+pub trait PromptAttachmentStore: Seam {
+    /// 添加或替换一个 section(对齐 `add_section`):metadata 合并
+    /// `{section, source}`;id 由 session+section 生成。
+    #[allow(clippy::too_many_arguments)] // 镜像 Python add_section 关键字签名。
+    fn add_section(
+        &self,
+        session_id: &str,
+        section: &str,
+        content: &str,
+        kind: PromptAttachmentKind,
+        source: &str,
+        priority: i32,
+        metadata: Option<&serde_json::Map<String, serde_json::Value>>,
+        content_kind: &str,
+        expires_at: Option<&str>,
+    ) -> Result<PromptAttachment, AttachmentError>;
+
+    /// 清空一个 section;返回删除条数(0/1)(对齐 `clear_section`)。
+    fn clear_section(&self, session_id: &str, section: &str) -> usize;
+
+    /// 按 id 取回附件(深拷贝);session_id 约束可选(对齐 `get_by_id`)。
+    fn get_by_id(
+        &self,
+        prompt_attachment_id: &str,
+        session_id: Option<&str>,
+    ) -> Option<PromptAttachment>;
+
+    /// 按 id 更新(对齐 `update_by_id`);未找到显式 KeyError 语义错误。
+    fn update_by_id(
+        &self,
+        prompt_attachment_id: &str,
+        update: &PromptAttachmentUpdate,
+    ) -> Result<PromptAttachment, AttachmentError>;
+
+    /// 按 id 删除;未找到或 session 不匹配返回 false(对齐 `remove_by_id`)。
+    fn remove_by_id(&self, prompt_attachment_id: &str, session_id: Option<&str>) -> bool;
+
+    /// 按过滤列出(稳定排序)(对齐 `list_by_filter`)。
+    fn list_by_filter(&self, filter: &AttachmentFilter) -> Vec<PromptAttachment>;
+
+    /// 按过滤删除;无任何过滤且 allow_all=false 显式错误(对齐 `remove_by_filter`)。
+    fn remove_by_filter(
+        &self,
+        filter: &AttachmentFilter,
+        allow_all: bool,
+    ) -> Result<usize, AttachmentError>;
+
+    /// 清空一个会话的全部附件;返回删除条数(对齐 `clear_session`)。
+    fn clear_session(&self, session_id: &str) -> usize;
+
+    /// 清空全部附件;返回删除条数(对齐 `clear_all`)。
+    fn clear_all(&self) -> usize;
+
+    /// 收集会话可见附件(剔除过期;返回稳定排序)(对齐 `collect_for_session`)。
+    fn collect_for_session(&self, session_id: &str) -> Vec<PromptAttachment>;
+}
+
 /// prompt 附件域错误(纯数据,供实现/消费方显式报错)。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttachmentError(pub String);
@@ -146,3 +217,145 @@ impl core::fmt::Display for AttachmentError {
 }
 
 impl std::error::Error for AttachmentError {}
+
+// ---------------------------------------------------------------------------
+// 渲染纯函数(对齐 prompt_attachment_manager.py 的 `_xml_text` / `_xml_attr` /
+// `render` / `_stable_sort` / `_is_expired` / `_make_section_id` 确定性部分)
+// ---------------------------------------------------------------------------
+
+/// XML 文本转义(对齐 `html.escape(text, quote=False)`):转义 `&` `<` `>`,
+/// 不转义引号。
+pub fn xml_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// XML 属性转义(对齐 `html.escape(str(text), quote=True).replace("'", "&apos;")`):
+/// 额外转义 `"` 为 `&quot;`、`'` 为 `&apos;`;None 视为空串。
+pub fn xml_attr(text: Option<&str>) -> String {
+    let raw = text.unwrap_or("");
+    let mut out = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// 附件类型字符串值(对齐 `_kind_value`)。
+pub fn kind_value(kind: &PromptAttachmentKind) -> &'static str {
+    match kind {
+        PromptAttachmentKind::Generic => "generic",
+        PromptAttachmentKind::Text => "text",
+        PromptAttachmentKind::Runtime => "runtime",
+        PromptAttachmentKind::Memory => "memory",
+        PromptAttachmentKind::File => "file",
+        PromptAttachmentKind::Tool => "tool",
+        PromptAttachmentKind::Skill => "skill",
+        PromptAttachmentKind::Diagnostic => "diagnostic",
+        PromptAttachmentKind::TodoReminder => "todo_reminder",
+        PromptAttachmentKind::WorkspaceDelta => "workspace_delta",
+    }
+}
+
+/// 稳定排序键(对齐 `_stable_sort` 的 key:`(priority, source or "", section)`)。
+pub fn stable_sort_key(attachment: &PromptAttachment) -> (i32, String, String) {
+    (
+        attachment.priority,
+        attachment.source.clone().unwrap_or_default(),
+        attachment.section.clone(),
+    )
+}
+
+/// 附件是否已过期(对齐 `_is_expired`:expires_at 非空且 <= now)。
+pub fn is_expired(attachment: &PromptAttachment, now: &str) -> bool {
+    matches!(&attachment.expires_at, Some(expires) if expires.as_str() <= now)
+}
+
+/// 默认最大单附件字符数(对齐 `_DEFAULT_MAX_PROMPT_ATTACHMENT_CHARS`)。
+pub const DEFAULT_MAX_PROMPT_ATTACHMENT_CHARS: usize = 12000;
+/// 默认最大渲染总字符数(对齐 `_DEFAULT_MAX_RENDERED_CHARS`)。
+pub const DEFAULT_MAX_RENDERED_CHARS: usize = 48000;
+
+/// 渲染 prompt 附件为 user-role system-reminder 块(对齐 `PromptAttachmentManager.render`)。
+///
+/// 已按稳定排序键排序输入;空列表返回空串。单附件超限截断并在尾部追加
+/// `[Prompt attachment truncated: ...]`;渲染总量超限截断并重写截断标记。
+pub fn render(
+    attachments: &[PromptAttachment],
+    max_prompt_attachment_chars: usize,
+    max_rendered_chars: usize,
+) -> String {
+    if attachments.is_empty() {
+        return String::new();
+    }
+    let mut sorted: Vec<&PromptAttachment> = attachments.iter().collect();
+    sorted.sort_by_key(|item| stable_sort_key(item));
+
+    let mut truncated_ids: Vec<String> = Vec::new();
+    let mut blocks: Vec<String> = vec![
+        "The following context is automatically attached for this model call only.".to_string(),
+        "It may or may not be relevant to your tasks. Do not respond to it unless it highly relevant to your task.".to_string(),
+        String::new(),
+    ];
+    for item in &sorted {
+        let mut content = item.content.clone().unwrap_or_default();
+        if max_prompt_attachment_chars > 0 && content.chars().count() > max_prompt_attachment_chars
+        {
+            content = content
+                .chars()
+                .take(max_prompt_attachment_chars)
+                .collect::<String>()
+                + "\n\n[Prompt attachment truncated: content exceeded max_prompt_attachment_chars.]";
+            truncated_ids.push(item.id.clone());
+        }
+        blocks.push(format!(
+            "<prompt-attachment type=\"{}\">",
+            xml_attr(Some(kind_value(&item.kind)))
+        ));
+        blocks.push(xml_text(&content));
+        blocks.push("</prompt-attachment>".to_string());
+        blocks.push(String::new());
+    }
+
+    let body = blocks.join("\n").trim_end().to_string();
+    let mut rendered = format!("<system-reminder>\n{body}\n</system-reminder>");
+    if max_rendered_chars > 0 && rendered.chars().count() > max_rendered_chars {
+        rendered = rendered
+            .chars()
+            .take(max_rendered_chars)
+            .collect::<String>()
+            + "\n\n[Prompt attachments truncated: rendered content exceeded max_rendered_chars.]\n"
+            + "</system-reminder>";
+        truncated_ids = sorted.iter().map(|item| item.id.clone()).collect();
+    }
+
+    let _ = truncated_ids; // 日志由插件层发出。
+    rendered
+}
+
+/// 注入渲染文本为独立 user 消息(对齐 `inject_messages`):空渲染返回原消息副本。
+pub fn inject_messages<S: AsRef<str>>(
+    messages: &[S],
+    rendered_prompt_attachments: &str,
+) -> Vec<String> {
+    let mut new_messages: Vec<String> = messages.iter().map(|m| m.as_ref().to_string()).collect();
+    if !rendered_prompt_attachments.is_empty() {
+        new_messages.push(rendered_prompt_attachments.to_string());
+    }
+    new_messages
+}

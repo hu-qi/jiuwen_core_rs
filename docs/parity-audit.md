@@ -1,7 +1,7 @@
 # 对等审计基线(parity-audit.md)
 
 > 生成时间:第 127 回合;审计基线:`b5c3548`(92 crates / 925 tests)。
-> 当前(第 140 回合):109 crates;本回合新增 ah-contracts team_prompts 7 测试 + ah-plugins-team-prompts 3 测试。
+> 当前(第 141 回合):109 crates;本回合 core/operator 收尾 done(5 契约 + 2 插件测试)+ agent_teams/monitor stream_logger 收尾(7 测试)。
 > 方法:7 域 97 个子模块,逐模块读 Python 源码(类/函数签名)对照 Rust crate 源码(`pub fn/struct/enum/trait` + `impl`),带 file:line 证据。
 > 判定标准(严格):`done` = 全部核心功能点**含 LLM 驱动能力**(LLM judge/生成/诊断、梯度优化器、embedding/reranker、多后端/多 provider/多拓扑)在 Rust 1:1 对等;Python 是 LLM 驱动而 Rust 只有确定性规则/字符串匹配/简化循环 → `partial`;Rust 无实现 → `missing`。
 > 此表衡量**行为对等度**(含 LLM 能力),不是"有代码就算完成"的功能覆盖率。
@@ -10,8 +10,9 @@
 
 | 指标 | 值 |
 | --- | --- |
-| **总体对等度** | **≈ 53.1%**(按 Python 文件数加权;excluded 不参与计分) |
-| done / partial / missing / excluded | **5 / 90 / 0 / 2** |
+| **总体对等度** | **≈ 57.0%**(按 Python 文件数加权;excluded 不参与计分) |
+| done / partial / missing / excluded | **6 / 89 / 0 / 2** |
+> 第 141 回合:core/operator 收尾 done;harness/prompts 附件 CRUD/XML 渲染/注入收尾(55→68);harness/workspace 目录构建器/校验/schema 语言变体收尾(40→55);agent_teams/monitor 的 TeamStreamLogger 收尾(80→95)。
 > 第 129 回合:context 90 / config 95 / data_loader 92(仍计 partial,未达 done 判定线 100 或 LLM 无缺) |
 | 上一基线(第 75 回合) | ≈ 31% |
 
@@ -19,15 +20,15 @@
 
 | 域 | 文件数 | 对等度 | done/partial/missing |
 | --- | ---: | ---: | --- |
-| core | 796 | 53% | 0/16/0 |
-| agent_teams | 276 | 70% | 1/24/0 |
+| core | 796 | 54% | 1/15/0 |
+| agent_teams | 276 | 71% | 1/24/0 |
 | agent_evolving | 208 | 64% | 1/11/0 |
 | extensions | 102 | 48% | 0/10/0 |
 | rsi | 175(excl. 5) | 38% | 1/12/0(2 excluded) |
 | harness | 337 | 45% | 2/12/0 |
 | dev_tools | 94 | 41% | 0/5/0 |
 
-## 2. 完整完成(done)—— 5 个(全是确定性算法)
+## 2. 完整完成(done)—— 6 个(全是确定性算法)
 
 | 模块 | pct | 证据 |
 | --- | ---: | --- |
@@ -36,6 +37,7 @@
 | rsi / dataset_curator | 90 | `ah-plugins-dataset-curator/src/lib.rs:423/485` 决策路径 1:1 |
 | harness / manifest | 90 | `ah-plugins-manifest/src/lib.rs:27/88/136/262` + `ah-contracts/src/manifest.rs:19/48/115/189` 描述符目录/工厂注册表/kind 路由注册 1:1 |
 | harness / kv_cache | 90 | `ah-contracts/src/kv_cache.rs:77/94/131/186` + `ah-plugins-kv-cache/src/lib.rs:21-118` affinity/sticky/session-id 判定 + prefetch/offload/evict 信号 1:1 |
+| core / operator | 100 | **done(第 141 回合)**:`ah-contracts/src/operator.rs:71/96/128` Operator.apply_update 兼容行为(replace/state→set_parameter+前后状态比较,其余显式错误)+ PreviewableOperator(preview_update 抽象 + apply_update 路由预览)+ TunableKind::SkillExperience;`ah-plugins-operator/src/lib.rs:434-548` SkillExperienceOperator(operator_id=skill_experience_{skill},tunables experiences/kind skill_experience/path content/preview_update 目标+mode/effect 校验→records+lifecycle_stage=local_apply_completed+metadata.skill_name/set_parameter 通知消费方/get_state={}/load_state 无副作用),1:1 对齐 operator/base.py:114-181 + skill_call/base.py:22-117;ApplyResult 补 records/lifecycle_stage/pending_change_id(evolving.rs:230) |
 
 ## 3. 完全未实现(missing)—— 0 个
 
@@ -54,7 +56,6 @@
 
 | 模块 | pct | 主要缺口 |
 | --- | ---: | --- |
-| operator | 88 | PreviewableOperator 预览语义 |
 | workflow | 85 | STREAM/TRANSFORM/COLLECT 流式组件能力 |
 | controller | 65 | LLM 意图识别(现关键字匹配) |
 | graph | 60 | StreamActor 流式、可视化 |
@@ -75,8 +76,8 @@
 
 | 模块 | pct | 主要缺口 |
 | --- | ---: | --- |
-| prompts | 55 | 附件 CRUD/XML 渲染/注入(仅哈希层) |
-| workspace | 40 | 目录构建器/节点管理/schema 生成 |
+| prompts | 68 | **附件 CRUD/XML 渲染/注入已收尾(第 141 回合)**:ah-contracts prompt_attachment 补渲染纯函数(xml_text/xml_attr/kind_value/stable_sort_key/is_expired/render(DEFAULT_MAX_PROMPT_ATTACHMENT_CHARS=12000/DEFAULT_MAX_RENDERED_CHARS=48000,`<system-reminder>` 块/单附件超限截断标记/总量截断)/inject_messages)+ PromptAttachmentStore seam(add_section/clear_section/get_by_id/update_by_id/remove_by_id/list_by_filter/remove_by_filter(无过滤+allow_all=false 显式错误)/clear_session/clear_all/collect_for_session(过期剔除)),对齐 prompt_attachment_manager.py:74-661;ah-plugins-prompt-attachment InMemoryPromptAttachmentStore(真实实现:section_id 净化/id=session.{safe}.{safe}/metadata 合并 {section,source}/normalize_for_write(UTC 时间戳+内容 sha256+metadata.section)/update 不可变字段回写/稳定排序 (priority,source,section));XML 转义/CRUD/过滤/过期/排序/注入 6 契约 + 6 插件测试;PromptAttachmentContextWriter(上下文会话绑定)与 make_window_mutator 留待上下文接线 |
+| workspace | 55 | **目录构建器/校验/schema 语言变体已收尾(第 141 回合)**:ah-contracts workspace 补 workspace_schema(cn/en 双语言,对齐 DEFAULT_WORKSPACE_SCHEMA/_EN,含 context 节点)+ validate_directory_node(非 dict/name 空·含分隔符/path·description 类型/is_file·default_content 类型/children 递归,对齐 _validate_directory_node)+ node_full_path(顶层路径拼接,对齐 get_node_path)+ set_directory(同名替换,对齐 set_directory)+ is_safe_relative_path(绝对/盘符/UNC/.. 越级拒绝,对齐 directory_builder.py `_is_safe_path`);ah-plugins-workspace DirectoryBuilder(真实递归建目录+`.workspace` 标记+文件默认内容,不安全路径显式 `Unsafe path detected` 不落盘);4 契约 + 3 插件测试;链接管理(.team/.worktree 软链)与语言感知默认内容留待后续 |
 | schema | 35 | DeepAgentSpec/交互/停止条件/事件模型 |
 | task_loop | 35 | 事件管理器/协调器/控制器/执行器 |
 | cli | 35 | chat/run 交互、auto_harness 子命令 |
@@ -95,9 +96,9 @@
 | external | 90 | **ExternalTeamClient 已收尾(第 135 回合)**:ah-contracts external_client seam(InboxView/InboxMessage/compose_inbox_text/ExternalInboxSource/ExternalTeamClientFactory/ExternalTeamClient — 描述符投影/session 绑定/幂等 connect·close/未连接显式报错/fetch_inbox/read_inbox,对齐 client.py)+ ah-plugins-external client.rs;read_inbox 组合 external-format + team-message 模板展开 + team-i18n 看板文案;watch(messager 订阅)留待 messager seam |
 | reliability | 90 | **rail/handler/factory 已收尾(第 136 回合)**:ah-contracts reliability_rail seam(error_text/args_as_dict/measure_response 纯辅助 + 6 个 hook 信号构造 + format_anomaly_event/format_anomaly 一行摘要 + route_decision 策略路由决策 + member_detector_specs enabled 装配决策 + ReliabilityRail/ReliabilityHandler/ReliabilityFactory seam,对齐 rail.py/handler.py/factory.py 确定性部分)+ ah-plugins-reliability-monitor rail.rs(MemberReliabilityRail hook→monitor→LocalAutoRemediator 纠偏 + bind_local_sink 本地上报;LeaderReliabilityHandler 路由+格式;ReliabilityAssembly 规格+策略视图);事件订阅/投递(协调运行时)留待后续 |
 | context | 90 | **已收尾(第 129 回合)**:ah-contracts team_context seam + ah-plugins-team-context(session_id set/get/reset token 可逆,对齐 context.py) |
-| monitor | 80 | stream_logger 分块摘要 |
 | prompts | 90 | **loader.py 已收尾(第 135 回合)**:ah-contracts team_prompts 增 TeamPromptLoader seam + ah-plugins-team-prompts EmbeddedTeamPromptLoader(嵌入 scheduler_* 双语模板,缺失显式 Err,对齐 loader.py load_template);plan-mode/bridge brief 已收尾(第 134 回合):team_plan_mode 双语模板渲染 + bridge brief;messages/sections 装配留待后续 |
 | schema | 86 | **ssh_transport/task graph/blueprint 校验已收尾(第 137 回合)**:ah-contracts team_schema seam(SshTransportConfig + validate_ssh_auth 认证校验;TaskOpResult/TaskCreateResult/TaskSummary/TaskDetail/TaskListResult/TaskGraphSpec/TaskGraphResult/NewTaskSpec/GraphMutationResult 纯模型;InfraRegistry transport/storage 注册表 + transport/storage_merged_params backend/db_type 注入;validate_pool_router_exclusive/external_cli_unique/review_settings/stall_settings/swarmflow_budget/reserved_names/hitt·bridge_consistency 装配期校验,对齐 ssh_transport.py/task.py/blueprint.py 确定性部分)+ ah-plugins-team-schema(InfraRegistry 可逆注册 + 内置类型惰性播种);TeamAgentSpec.build()/DeepAgentSpec 运行时装配留待后续 |
+| monitor | 95 | **stream_logger 已收尾(第 141 回合)**:TeamStreamLogger 1:1(见 §2);TeamMonitor 只读视图精简:缺 get_members/get_member/get_task 单查 + MessageInfo(broadcast/is_read)+ get_messages to/from/hide_dm 过滤,留待后续 |
 | workflow | 80 | avatar session 后端/concurrency governor |
 | interaction | 75 | UserInbox 持久信箱、bridge 适配 |
 | memory | 75 | LLM 提取、member toolkit |

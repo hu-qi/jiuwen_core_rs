@@ -14,9 +14,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use ah_contracts::effect::Effect;
+use ah_contracts::evolving::{ApplyResult, UpdateEffect, UpdateMode, UpdateValue};
 use ah_contracts::keys::OPERATOR;
 use ah_contracts::operator::{
-    Operator, OperatorError, OperatorRegistry, ParameterUpdated, TunableKind, TunableSpec,
+    Operator, OperatorError, OperatorRegistry, ParameterUpdated, PreviewableOperator, TunableKind,
+    TunableSpec,
 };
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
@@ -428,6 +430,150 @@ impl Operator for SkillCallOperator {
     }
 }
 
+/// Skill experience 预览算子(对齐 Python core/operator/skill_call/base.py
+/// `SkillExperienceOperator`)。
+///
+/// 只拥有 `updates_generated -> local_apply_completed` 的预览语义:
+/// 审批归 ExperienceManager,持久化归 EvolutionStore,算子本身不进入
+/// pending/持久化。`apply_update` 路由到 `preview_update`。
+pub struct SkillExperienceOperator {
+    skill_name: String,
+    callbacks: Callbacks,
+}
+
+/// 协议常量(对齐 agent_evolving/protocols.py)。
+pub const EXPERIENCES_TARGET: &str = "experiences";
+pub const APPEND_MODE: &str = "append";
+pub const MERGE_MODE: &str = "merge";
+pub const PENDING_CHANGE_EFFECT: &str = "pending_change";
+pub const LOCAL_APPLY_COMPLETED: &str = "local_apply_completed";
+
+impl SkillExperienceOperator {
+    pub fn new(skill_name: impl Into<String>) -> Self {
+        Self {
+            skill_name: skill_name.into(),
+            callbacks: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl Seam for SkillExperienceOperator {}
+
+impl Operator for SkillExperienceOperator {
+    fn operator_id(&self) -> String {
+        format!("skill_experience_{}", self.skill_name)
+    }
+
+    fn get_tunables(&self) -> Vec<TunableSpec> {
+        vec![TunableSpec {
+            name: EXPERIENCES_TARGET.to_string(),
+            kind: TunableKind::SkillExperience,
+            path: "content".to_string(),
+            constraint: Some(json!({ "type": "record" })),
+        }]
+    }
+
+    fn get_state(&self) -> Value {
+        json!({})
+    }
+
+    fn set_parameter(&self, target: &str, value: Value) -> Result<(), OperatorError> {
+        // 对齐 Python set_parameter:仅 experiences 且非 None 时通知消费方,不暂存。
+        if target != EXPERIENCES_TARGET || value.is_null() {
+            return Ok(());
+        }
+        let items: Value = if let Some(list) = value.as_array() {
+            Value::Array(list.clone())
+        } else {
+            Value::Array(vec![value])
+        };
+        fire(&self.callbacks, target, &items);
+        Ok(())
+    }
+
+    fn load_state(&self, _state: Value) -> Result<(), OperatorError> {
+        Ok(())
+    }
+
+    fn on_parameter_updated(&self, callback: ParameterUpdated) -> Effect {
+        self.callbacks.lock().unwrap().push(callback.clone());
+        let callbacks = self.callbacks.clone();
+        Effect::new(move || {
+            callbacks
+                .lock()
+                .unwrap()
+                .retain(|c| !Arc::ptr_eq(c, &callback));
+        })
+    }
+}
+
+impl PreviewableOperator for SkillExperienceOperator {
+    fn preview_update(&self, target: &str, update: &UpdateValue) -> ApplyResult {
+        // 目标校验。
+        if target != EXPERIENCES_TARGET {
+            return ApplyResult {
+                operator_id: self.operator_id(),
+                target: target.to_string(),
+                applied: false,
+                mode: update.mode,
+                effect: update.effect,
+                value: Some(update.payload.clone()),
+                records: vec![],
+                change_type: update.change_type.clone(),
+                lifecycle_stage: None,
+                pending_change_id: None,
+                errors: vec![format!(
+                    "unsupported target for SkillExperienceOperator: {target}"
+                )],
+                metadata: update.metadata.clone(),
+            };
+        }
+        // mode/effect 校验:仅 append/merge + pending_change。
+        let valid_mode = matches!(update.mode, UpdateMode::Append | UpdateMode::Merge);
+        if update.effect != UpdateEffect::PendingChange || !valid_mode {
+            return ApplyResult {
+                operator_id: self.operator_id(),
+                target: target.to_string(),
+                applied: false,
+                mode: update.mode,
+                effect: update.effect,
+                value: Some(update.payload.clone()),
+                records: vec![],
+                change_type: update.change_type.clone(),
+                lifecycle_stage: None,
+                pending_change_id: None,
+                errors: vec![format!(
+                    "unsupported update mode/effect for SkillExperienceOperator: {}/{}",
+                    update.mode.as_str(),
+                    update.effect.as_str()
+                )],
+                metadata: update.metadata.clone(),
+            };
+        }
+        // 记录列表:payload 为数组原样,否则单元素。
+        let records: Vec<Value> = match update.payload.as_array() {
+            Some(list) => list.clone(),
+            None => vec![update.payload.clone()],
+        };
+        let mut metadata = update.metadata.clone();
+        metadata.insert("skill_name".to_string(), json!(self.skill_name));
+        ApplyResult {
+            operator_id: self.operator_id(),
+            target: target.to_string(),
+            applied: !records.is_empty(),
+            mode: update.mode,
+            effect: update.effect,
+            value: Some(update.payload.clone()),
+            records,
+            change_type: update.change_type.clone(),
+            lifecycle_stage: Some(LOCAL_APPLY_COMPLETED.to_string()),
+            pending_change_id: None,
+            errors: vec![],
+            metadata,
+        }
+    }
+}
+
 /// 算子注册表。
 pub struct LocalOperatorRegistry {
     operators: Arc<Mutex<HashMap<String, Arc<dyn Operator>>>>,
@@ -650,5 +796,95 @@ mod tests {
             .expect("mount");
         // effects dropped -> services unregistered (Context dropped here anyway).
         let _ = ctx2;
+    }
+
+    #[test]
+    fn skill_experience_operator_preview_semantics() {
+        use ah_contracts::evolving::{UpdateEffect, UpdateMode, UpdateValue};
+        use ah_contracts::operator::PreviewableOperator;
+
+        let op = SkillExperienceOperator::new("my_skill");
+        assert_eq!(op.operator_id(), "skill_experience_my_skill");
+
+        // tunables:experiences(kind skill_experience)。
+        let tunables = op.get_tunables();
+        assert_eq!(tunables.len(), 1);
+        assert_eq!(tunables[0].name, EXPERIENCES_TARGET);
+        assert_eq!(tunables[0].kind, TunableKind::SkillExperience);
+        assert_eq!(tunables[0].path, "content");
+        assert_eq!(op.get_state(), json!({}));
+
+        // 合法 append/pending_change 更新 → 本地预览结果(apply_update 路由到 preview)。
+        let update = UpdateValue {
+            payload: json!([{"id": "ev_1", "content": "learned"}]),
+            mode: UpdateMode::Append,
+            effect: UpdateEffect::PendingChange,
+            change_type: Some("skill_experience_entry".to_string()),
+            metadata: serde_json::Map::new(),
+        };
+        let result = PreviewableOperator::apply_update(&op, EXPERIENCES_TARGET, &update);
+        assert!(result.applied, "preview applied");
+        assert!(result.ok());
+        assert_eq!(result.records.len(), 1);
+        assert_eq!(result.records[0]["id"], "ev_1");
+        assert_eq!(
+            result.lifecycle_stage.as_deref(),
+            Some(LOCAL_APPLY_COMPLETED)
+        );
+        assert_eq!(result.metadata["skill_name"], "my_skill");
+
+        // apply_update 路由到 preview(PreviewableOperator 语义)。
+        let routed = PreviewableOperator::apply_update(&op, EXPERIENCES_TARGET, &update);
+        assert!(routed.applied);
+
+        // 不支持目标 → 显式错误。
+        let bad = op.preview_update("other", &update);
+        assert!(!bad.applied);
+        assert!(bad.errors[0].contains("unsupported target"));
+
+        // 不支持 mode/effect(replace/state)→ 显式错误。
+        let bad = op.preview_update(EXPERIENCES_TARGET, &UpdateValue::new(json!([{"id": "x"}])));
+        assert!(!bad.applied);
+        assert!(bad.errors[0].contains("unsupported update mode/effect"));
+
+        // set_parameter 通知消费方(items 列表)。
+        let fired = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let f = fired.clone();
+        let _guard = op.on_parameter_updated(Arc::new(move |t, v| {
+            assert_eq!(t, EXPERIENCES_TARGET);
+            assert!(v.is_array());
+            f.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }));
+        op.set_parameter(EXPERIENCES_TARGET, json!({"id": "r1"}))
+            .expect("set");
+        assert_eq!(fired.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // None 值跳过。
+        op.set_parameter(EXPERIENCES_TARGET, Value::Null)
+            .expect("set");
+        assert_eq!(fired.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        // 检查点为空且 load_state 无副作用。
+        op.load_state(json!({"x": 1})).expect("load");
+        assert_eq!(op.get_state(), json!({}));
+    }
+
+    #[test]
+    fn skill_experience_operator_registers_via_registry() {
+        let (ctx, effects) = build_ctx();
+        let registry = ctx
+            .service::<dyn OperatorRegistry>(&OPERATOR)
+            .expect("registry");
+        let op: Arc<dyn Operator> = Arc::new(SkillExperienceOperator::new("team_x"));
+        let _guard = registry.register(op);
+        let fetched = registry.get("skill_experience_team_x").expect("fetched");
+        assert_eq!(fetched.operator_id(), "skill_experience_team_x");
+        let ids = registry.ids();
+        assert!(ids.contains(&"skill_experience_team_x".to_string()));
+        drop(_guard);
+        assert!(
+            registry.get("skill_experience_team_x").is_none(),
+            "guard drop unregisters"
+        );
+        drop(effects);
     }
 }

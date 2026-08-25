@@ -13,10 +13,12 @@ use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::workspace::{
-    Goal, GoalStatus, WorkspaceError, WorkspaceManifest, WorkspaceService,
+    DirectoryNode, Goal, GoalStatus, WorkspaceError, WorkspaceManifest, WorkspaceService,
+    is_safe_relative_path, validate_directory_node,
 };
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
+use serde_json::Value;
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -137,6 +139,85 @@ impl WorkspaceService for FileWorkspaceService {
     }
 }
 
+/// 工作区目录构建器(对齐 directory_builder.py `DirectoryBuilder`):
+/// 按目录节点树真实创建目录(带 `.workspace` 标记文件)与文件(默认内容)。
+/// 不安全路径(绝对路径/盘符/`..` 越级)显式报错,不落盘。
+pub struct DirectoryBuilder {
+    root_path: PathBuf,
+}
+
+impl DirectoryBuilder {
+    pub fn new(root_path: impl Into<PathBuf>) -> Self {
+        Self {
+            root_path: root_path.into(),
+        }
+    }
+
+    /// 递归创建目录结构(对齐 `build` + `_create_directory_recursive`)。
+    pub fn build(&self, node: &DirectoryNode) -> Result<(), WorkspaceError> {
+        self.build_recursive(node, "")
+    }
+
+    fn build_recursive(
+        &self,
+        node: &DirectoryNode,
+        parent_path: &str,
+    ) -> Result<(), WorkspaceError> {
+        let relative = &node.path;
+        if !is_safe_relative_path(relative) {
+            return Err(WorkspaceError(format!("Unsafe path detected: {relative}")));
+        }
+        let full_path = if parent_path.is_empty() {
+            if self.root_path.as_os_str().is_empty() {
+                PathBuf::from(relative)
+            } else {
+                self.root_path.join(relative)
+            }
+        } else {
+            PathBuf::from(parent_path).join(relative)
+        };
+        let full_path_str = full_path.to_string_lossy().to_string();
+
+        if node.is_file {
+            if !full_path.exists() {
+                std::fs::create_dir_all(full_path.parent().unwrap_or(&full_path))
+                    .map_err(|e| WorkspaceError(format!("create parent dir failed: {e}")))?;
+                std::fs::write(&full_path, "")
+                    .map_err(|e| WorkspaceError(format!("write file failed: {e}")))?;
+            }
+        } else {
+            std::fs::create_dir_all(&full_path)
+                .map_err(|e| WorkspaceError(format!("create dir failed: {e}")))?;
+            // 目录标记文件 `.workspace`(空内容,对齐 marker_file)。
+            let marker = full_path.join(".workspace");
+            if !marker.exists() {
+                std::fs::write(&marker, "")
+                    .map_err(|e| WorkspaceError(format!("write marker failed: {e}")))?;
+            }
+        }
+        for child in &node.children {
+            self.build_recursive(child, &full_path_str)?;
+        }
+        Ok(())
+    }
+
+    /// 按 JSON 节点树构建(供配置驱动;先整体校验再创建)。
+    pub fn build_from_json(&self, nodes: &Value) -> Result<(), WorkspaceError> {
+        let Some(array) = nodes.as_array() else {
+            return Err(WorkspaceError(
+                "`directories` must be a list of directory definitions.".to_string(),
+            ));
+        };
+        for node in array {
+            validate_directory_node(node)?;
+            let parsed: DirectoryNode = serde_json::from_value(node.clone())
+                .map_err(|e| WorkspaceError(format!("invalid directory node: {e}")))?;
+            self.build(&parsed)?;
+        }
+        Ok(())
+    }
+}
+
 /// workspace 插件:提供真实工作区清单。
 pub struct WorkspacePlugin {
     dir: PathBuf,
@@ -240,6 +321,72 @@ mod tests {
         assert_eq!(parsed["goals"][0]["id"], "g2");
 
         drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn directory_builder_creates_real_tree() {
+        use ah_contracts::workspace::DirectoryNode;
+        let root = std::env::temp_dir().join(format!("ah-ws-build-{}", std::process::id()));
+        let builder = DirectoryBuilder::new(&root);
+
+        let tree = DirectoryNode::new("memory", "memory", "记忆", false).with_children(vec![
+            DirectoryNode::new("MEMORY.md", "MEMORY.md", "索引", true),
+            DirectoryNode::new("daily_memory", "daily_memory", "每日", false),
+        ]);
+        builder.build(&tree).expect("build");
+
+        // 目录 + 标记文件 + 子文件真实落盘。
+        assert!(root.join("memory").is_dir());
+        assert!(root.join("memory/.workspace").exists(), "marker written");
+        assert!(root.join("memory/MEMORY.md").is_file());
+        assert!(root.join("memory/daily_memory").is_dir());
+        assert!(root.join("memory/daily_memory/.workspace").exists());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn directory_builder_rejects_unsafe_path() {
+        use ah_contracts::workspace::DirectoryNode;
+        let root = std::env::temp_dir().join(format!("ah-ws-unsafe-{}", std::process::id()));
+        let builder = DirectoryBuilder::new(&root);
+
+        // 绝对路径 / 越级路径显式报错,不落盘。
+        let abs = DirectoryNode::new("escape", "/etc", "x", false);
+        assert!(builder.build(&abs).is_err());
+        let traverse = DirectoryNode::new("escape", "../up", "x", false);
+        assert!(builder.build(&traverse).is_err());
+        assert!(!root.exists() || root.read_dir().unwrap().next().is_none());
+
+        // 合法树不受影响。
+        builder
+            .build(&DirectoryNode::new("ok", "ok_dir", "x", false))
+            .expect("ok");
+        assert!(root.join("ok_dir").is_dir());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn directory_builder_from_json_validates_then_builds() {
+        let root = std::env::temp_dir().join(format!("ah-ws-json-{}", std::process::id()));
+        let builder = DirectoryBuilder::new(&root);
+
+        // 非法节点(带分隔符 name)→ 显式报错,不创建任何内容。
+        let bad = serde_json::json!([{"name": "a/b", "path": "x"}]);
+        assert!(builder.build_from_json(&bad).is_err());
+
+        // 合法 JSON 数组真实构建。
+        let good = serde_json::json!([
+            {"name": "skills", "path": "skills", "is_file": false, "children": [
+                {"name": "code", "path": "code", "is_file": true}
+            ]}
+        ]);
+        builder.build_from_json(&good).expect("build");
+        assert!(root.join("skills").is_dir());
+        assert!(root.join("skills/code").is_file());
+
         let _ = std::fs::remove_dir_all(&root);
     }
 }

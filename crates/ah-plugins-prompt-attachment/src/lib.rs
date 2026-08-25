@@ -7,11 +7,15 @@
 //! 注册服务键 PROMPT_ATTACHMENT("prompt-attachment"),实现
 //! ah_contracts::prompt_attachment::PromptAttachmentApi。
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
-use ah_contracts::keys::PROMPT_ATTACHMENT;
+use ah_contracts::keys::{PROMPT_ATTACHMENT, PROMPT_ATTACHMENT_STORE};
 use ah_contracts::prelude::Effect;
-use ah_contracts::prompt_attachment::{PromptAttachment, PromptAttachmentApi};
+use ah_contracts::prompt_attachment::{
+    AttachmentError, AttachmentFilter, PromptAttachment, PromptAttachmentApi, PromptAttachmentKind,
+    PromptAttachmentStore, PromptAttachmentUpdate, stable_sort_key,
+};
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_hub::context::Context;
@@ -197,7 +201,384 @@ impl PromptAttachmentApi for PromptAttachmentService {
     }
 }
 
-/// prompt-attachment 插件:注册 prompt-attachment seam。
+/// 内存 prompt 附件管理(对齐 Python `PromptAttachmentManager` 确定性 CRUD)。
+pub struct InMemoryPromptAttachmentStore {
+    items: Mutex<HashMap<String, HashMap<String, PromptAttachment>>>,
+    api: PromptAttachmentService,
+}
+
+impl InMemoryPromptAttachmentStore {
+    pub fn new() -> Self {
+        Self {
+            items: Mutex::new(HashMap::new()),
+            api: PromptAttachmentService,
+        }
+    }
+
+    /// 对齐 `_make_section_id`:session.{safe_id(session)}.{section_value}。
+    fn make_section_id(&self, session_id: &str, section: &str) -> String {
+        let safe_session = self.api.safe_id_part(Some(session_id), "session");
+        let safe_section = self.api.safe_id_part(Some(section), "section");
+        format!("session.{safe_session}.{safe_section}")
+    }
+
+    /// 对齐 `_section_value`:safe_id_part(str(value), fallback="section")。
+    fn section_value(&self, section: &str) -> String {
+        self.api.safe_id_part(Some(section), "section")
+    }
+
+    /// 对齐 `_normalize_for_write`:时间戳/内容哈希/metadata.section 注入。
+    fn normalize_for_write(
+        &self,
+        mut attachment: PromptAttachment,
+        is_new: bool,
+    ) -> Result<PromptAttachment, AttachmentError> {
+        let now = utc_iso_now();
+        if attachment.session_id.is_empty() {
+            return Err(AttachmentError(
+                "prompt attachment requires session_id".to_string(),
+            ));
+        }
+        if attachment.section.is_empty() {
+            return Err(AttachmentError(
+                "prompt attachment requires section".to_string(),
+            ));
+        }
+        if is_new || attachment.created_at.is_none() {
+            attachment.created_at = Some(now.clone());
+        }
+        attachment.updated_at = Some(now);
+        attachment.content_sha256 = Some(self.api.content_sha256(attachment.content.as_deref()));
+        let mut metadata = attachment.metadata.clone();
+        metadata.insert(
+            "section".to_string(),
+            Value::String(attachment.section.clone()),
+        );
+        if let Some(source) = &attachment.source {
+            metadata
+                .entry("source".to_string())
+                .or_insert_with(|| Value::String(source.clone()));
+        }
+        attachment.metadata = metadata;
+        Ok(attachment)
+    }
+
+    /// 对齐 `_find_location_by_id_unlocked` / `_find_by_id`(带 session 约束)。
+    fn find_by_id(
+        &self,
+        prompt_attachment_id: &str,
+        session_id: Option<&str>,
+    ) -> Option<(String, String)> {
+        let items = self.items.lock().unwrap();
+        for (sid, bucket) in items.iter() {
+            if let Some(expected) = session_id
+                && sid != expected
+            {
+                continue;
+            }
+            for (section, item) in bucket.iter() {
+                if item.id == prompt_attachment_id {
+                    return Some((sid.clone(), section.clone()));
+                }
+            }
+        }
+        None
+    }
+}
+
+impl Default for InMemoryPromptAttachmentStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Seam for InMemoryPromptAttachmentStore {}
+
+impl PromptAttachmentStore for InMemoryPromptAttachmentStore {
+    fn add_section(
+        &self,
+        session_id: &str,
+        section: &str,
+        content: &str,
+        kind: PromptAttachmentKind,
+        source: &str,
+        priority: i32,
+        metadata: Option<&serde_json::Map<String, serde_json::Value>>,
+        content_kind: &str,
+        expires_at: Option<&str>,
+    ) -> Result<PromptAttachment, AttachmentError> {
+        let section_id = self.section_value(section);
+        let mut merged = metadata.cloned().unwrap_or_default();
+        merged.insert("section".to_string(), Value::String(section_id.clone()));
+        merged.insert("source".to_string(), Value::String(source.to_string()));
+        let item = PromptAttachment {
+            id: self.make_section_id(session_id, &section_id),
+            section: section_id.clone(),
+            kind,
+            content: Some(content.to_string()),
+            priority,
+            source: Some(source.to_string()),
+            session_id: session_id.to_string(),
+            created_at: None,
+            updated_at: None,
+            expires_at: expires_at.map(str::to_string),
+            metadata: merged,
+            content_kind: content_kind.to_string(),
+            content_path: None,
+            content_sha256: None,
+        };
+        let mut items = self.items.lock().unwrap();
+        let existing = items.get(session_id).and_then(|b| b.get(&section_id));
+        let is_new = existing.is_none();
+        let normalized = self.normalize_for_write(item, is_new)?;
+        items
+            .entry(session_id.to_string())
+            .or_default()
+            .insert(section_id, normalized.clone());
+        Ok(normalized)
+    }
+
+    fn clear_section(&self, session_id: &str, section: &str) -> usize {
+        let section_id = self.section_value(section);
+        let mut items = self.items.lock().unwrap();
+        let Some(bucket) = items.get_mut(session_id) else {
+            return 0;
+        };
+        if bucket.remove(&section_id).is_none() {
+            return 0;
+        }
+        if bucket.is_empty() {
+            items.remove(session_id);
+        }
+        1
+    }
+
+    fn get_by_id(
+        &self,
+        prompt_attachment_id: &str,
+        session_id: Option<&str>,
+    ) -> Option<PromptAttachment> {
+        self.find_by_id(prompt_attachment_id, session_id)
+            .map(|(sid, section)| self.items.lock().unwrap()[&sid][&section].clone())
+    }
+
+    fn update_by_id(
+        &self,
+        prompt_attachment_id: &str,
+        update: &PromptAttachmentUpdate,
+    ) -> Result<PromptAttachment, AttachmentError> {
+        let mut items = self.items.lock().unwrap();
+        let mut location = None;
+        for (sid, bucket) in items.iter() {
+            for (section, item) in bucket.iter() {
+                if item.id == prompt_attachment_id {
+                    location = Some((sid.clone(), section.clone()));
+                }
+            }
+        }
+        let Some((sid, section)) = location else {
+            return Err(AttachmentError(format!(
+                "prompt attachment not found: {prompt_attachment_id}"
+            )));
+        };
+        let current = items[&sid][&section].clone();
+        let mut data = serde_json::to_value(&current).expect("attachment serializes");
+        let obj = data.as_object_mut().expect("object");
+        if let Some(kind) = update.kind {
+            obj.insert("kind".to_string(), serde_json::to_value(kind).unwrap());
+        }
+        if let Some(content) = &update.content {
+            obj.insert("content".to_string(), Value::String(content.clone()));
+        }
+        if let Some(priority) = update.priority {
+            obj.insert("priority".to_string(), Value::from(priority));
+        }
+        if let Some(source) = &update.source {
+            obj.insert("source".to_string(), Value::String(source.clone()));
+        }
+        if let Some(expires_at) = &update.expires_at {
+            obj.insert("expires_at".to_string(), Value::String(expires_at.clone()));
+        }
+        if let Some(metadata) = &update.metadata {
+            obj.insert("metadata".to_string(), Value::Object(metadata.clone()));
+        }
+        if let Some(content_kind) = &update.content_kind {
+            obj.insert(
+                "content_kind".to_string(),
+                Value::String(content_kind.clone()),
+            );
+        }
+        // 不可变字段回写。
+        obj.insert("id".to_string(), Value::String(current.id.clone()));
+        obj.insert(
+            "section".to_string(),
+            Value::String(current.section.clone()),
+        );
+        obj.insert(
+            "session_id".to_string(),
+            Value::String(current.session_id.clone()),
+        );
+        obj.insert(
+            "created_at".to_string(),
+            current
+                .created_at
+                .as_ref()
+                .map(|s| Value::String(s.clone()))
+                .unwrap_or(Value::Null),
+        );
+        let decoded: PromptAttachment = serde_json::from_value(data)
+            .map_err(|e| AttachmentError(format!("invalid attachment update: {e}")))?;
+        let updated = self.normalize_for_write(decoded, false)?;
+        items
+            .get_mut(&sid)
+            .unwrap()
+            .insert(section, updated.clone());
+        Ok(updated)
+    }
+
+    fn remove_by_id(&self, prompt_attachment_id: &str, session_id: Option<&str>) -> bool {
+        let Some((sid, section)) = self.find_by_id(prompt_attachment_id, session_id) else {
+            return false;
+        };
+        let mut items = self.items.lock().unwrap();
+        let bucket = items.get_mut(&sid).unwrap();
+        bucket.remove(&section);
+        if bucket.is_empty() {
+            items.remove(&sid);
+        }
+        true
+    }
+
+    fn list_by_filter(&self, filter: &AttachmentFilter) -> Vec<PromptAttachment> {
+        let mut items: Vec<PromptAttachment> = self
+            .items
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(sid, _)| {
+                filter
+                    .session_id
+                    .as_ref()
+                    .map(|s| s == *sid)
+                    .unwrap_or(true)
+            })
+            .flat_map(|(_, bucket)| bucket.values().cloned())
+            .filter(|item| {
+                filter
+                    .section
+                    .as_ref()
+                    .map(|s| item.section == *s)
+                    .unwrap_or(true)
+                    && filter.kind.map(|k| k == item.kind).unwrap_or(true)
+                    && filter
+                        .source
+                        .as_ref()
+                        .map(|s| item.source.as_deref() == Some(s.as_str()))
+                        .unwrap_or(true)
+            })
+            .collect();
+        items.sort_by_key(stable_sort_key);
+        items
+    }
+
+    fn remove_by_filter(
+        &self,
+        filter: &AttachmentFilter,
+        allow_all: bool,
+    ) -> Result<usize, AttachmentError> {
+        let has_filter = filter.session_id.is_some()
+            || filter.section.is_some()
+            || filter.kind.is_some()
+            || filter.source.is_some();
+        if !has_filter && !allow_all {
+            return Err(AttachmentError(
+                "destructive prompt attachment operation requires at least one filter".to_string(),
+            ));
+        }
+        let targets = self.list_by_filter(filter);
+        let mut count = 0;
+        for item in targets {
+            if self.remove_by_id(&item.id, Some(&item.session_id)) {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    fn clear_session(&self, session_id: &str) -> usize {
+        let mut items = self.items.lock().unwrap();
+        items.remove(session_id).map(|b| b.len()).unwrap_or(0)
+    }
+
+    fn clear_all(&self) -> usize {
+        let mut items = self.items.lock().unwrap();
+        let count: usize = items.values().map(|b| b.len()).sum();
+        items.clear();
+        count
+    }
+
+    fn collect_for_session(&self, session_id: &str) -> Vec<PromptAttachment> {
+        let now = utc_iso_now();
+        let mut items = self.items.lock().unwrap();
+        let mut expired: Vec<String> = Vec::new();
+        let mut result: Vec<PromptAttachment> = Vec::new();
+        if let Some(bucket) = items.get_mut(session_id) {
+            let mut keep: HashMap<String, PromptAttachment> = HashMap::new();
+            for (section, item) in bucket.drain() {
+                if ah_contracts::prompt_attachment::is_expired(&item, &now) {
+                    expired.push(section);
+                } else {
+                    keep.insert(section, item);
+                }
+            }
+            *bucket = keep;
+            result.extend(bucket.values().cloned());
+        }
+        // 空会话桶清理。
+        if let Some(bucket) = items.get(session_id)
+            && bucket.is_empty()
+        {
+            items.remove(session_id);
+        }
+        let _ = expired;
+        result.sort_by_key(stable_sort_key);
+        result
+    }
+}
+
+/// UTC 时间(ISO-8601 近似,与 Python `datetime.now(timezone.utc).isoformat()`
+/// 同为 UTC 时间戳)。
+fn utc_iso_now() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_micros())
+        .unwrap_or(0);
+    let secs = (now / 1_000_000) as i64;
+    let micros = (now % 1_000_000) as u32;
+    let days = secs.div_euclid(86_400);
+    let secs_of_day = secs.rem_euclid(86_400);
+    let (y, m, d) = civil_from_days(days);
+    let hh = secs_of_day / 3600;
+    let mm = (secs_of_day % 3600) / 60;
+    let ss = secs_of_day % 60;
+    format!("{y:04}-{m:02}-{d:02}T{hh:02}:{mm:02}:{ss:02}.{micros:06}+00:00")
+}
+
+/// days(自 1970-01-01)→ (year, month, day)(Howard Hinnant 算法)。
+fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as i64;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as i64;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// prompt-attachment 插件:注册 prompt-attachment seam + prompt-attachment-store seam。
 pub struct PromptAttachmentPlugin;
 
 impl Plugin for PromptAttachmentPlugin {
@@ -206,12 +587,16 @@ impl Plugin for PromptAttachmentPlugin {
     }
 
     fn provides(&self) -> Vec<ServiceKey> {
-        vec![PROMPT_ATTACHMENT]
+        vec![PROMPT_ATTACHMENT, PROMPT_ATTACHMENT_STORE]
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
         let service: Arc<dyn PromptAttachmentApi> = Arc::new(PromptAttachmentService);
-        Ok(vec![ctx.register(PROMPT_ATTACHMENT, service)])
+        let store: Arc<dyn PromptAttachmentStore> = Arc::new(InMemoryPromptAttachmentStore::new());
+        Ok(vec![
+            ctx.register(PROMPT_ATTACHMENT, service),
+            ctx.register(PROMPT_ATTACHMENT_STORE, store),
+        ])
     }
 }
 #[cfg(test)]
@@ -568,5 +953,293 @@ mod tests {
         // 卸载(Effect drop)后服务回滚。
         drop(effects);
         assert!(!ctx.has_service(&PROMPT_ATTACHMENT));
+    }
+
+    #[test]
+    fn store_add_get_update_remove() {
+        use ah_contracts::keys::PROMPT_ATTACHMENT_STORE;
+        use ah_contracts::prompt_attachment::PromptAttachmentStore;
+        let ctx = Context::new();
+        let plugin: DynPlugin = Arc::new(PromptAttachmentPlugin);
+        let effects = ctx.mount(&plugin).expect("mount");
+        let store = ctx
+            .service::<dyn PromptAttachmentStore>(&PROMPT_ATTACHMENT_STORE)
+            .expect("store seam");
+
+        let added = store
+            .add_section(
+                "sid1",
+                "mem",
+                "hello",
+                PromptAttachmentKind::Memory,
+                "test",
+                50,
+                None,
+                "text/plain",
+                None,
+            )
+            .expect("add");
+        assert_eq!(added.id, "session.sid1.mem");
+        assert_eq!(added.section, "mem");
+        assert_eq!(added.metadata["section"], "mem");
+        assert_eq!(added.metadata["source"], "test");
+        assert!(added.content_sha256.is_some());
+        assert!(added.created_at.is_some());
+
+        // 替换同 section → id 不变,内容更新。
+        let replaced = store
+            .add_section(
+                "sid1",
+                "mem",
+                "new",
+                PromptAttachmentKind::Memory,
+                "test",
+                50,
+                None,
+                "text/plain",
+                None,
+            )
+            .expect("replace");
+        assert_eq!(replaced.id, "session.sid1.mem");
+        assert_eq!(replaced.content.as_deref(), Some("new"));
+
+        let fetched = store.get_by_id("session.sid1.mem", None).expect("get");
+        assert_eq!(fetched.content.as_deref(), Some("new"));
+
+        // 更新内容。
+        let update = PromptAttachmentUpdate {
+            kind: None,
+            content: Some("updated".to_string()),
+            priority: Some(10),
+            source: None,
+            expires_at: None,
+            metadata: None,
+            content_kind: None,
+        };
+        let updated = store
+            .update_by_id("session.sid1.mem", &update)
+            .expect("update");
+        assert_eq!(updated.content.as_deref(), Some("updated"));
+        assert_eq!(updated.priority, 10);
+        // 未找到显式报错。
+        assert!(store.update_by_id("nope", &update).is_err());
+
+        // 删除。
+        assert!(store.remove_by_id("session.sid1.mem", None));
+        assert!(!store.remove_by_id("session.sid1.mem", None));
+        assert!(store.get_by_id("session.sid1.mem", None).is_none());
+
+        drop(effects);
+    }
+
+    #[test]
+    fn store_filter_and_destructive_guard() {
+        use ah_contracts::keys::PROMPT_ATTACHMENT_STORE;
+        use ah_contracts::prompt_attachment::{AttachmentFilter, PromptAttachmentStore};
+        let ctx = Context::new();
+        let plugin: DynPlugin = Arc::new(PromptAttachmentPlugin);
+        let effects = ctx.mount(&plugin).expect("mount");
+        let store = ctx
+            .service::<dyn PromptAttachmentStore>(&PROMPT_ATTACHMENT_STORE)
+            .expect("store");
+
+        store
+            .add_section(
+                "s1",
+                "mem",
+                "a",
+                PromptAttachmentKind::Memory,
+                "src1",
+                50,
+                None,
+                "text/plain",
+                None,
+            )
+            .expect("add");
+        store
+            .add_section(
+                "s1",
+                "todo",
+                "b",
+                PromptAttachmentKind::TodoReminder,
+                "src2",
+                10,
+                None,
+                "text/plain",
+                None,
+            )
+            .expect("add");
+        store
+            .add_section(
+                "s2",
+                "mem",
+                "c",
+                PromptAttachmentKind::Memory,
+                "src1",
+                5,
+                None,
+                "text/plain",
+                None,
+            )
+            .expect("add");
+
+        // 稳定排序:priority 升序,其次 source,再次 section。
+        let all = store.list_by_filter(&AttachmentFilter::default());
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[0].content.as_deref(), Some("c")); // priority 5
+        assert_eq!(all[1].content.as_deref(), Some("b")); // priority 10
+        assert_eq!(all[2].content.as_deref(), Some("a")); // priority 50
+
+        // 按 section 过滤。
+        let mem = store.list_by_filter(&AttachmentFilter {
+            section: Some("mem".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(mem.len(), 2);
+
+        // 按 kind 过滤。
+        let todo = store.list_by_filter(&AttachmentFilter {
+            kind: Some(PromptAttachmentKind::TodoReminder),
+            ..Default::default()
+        });
+        assert_eq!(todo.len(), 1);
+        assert_eq!(todo[0].section, "todo");
+
+        // 按 session 过滤。
+        let s1 = store.list_by_filter(&AttachmentFilter {
+            session_id: Some("s1".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(s1.len(), 2);
+
+        // 按 source 过滤。
+        let src1 = store.list_by_filter(&AttachmentFilter {
+            source: Some("src1".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(src1.len(), 2);
+
+        // 无过滤破坏性删除 → 显式报错。
+        assert!(
+            store
+                .remove_by_filter(&AttachmentFilter::default(), false)
+                .is_err()
+        );
+
+        // 按 source 删除。
+        let removed = store
+            .remove_by_filter(
+                &AttachmentFilter {
+                    source: Some("src1".to_string()),
+                    ..Default::default()
+                },
+                false,
+            )
+            .expect("remove");
+        assert_eq!(removed, 2);
+        let remaining = store.list_by_filter(&AttachmentFilter::default());
+        assert_eq!(remaining.len(), 1);
+
+        // clear_session。
+        assert_eq!(store.clear_session("s1"), 1);
+        assert_eq!(store.clear_session("s1"), 0);
+        assert_eq!(store.list_by_filter(&AttachmentFilter::default()).len(), 0);
+
+        drop(effects);
+    }
+
+    #[test]
+    fn store_expiry_collect_and_clear_all() {
+        use ah_contracts::keys::PROMPT_ATTACHMENT_STORE;
+        use ah_contracts::prompt_attachment::PromptAttachmentStore;
+        let ctx = Context::new();
+        let plugin: DynPlugin = Arc::new(PromptAttachmentPlugin);
+        let effects = ctx.mount(&plugin).expect("mount");
+        let store = ctx
+            .service::<dyn PromptAttachmentStore>(&PROMPT_ATTACHMENT_STORE)
+            .expect("store");
+
+        // 过期时间在过去 → collect 剔除。
+        store
+            .add_section(
+                "s1",
+                "old",
+                "x",
+                PromptAttachmentKind::Text,
+                "src",
+                50,
+                None,
+                "text/plain",
+                Some("2000-01-01T00:00:00+00:00"),
+            )
+            .expect("add");
+        store
+            .add_section(
+                "s1",
+                "fresh",
+                "y",
+                PromptAttachmentKind::Text,
+                "src",
+                50,
+                None,
+                "text/plain",
+                None,
+            )
+            .expect("add");
+        let collected = store.collect_for_session("s1");
+        assert_eq!(collected.len(), 1);
+        assert_eq!(collected[0].section, "fresh");
+
+        assert_eq!(store.clear_all(), 1);
+        assert_eq!(store.clear_all(), 0);
+
+        drop(effects);
+    }
+
+    #[test]
+    fn render_blocks_and_truncation() {
+        use ah_contracts::prompt_attachment::{
+            DEFAULT_MAX_PROMPT_ATTACHMENT_CHARS, DEFAULT_MAX_RENDERED_CHARS, render,
+        };
+        let a = attachment("session.sid1.mem", Some("hello <world> & \"quoted\""));
+        let rendered = render(
+            &[a],
+            DEFAULT_MAX_PROMPT_ATTACHMENT_CHARS,
+            DEFAULT_MAX_RENDERED_CHARS,
+        );
+        assert!(rendered.starts_with("<system-reminder>\n"));
+        assert!(rendered.contains("The following context is automatically attached"));
+        assert!(rendered.contains("<prompt-attachment type=\"text\">"));
+        // XML 文本转义(quote=False:引号不转义)。
+        assert!(rendered.contains("hello &lt;world&gt; &amp; \"quoted\""));
+        assert!(rendered.ends_with("</system-reminder>"));
+        // 空列表 → 空串。
+        assert_eq!(render(&[], 100, 100), "");
+
+        // 单附件超限截断。
+        let big = attachment("id-big", Some(&"x".repeat(200)));
+        let truncated = render(&[big], 100, 10_000);
+        assert!(truncated.contains("[Prompt attachment truncated: content exceeded"));
+    }
+
+    #[test]
+    fn render_sorts_and_inject_messages() {
+        use ah_contracts::prompt_attachment::{inject_messages, render};
+        let mut low = attachment("a", Some("CONTENT-LOW"));
+        low.priority = 100;
+        let mut high = attachment("b", Some("CONTENT-HIGH"));
+        high.priority = 5;
+        let rendered = render(&[low, high], 100, 10_000);
+        let high_pos = rendered.find("CONTENT-HIGH").expect("high present");
+        let low_pos = rendered.find("CONTENT-LOW").expect("low present");
+        assert!(high_pos < low_pos, "priority 5 first: {rendered}");
+
+        // inject_messages:追加为独立 user 消息;空渲染 → 原样。
+        let msgs = vec!["m1".to_string(), "m2".to_string()];
+        let injected = inject_messages(&msgs, "RENDERED");
+        assert_eq!(injected.len(), 3);
+        assert_eq!(injected[2], "RENDERED");
+        let unchanged = inject_messages(&msgs, "");
+        assert_eq!(unchanged, msgs);
     }
 }

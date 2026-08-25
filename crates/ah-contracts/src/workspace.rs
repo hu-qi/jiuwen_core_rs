@@ -115,8 +115,11 @@ impl WorkspaceNode {
 pub struct DirectoryNode {
     pub name: String,
     pub path: String,
+    #[serde(default)]
     pub description: String,
+    #[serde(default)]
     pub is_file: bool,
+    #[serde(default)]
     pub children: Vec<DirectoryNode>,
 }
 
@@ -144,33 +147,177 @@ impl DirectoryNode {
 
 /// 工作区默认目录 schema(对齐 DEFAULT_WORKSPACE_SCHEMA 的核心节点)。
 pub fn default_workspace_schema() -> Vec<DirectoryNode> {
-    vec![
-        DirectoryNode::new("AGENT.md", "AGENT.md", "基础配置和能力", true),
-        DirectoryNode::new("SOUL.md", "SOUL.md", "人格、性格和价值观", true),
-        DirectoryNode::new("HEARTBEAT.md", "HEARTBEAT.md", "心跳日志和状态记录", true),
-        DirectoryNode::new("IDENTITY.md", "IDENTITY.md", "身份凭证和权限", true),
-        DirectoryNode::new("USER.md", "USER.md", "用户数据目录", true),
-        DirectoryNode::new("memory", "memory", "记忆核心模块", false).with_children(vec![
-            DirectoryNode::new("MEMORY.md", "MEMORY.md", "长期记忆索引和摘要", true),
-            DirectoryNode::new("daily_memory", "daily_memory", "每日结构化记忆", false),
-        ]),
-        DirectoryNode::new(
-            "coding_memory",
-            "coding_memory",
-            "Coding Agent 记忆模块",
-            false,
-        )
-        .with_children(vec![DirectoryNode::new(
-            "MEMORY.md",
-            "MEMORY.md",
-            "Coding 记忆索引",
-            true,
-        )]),
-        DirectoryNode::new("todo", "todo", "待办事项目录", false),
-        DirectoryNode::new("messages", "messages", "消息历史目录", false),
-        DirectoryNode::new("skills", "skills", "技能库目录", false),
-        DirectoryNode::new("agents", "agents", "子智能体嵌套目录", false),
-    ]
+    workspace_schema("cn")
+}
+
+/// 按语言返回工作区默认 schema(对齐 `get_workspace_schema`;cn/en 两套)。
+pub fn workspace_schema(language: &str) -> Vec<DirectoryNode> {
+    if language == "en" {
+        vec![
+            DirectoryNode::new(
+                "AGENT.md",
+                "AGENT.md",
+                "Basic agent configuration and capabilities",
+                true,
+            ),
+            DirectoryNode::new(
+                "SOUL.md",
+                "SOUL.md",
+                "Agent personality, character, values, and behavioral guidelines",
+                true,
+            ),
+            DirectoryNode::new(
+                "HEARTBEAT.md",
+                "HEARTBEAT.md",
+                "Heartbeat log / status recording",
+                true,
+            ),
+            DirectoryNode::new(
+                "IDENTITY.md",
+                "IDENTITY.md",
+                "Identity credentials, unique identifier, and permission information",
+                true,
+            ),
+            DirectoryNode::new("USER.md", "USER.md", "User data directory", true),
+            DirectoryNode::new("memory", "memory", "Memory core module", false).with_children(
+                vec![
+                    DirectoryNode::new(
+                        "MEMORY.md",
+                        "MEMORY.md",
+                        "Memory overview, index, and important memory summaries",
+                        true,
+                    ),
+                    DirectoryNode::new(
+                        "daily_memory",
+                        "daily_memory",
+                        "Daily structured memory",
+                        false,
+                    ),
+                ],
+            ),
+            DirectoryNode::new("todo", "todo", "Todo items", false),
+            DirectoryNode::new("messages", "messages", "Message history module", false),
+            DirectoryNode::new("skills", "skills", "Skills library directory", false),
+            DirectoryNode::new("agents", "agents", "Sub-agent nesting directory", false),
+            DirectoryNode::new(
+                "context",
+                "context",
+                "context offload and session memory file",
+                false,
+            )
+            .with_children(vec![DirectoryNode::new(
+                "session_memory.md",
+                "session_memory.md",
+                "session memory模版",
+                true,
+            )]),
+        ]
+    } else {
+        vec![
+            DirectoryNode::new("AGENT.md", "AGENT.md", "基础配置和能力", true),
+            DirectoryNode::new("SOUL.md", "SOUL.md", "人格、性格和价值观", true),
+            DirectoryNode::new("HEARTBEAT.md", "HEARTBEAT.md", "心跳日志和状态记录", true),
+            DirectoryNode::new("IDENTITY.md", "IDENTITY.md", "身份凭证和权限", true),
+            DirectoryNode::new("USER.md", "USER.md", "用户数据目录", true),
+            DirectoryNode::new("memory", "memory", "记忆核心模块", false).with_children(vec![
+                DirectoryNode::new("MEMORY.md", "MEMORY.md", "长期记忆索引和摘要", true),
+                DirectoryNode::new("daily_memory", "daily_memory", "每日结构化记忆", false),
+            ]),
+            DirectoryNode::new(
+                "coding_memory",
+                "coding_memory",
+                "Coding Agent 记忆模块",
+                false,
+            )
+            .with_children(vec![DirectoryNode::new(
+                "MEMORY.md",
+                "MEMORY.md",
+                "Coding 记忆索引",
+                true,
+            )]),
+            DirectoryNode::new("todo", "todo", "待办事项目录", false),
+            DirectoryNode::new("messages", "messages", "消息历史目录", false),
+            DirectoryNode::new("skills", "skills", "技能库目录", false),
+            DirectoryNode::new("agents", "agents", "子智能体嵌套目录", false),
+            DirectoryNode::new(
+                "context",
+                "context",
+                "上下文offload以及session memory目录",
+                false,
+            )
+            .with_children(vec![DirectoryNode::new(
+                "session_memory.md",
+                "session_memory.md",
+                "session memory模版",
+                true,
+            )]),
+        ]
+    }
+}
+
+/// 校验单个目录节点(对齐 `_validate_directory_node`):非 dict/name 非空字符串/
+/// name 含路径分隔符/path·description 非字符串/is_file·default_content 非
+/// 对应类型/children 非列表,均显式报错。
+pub fn validate_directory_node(node: &serde_json::Value) -> Result<(), WorkspaceError> {
+    let Some(obj) = node.as_object() else {
+        return Err(WorkspaceError(
+            "Each directory entry must be a dict.".to_string(),
+        ));
+    };
+    let name = obj.get("name");
+    match name {
+        Some(serde_json::Value::String(n)) if !n.is_empty() => {}
+        _ => {
+            return Err(WorkspaceError(
+                "Directory `name` must be a non-empty string.".to_string(),
+            ));
+        }
+    }
+    let name_str = name.unwrap().as_str().unwrap();
+    if name_str.contains('/') || name_str.contains('\\') {
+        return Err(WorkspaceError(format!(
+            "Directory `name` must not contain path separators: {name_str:?}"
+        )));
+    }
+    if let Some(path) = obj.get("path")
+        && !path.is_string()
+    {
+        return Err(WorkspaceError(
+            "Directory `path` must be a string when provided.".to_string(),
+        ));
+    }
+    if let Some(description) = obj.get("description")
+        && !description.is_string()
+    {
+        return Err(WorkspaceError(
+            "Directory `description` must be a string when provided.".to_string(),
+        ));
+    }
+    if let Some(is_file) = obj.get("is_file")
+        && !is_file.is_boolean()
+    {
+        return Err(WorkspaceError(
+            "`is_file` must be a bool when provided.".to_string(),
+        ));
+    }
+    if let Some(default_content) = obj.get("default_content")
+        && !default_content.is_string()
+    {
+        return Err(WorkspaceError(
+            "`default_content` must be a string when provided.".to_string(),
+        ));
+    }
+    if let Some(children) = obj.get("children") {
+        let Some(children) = children.as_array() else {
+            return Err(WorkspaceError(
+                "Directory `children` must be a list when provided.".to_string(),
+            ));
+        };
+        for child in children {
+            validate_directory_node(child)?;
+        }
+    }
+    Ok(())
 }
 
 /// 在目录节点树中按 name 递归查找 path(对齐 get_directory 的 find_in_nodes)。
@@ -192,6 +339,58 @@ pub fn resolve_directory(directories: &[DirectoryNode], name: &str) -> Option<St
         return Some(p.to_string());
     }
     find_directory_path(&default_workspace_schema(), name).map(|p| p.to_string())
+}
+
+/// 顶层节点完整路径(对齐 Workspace.get_node_path:仅查顶层,root_path 拼接)。
+pub fn node_full_path(
+    directories: &[DirectoryNode],
+    root_path: &str,
+    name: &str,
+) -> Option<String> {
+    let relative = directories
+        .iter()
+        .find(|n| n.name == name)
+        .map(|n| n.path.clone())
+        .unwrap_or_else(|| name.to_string());
+    let root = if root_path.is_empty() { "." } else { root_path };
+    Some(format!("{}/{}", root.trim_end_matches('/'), relative))
+}
+
+/// 顶层节点添加/替换(对齐 Workspace.set_directory):同名替换,否则追加。
+pub fn set_directory(directories: &mut Vec<DirectoryNode>, node: DirectoryNode) {
+    let name = node.name.clone();
+    for existing in directories.iter_mut() {
+        if existing.name == name {
+            *existing = node;
+            return;
+        }
+    }
+    directories.push(node);
+}
+
+/// 目录构建路径安全校验(对齐 directory_builder.py `DirectoryBuilder._is_safe_path`):
+/// 绝对路径/盘符/`..` 越级均不安全。
+pub fn is_safe_relative_path(path: &str) -> bool {
+    if path.is_empty() {
+        return true;
+    }
+    if path.starts_with('/') || path.starts_with('\\') {
+        return false;
+    }
+    // Windows 盘符(C:\)。
+    let bytes = path.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return false;
+    }
+    if path.starts_with("\\\\") {
+        return false;
+    }
+    let normalized = path.replace('\\', "/");
+    let parts: Vec<&str> = normalized
+        .split('/')
+        .filter(|x| !x.is_empty() && *x != ".")
+        .collect();
+    !parts.contains(&"..")
 }
 #[cfg(test)]
 mod tests {
@@ -241,5 +440,104 @@ mod tests {
         );
         // missing from both -> None
         assert_eq!(resolve_directory(&[], "ghost"), None);
+    }
+
+    #[test]
+    fn workspace_schema_language_variants() {
+        let cn = workspace_schema("cn");
+        let en = workspace_schema("en");
+        // 两套语言都有 core 节点。
+        assert!(cn.iter().any(|n| n.name == "context"));
+        assert!(en.iter().any(|n| n.name == "context"));
+        // 语言差异:cn 有 coding_memory,en 没有。
+        assert!(cn.iter().any(|n| n.name == "coding_memory"));
+        assert!(!en.iter().any(|n| n.name == "coding_memory"));
+        // en 描述为英文。
+        let en_agent = en.iter().find(|n| n.name == "AGENT.md").unwrap();
+        assert!(en_agent.description.starts_with("Basic agent"));
+        // 未知语言回退 cn。
+        assert!(
+            workspace_schema("fr")
+                .iter()
+                .any(|n| n.name == "coding_memory")
+        );
+    }
+
+    #[test]
+    fn validate_directory_node_rejects_bad_shapes() {
+        use serde_json::json;
+        // 合法节点通过。
+        assert!(
+            validate_directory_node(&json!({
+                "name": "skills", "path": "skills", "is_file": false, "children": []
+            }))
+            .is_ok()
+        );
+        // 非 dict 报错。
+        assert!(validate_directory_node(&json!("skills")).is_err());
+        // name 缺失/空/含分隔符。
+        assert!(validate_directory_node(&json!({"path": "x"})).is_err());
+        assert!(validate_directory_node(&json!({"name": ""})).is_err());
+        assert!(validate_directory_node(&json!({"name": "a/b"})).is_err());
+        // 字段类型错误。
+        assert!(validate_directory_node(&json!({"name": "x", "path": 1})).is_err());
+        assert!(validate_directory_node(&json!({"name": "x", "is_file": "yes"})).is_err());
+        assert!(validate_directory_node(&json!({"name": "x", "children": {}})).is_err());
+        // 嵌套子节点递归校验。
+        assert!(
+            validate_directory_node(&json!({
+                "name": "mem", "children": [{"name": "bad/name"}]
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn node_full_path_and_set_directory() {
+        let mut dirs = vec![DirectoryNode::new("skills", "skills", "x", false)];
+        // 顶层路径拼接。
+        assert_eq!(
+            node_full_path(&dirs, "/root", "skills"),
+            Some("/root/skills".to_string())
+        );
+        assert_eq!(
+            node_full_path(&dirs, "/root/", "skills"),
+            Some("/root/skills".to_string())
+        );
+        // 未知顶层 → name 自身。
+        assert_eq!(
+            node_full_path(&dirs, "/root", "ghost"),
+            Some("/root/ghost".to_string())
+        );
+        // set_directory:替换同名。
+        set_directory(
+            &mut dirs,
+            DirectoryNode::new("skills", "custom", "y", false),
+        );
+        assert_eq!(dirs.len(), 1);
+        assert_eq!(dirs[0].path, "custom");
+        // 追加新名。
+        set_directory(
+            &mut dirs,
+            DirectoryNode::new("agents", "agents", "z", false),
+        );
+        assert_eq!(dirs.len(), 2);
+    }
+
+    #[test]
+    fn is_safe_relative_path_rejects_escapes() {
+        use crate::workspace::is_safe_relative_path as safe;
+        assert!(safe(""));
+        assert!(safe("skills"));
+        assert!(safe("a/b/c"));
+        assert!(safe("./a"));
+        assert!(!safe("/abs"));
+        assert!(!safe("\\abs"));
+        assert!(!safe("C:\\\\x"));
+        assert!(!safe("C:/x"));
+        assert!(!safe("\\\\server\\share"));
+        assert!(!safe("a/../b"));
+        assert!(!safe("../up"));
+        assert!(safe("a/./b"));
     }
 }

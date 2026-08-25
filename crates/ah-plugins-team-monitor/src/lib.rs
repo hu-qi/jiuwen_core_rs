@@ -2,7 +2,10 @@
 //!
 //! 真实团队监控(对齐 Python agent_teams/monitor):
 //! - 只读视图:团队信息/成员/任务(含认领人)/消息(经 TeamRuntime 查询);
-//! - 事件流:订阅 teams/task 事件,按 seq 追加到监控日志(可回读)。
+//! - 事件流:订阅 teams/task 事件,按 seq 追加到监控日志(可回读);
+//! - 流式诊断日志:TeamStreamLogger 聚合 token 流 chunk(对齐 stream_logger.py)。
+
+pub mod stream_logger;
 
 use std::sync::{Arc, Mutex};
 
