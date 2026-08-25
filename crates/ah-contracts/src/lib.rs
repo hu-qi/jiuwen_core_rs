@@ -47,6 +47,7 @@ pub mod mcp;
 pub mod member_optimizer;
 pub mod memory;
 pub mod memory_lite;
+pub mod messager;
 pub mod model_allocator;
 pub mod model_catalog;
 pub mod oauth;

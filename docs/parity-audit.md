@@ -10,9 +10,9 @@
 
 | 指标 | 值 |
 | --- | --- |
-| **总体对等度** | **≈ 64.5%**(按 Python 文件数加权;excluded 不参与计分) |
+| **总体对等度** | **≈ 65.5%**(按 Python 文件数加权;excluded 不参与计分) |
 | done / partial / missing / excluded | **6 / 89 / 0 / 2** |
-> 第 145 回合:agent_teams/security permission narrowing 收尾(60→72);第 144 回合:agent_teams/runtime BackgroundTaskController 收尾(75→80);第 143 回合:harness/schema 停止条件(35→45)+ agent_teams/schema 事件主题(86→89)+ rsi learner 检索(25→50)+ workflow ComponentAbility(85→86);harness/security Shell AST + file_guard(第 142 回合,25→48)。
+> 第 146 回合:agent_teams/messager base 配置模型 + inprocess 传输收尾(55→65);第 145 回合:agent_teams/security permission narrowing 收尾(60→72);第 144 回合:agent_teams/runtime BackgroundTaskController(75→80);第 143 回合:harness/schema 停止条件(35→45)+ agent_teams/schema 事件主题(86→89)+ rsi learner 检索(25→50)+ workflow ComponentAbility(85→86);harness/security Shell AST + file_guard(第 142 回合,25→48)。
 > 第 141 回合:core/operator 收尾 done;harness/prompts 附件 CRUD/XML 渲染/注入(55→68);harness/workspace 目录构建器(40→55);agent_teams/monitor TeamStreamLogger(80→95)。
 > 第 129 回合:context 90 / config 95 / data_loader 92(仍计 partial,未达 done 判定线 100 或 LLM 无缺) |
 | 上一基线(第 75 回合) | ≈ 31% |
@@ -112,7 +112,7 @@
 | spawn | 60 | shared_resources 单例、inprocess handle |
 | cli | 55 | 团队生命周期命令/TUI |
 | mcp | 55 | MCP server(仅 client) |
-| messager | 55 | ZMQ/WebSocket 传输 |
+| messager | 65 | **base 配置模型 + inprocess 传输已收尾(第 146 回合)**:ah-contracts messager seam(MessagerPeerConfig/MessagerTransportConfig(backend=inprocess 默认/team_name=default/node_id/地址字段/request_timeout=10.0+broadcast_topic `team:{team}:broadcast`,对齐 base.py:19-57)+ SubscriptionHandle + create_messager(inprocess→InProcessMessager,其他后端显式 `Unsupported messager backend: {backend}`,对齐 base.py:65-78)+ InProcessBus(topic→agent_id→handler pub-sub/unsubscribe 空桶清理/p2p register·send(无 handler→false)/clear,对齐 inprocess.py:21-75)+ InProcessMessager(publish 空 sender_id 盖章为 agent_id/subscribe·unsubscribe·send/register·unregister_direct_message_handler,对齐 inprocess.py:101-152));5 契约测试;pyzmq 跨进程传输留待外部依赖 |
 | tools | 55 | build_team/spawn/task/approve 团队工具 |
 | team_workspace | 50 | mount/文件锁/冲突策略(语义不同) |
 
