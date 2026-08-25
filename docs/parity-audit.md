@@ -10,8 +10,9 @@
 
 | 指标 | 值 |
 | --- | --- |
-| **总体对等度** | **≈ 57.0%**(按 Python 文件数加权;excluded 不参与计分) |
+| **总体对等度** | **≈ 59.5%**(按 Python 文件数加权;excluded 不参与计分) |
 | done / partial / missing / excluded | **6 / 89 / 0 / 2** |
+> 第 142 回合:harness/security 的 Shell AST 保守回退扫描器 + 文件路径防护(file_guard)收尾(25→48);其余不变。
 > 第 141 回合:core/operator 收尾 done;harness/prompts 附件 CRUD/XML 渲染/注入收尾(55→68);harness/workspace 目录构建器/校验/schema 语言变体收尾(40→55);agent_teams/monitor 的 TeamStreamLogger 收尾(80→95)。
 > 第 129 回合:context 90 / config 95 / data_loader 92(仍计 partial,未达 done 判定线 100 或 LLM 无缺) |
 | 上一基线(第 75 回合) | ≈ 31% |
@@ -83,7 +84,7 @@
 | cli | 35 | chat/run 交互、auto_harness 子命令 |
 | rails | 30 | 任务完成/规划/重试等 LLM 型 rail |
 | subagents | 30 | 7 类具体 LLM 子代理构建器 |
-| security | 25 | 权限引擎/文件守卫/分层策略/Shell AST |
+| security | 48 | **Shell AST + 文件路径防护已收尾(第 142 回合)**:`ah-plugins-security/src/shell_ast.rs` 保守回退扫描器(parse_shell_for_permission:空→simple/风险结构(管道·复合·替换·展开·heredoc·重定向)→parse_unavailable/shlex 风格 argv(shlex_split_posix 单引号·双引号转义·反斜杠·未闭合→None)/ShellStructureFlags.has_risky_structure/运算符标记收集,对齐 shell_ast.py:34-186)+ `file_guard.rs`(PermissionLevel/PermissionResult/FileGuardMode/Match/Action/AxisDefaults/PathRule/EffectiveFileGuardConfig 纯类型 + parse_level/strictest/axis_from_star/apply_implications(Write|Exec⇒Read,显式 deny 优先)/compile_path_entry(prefix 无 / 跳过)/match_glob(手写 **/ */? 分段匹配)/looks_like_path + normalize_path_guard_config(enabled 判定 + native/legacy 分支)+ FileGuardChecker(legacy workspace 隐式放行 + external_directory 前缀 / native defaults+prefix+glob+workspace 轴 + trusted_dirs + 迁移源 / resolve_one(最长前缀·glob 命中·deny>ask>allow·未命中 defaults)/evaluate(全 ALLOW→None,拒绝/待批 reason+matched_rule)/collect_ask_accesses/extract_paths_legacy(写类工具→write 轴,shell 命令路径抽取)),对齐 file_guard.py:81-747 + models.py + tiered_policy.py 确定性部分);8 契约 + 7 插件测试;tiered_policy 工具级规则/权限引擎组合/approval_overrides 留待后续 |
 | tools | 25 | edit/glob/grep/todo/cron/memory 等工具 |
 | goal | 25 | LLM 评估、GoalStopConfig |
 | manifest | 90 | **done(第 127 回合)**:描述符目录/工厂注册表/kind 路由注册 1:1(见 §2) |

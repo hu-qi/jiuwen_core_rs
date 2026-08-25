@@ -2,6 +2,10 @@
 //!
 //! 真实安全检测:规则后端 guardrails(提示注入、敏感数据)+ SecurityProvider
 //! 组合裁决;并注册一个通用 tools/pre-execute rail,对工具参数做安全检测。
+//! 另含 Shell AST 保守回退扫描器(shell_ast 模块,对齐 harness/security/shell_ast.py)。
+
+pub mod file_guard;
+pub mod shell_ast;
 
 use std::sync::{Arc, Mutex};
 

@@ -67,7 +67,7 @@
 | context_engine(72 文件) | `context` seam + `tokenizer` seam | 压缩、offload、token 预算、reinjection | 已实现(ah-plugins-context:预算组装/摘录压缩+LLM 总结/offload JSONL/reinject;精确 tokenizer 已落地(BPE-lite + CJK 感知,注册后 estimate_tokens 用精确计数));向量化留待后续 |
 | memory(104 文件) | `memory` seam + ah-plugins-graph-memory + ah-plugins-memory-lite | graph/lite/coding 记忆、外部 provider | 图记忆已落地(本回合:确定性实体抽取 + 共现关系 + episode + JSONL 持久化 + 关键词检索/邻居遍历 + graph_* 工具);lite 记忆原语已落地(本回合:frontmatter 解析/校验/丰富/重建 + MemoryChunk + WriteMode/WriteResult);coding 记忆工具与外部 provider 留待后续 |
 | retrieval(84 文件) | `retrieval` seam | indexing/embedding/reranker/vector store/retriever | BM25 + 本地确定性向量(哈希 n-gram TF + 余弦)已落地;reranker 本地确定性融合重排已落地(ah-plugins-rerank:词法+向量归一化加权融合 + 多样性惩罚);外部模型 embedding 留待后续 |
-| security(20 类) | `security` seam | guardrail 后端、sanitizer、风险组合 | 规则+LLM 后端
+| security(20 类) | `security` seam | guardrail 后端、sanitizer、风险组合 | 规则+LLM 后端;Shell AST 保守回退扫描器已落地(第 142 回合:parse_shell_for_permission 空→simple/风险结构→parse_unavailable/shlex 风格 argv,对齐 shell_ast.py);文件路径防护已落地(第 142 回合:PermissionLevel/Result 模型 + normalize_path_guard_config(legacy/native)+ FileGuardChecker(workspace 隐式放行/前缀·glob·defaults 解析/拒绝·待批 reason/evaluate/collect_ask/legacy 路径抽取),对齐 file_guard.py);tiered_policy 工具级规则/approval_overrides 留待后续 |
 | sys_operation(56 类) | `fs`/`shell`/`code`/`sandbox` seam + ah-plugins-sysop-* | 本地/远程受限执行 | 现成 sys_operation 资产;补远程沙箱
 | single_agent(60 类) | ah-plugins-core-single-agent | ReAct、中断恢复、skills、ability manager | 中断可恢复;非 mock 模型
 | multi_agent(26 类) | 见 agent_teams 域 | handoff/hierarchical/msgbus | 见 2.3
