@@ -10,9 +10,9 @@
 
 | 指标 | 值 |
 | --- | --- |
-| **总体对等度** | **≈ 62.5%**(按 Python 文件数加权;excluded 不参与计分) |
+| **总体对等度** | **≈ 63.5%**(按 Python 文件数加权;excluded 不参与计分) |
 | done / partial / missing / excluded | **6 / 89 / 0 / 2** |
-> 第 143 回合:harness/schema 停止条件收尾(35→45)+ agent_teams/schema 事件主题收尾(86→89)+ rsi/optimization_experience_learner 索引检索/净化/状态机收尾(25→50)+ core/workflow ComponentAbility(85→86);harness/security Shell AST + file_guard(第 142 回合,25→48)。
+> 第 144 回合:agent_teams/runtime BackgroundTaskController 收尾(75→80);第 143 回合:harness/schema 停止条件收尾(35→45)+ agent_teams/schema 事件主题收尾(86→89)+ rsi/optimization_experience_learner 索引检索收尾(25→50)+ core/workflow ComponentAbility(85→86);harness/security Shell AST + file_guard(第 142 回合,25→48)。
 > 第 141 回合:core/operator 收尾 done;harness/prompts 附件 CRUD/XML 渲染/注入收尾(55→68);harness/workspace 目录构建器/校验/schema 语言变体收尾(40→55);agent_teams/monitor 的 TeamStreamLogger 收尾(80→95)。
 > 第 129 回合:context 90 / config 95 / data_loader 92(仍计 partial,未达 done 判定线 100 或 LLM 无缺) |
 | 上一基线(第 75 回合) | ≈ 31% |
@@ -103,7 +103,7 @@
 | workflow | 80 | avatar session 后端/concurrency governor |
 | interaction | 75 | UserInbox 持久信箱、bridge 适配 |
 | memory | 75 | LLM 提取、member toolkit |
-| runtime | 75 | BackgroundTaskController/InteractGate |
+| runtime | 80 | **BackgroundTaskController 已收尾(第 144 回合)**:ah-contracts team_pool 补 SwarmflowRunHandle(abort/abort_sessions/cancel/relaunch 闭包注入,对齐 SwarmflowRunHandle)+ BackgroundTaskController(register/deregister 幂等/pause 三步(abort→abort_sessions→cancel)+ 登记 relaunch/resume 重放/is_paused,空集 no-op 返回 false,对齐 background_task_controller.py:26-119);3 契约测试;InteractGate(既有);其余 runtime 留待后续 |
 | observability | 70 | OTLP 导出/redaction/callback handler |
 | rails | 70 | approval orchestrator/plan-mode/policy |
 | skill | 65 | skill CLI 子命令 |

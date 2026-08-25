@@ -177,3 +177,203 @@ pub trait TeamRuntimePool: Seam {
     /// 全部团队只读快照。
     fn list_all_info(&self) -> Vec<ActiveTeamInfo>;
 }
+
+// ---------------------------------------------------------------------------
+// 后台任务控制器(对齐 runtime/background_task_controller.py)
+// ---------------------------------------------------------------------------
+
+/// 一次存活 swarmflow 运行的控制句柄(对齐 SwarmflowRunHandle)。
+///
+/// 引擎副作用(abort_sessions/cancel/relaunch)由持有方经闭包注入,控制器只做
+/// 注册表 + 暂停/恢复编排 —— 对齐 Python 的 handle 携带 backend/native/relaunch。
+#[derive(Clone)]
+pub struct SwarmflowRunHandle {
+    pub task_id: String,
+    /// 设置引擎 abort_event(经闭包执行)。
+    pub abort: std::sync::Arc<dyn Fn() + Send + Sync>,
+    /// 中止该 run 的会话(经闭包执行;best-effort)。
+    pub abort_sessions: std::sync::Arc<dyn Fn() + Send + Sync>,
+    /// 取消顶层 run task(best-effort)。
+    pub cancel: std::sync::Arc<dyn Fn() + Send + Sync>,
+    /// 以相同输入重新启动 run_background。
+    pub relaunch: std::sync::Arc<dyn Fn() + Send + Sync>,
+}
+
+impl SwarmflowRunHandle {
+    /// 以闭包构造句柄。
+    pub fn new(
+        task_id: impl Into<String>,
+        abort: std::sync::Arc<dyn Fn() + Send + Sync>,
+        abort_sessions: std::sync::Arc<dyn Fn() + Send + Sync>,
+        cancel: std::sync::Arc<dyn Fn() + Send + Sync>,
+        relaunch: std::sync::Arc<dyn Fn() + Send + Sync>,
+    ) -> Self {
+        Self {
+            task_id: task_id.into(),
+            abort,
+            abort_sessions,
+            cancel,
+            relaunch,
+        }
+    }
+}
+
+/// 后台任务控制面(对齐 BackgroundTaskController)。
+///
+/// 注册表 + 控制面:run 启动时注册句柄、完成时注销;`pause`/`resume` 作用于
+/// 已注册句柄。无匹配 run 时 pause/resume 返回 false(no-op)。
+#[derive(Default)]
+pub struct BackgroundTaskController {
+    state: Mutex<BackgroundTaskState>,
+}
+
+#[derive(Default)]
+struct BackgroundTaskState {
+    active: std::collections::HashMap<String, SwarmflowRunHandle>,
+    paused: std::collections::HashMap<String, std::sync::Arc<dyn Fn() + Send + Sync>>,
+}
+
+impl BackgroundTaskController {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 注册一次运行的控制句柄(启动时调用)。
+    pub fn register(&self, handle: SwarmflowRunHandle) {
+        self.state
+            .lock()
+            .unwrap()
+            .active
+            .insert(handle.task_id.clone(), handle);
+    }
+
+    /// 注销句柄(launcher finally 调用;幂等)。
+    pub fn deregister(&self, task_id: &str) {
+        self.state.lock().unwrap().active.remove(task_id);
+    }
+
+    /// 暂停全部活跃运行;无活跃返回 false(对齐 pause 三步:abort → abort_sessions
+    /// → cancel,再登记 relaunch 到 paused 并移出 active)。
+    pub fn pause(&self) -> bool {
+        let mut state = self.state.lock().unwrap();
+        if state.active.is_empty() {
+            return false;
+        }
+        let handles: Vec<SwarmflowRunHandle> = state.active.values().cloned().collect();
+        for handle in handles {
+            (handle.abort)();
+            (handle.abort_sessions)();
+            (handle.cancel)();
+            state.paused.insert(handle.task_id.clone(), handle.relaunch);
+            state.active.remove(&handle.task_id);
+        }
+        true
+    }
+
+    /// 恢复全部暂停运行(重放 relaunch);无暂停返回 false。
+    pub fn resume(&self) -> bool {
+        let mut state = self.state.lock().unwrap();
+        if state.paused.is_empty() {
+            return false;
+        }
+        let relaunches: Vec<(String, std::sync::Arc<dyn Fn() + Send + Sync>)> =
+            state.paused.drain().collect();
+        for (task_id, relaunch) in relaunches {
+            (relaunch)();
+            state.active.remove(&task_id);
+        }
+        true
+    }
+
+    /// 是否处于暂停态(有待恢复的 run)。
+    pub fn is_paused(&self) -> bool {
+        !self.state.lock().unwrap().paused.is_empty()
+    }
+
+    /// 活跃 run 数。
+    pub fn active_count(&self) -> usize {
+        self.state.lock().unwrap().active.len()
+    }
+
+    /// 暂停 run 数。
+    pub fn paused_count(&self) -> usize {
+        self.state.lock().unwrap().paused.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn handle(
+        task_id: &str,
+        abort: std::sync::Arc<dyn Fn() + Send + Sync>,
+        relaunch: std::sync::Arc<dyn Fn() + Send + Sync>,
+    ) -> SwarmflowRunHandle {
+        let noop = std::sync::Arc::new(|| {}) as std::sync::Arc<dyn Fn() + Send + Sync>;
+        SwarmflowRunHandle::new(task_id, abort, noop.clone(), noop, relaunch)
+    }
+
+    #[test]
+    fn controller_register_pause_resume() {
+        let ctl = BackgroundTaskController::new();
+        let aborted = Arc::new(AtomicUsize::new(0));
+        let resumed = Arc::new(AtomicUsize::new(0));
+        let a = aborted.clone();
+        let r = resumed.clone();
+        ctl.register(handle(
+            "run1",
+            Arc::new(move || {
+                a.fetch_add(1, Ordering::SeqCst);
+            }),
+            Arc::new(move || {
+                r.fetch_add(1, Ordering::SeqCst);
+            }),
+        ));
+        assert_eq!(ctl.active_count(), 1);
+        assert!(!ctl.is_paused());
+
+        // pause:三步执行(abort 至少一次),active → paused。
+        assert!(ctl.pause());
+        assert_eq!(aborted.load(Ordering::SeqCst), 1);
+        assert_eq!(ctl.active_count(), 0);
+        assert!(ctl.is_paused());
+        assert_eq!(ctl.paused_count(), 1);
+
+        // 无活跃 → pause false;无暂停 → resume false。
+        assert!(!ctl.pause());
+        // resume:重放 relaunch。
+        assert!(ctl.resume());
+        assert_eq!(resumed.load(Ordering::SeqCst), 1);
+        assert!(!ctl.is_paused());
+        assert!(!ctl.resume());
+    }
+
+    #[test]
+    fn controller_deregister_is_idempotent() {
+        let ctl = BackgroundTaskController::new();
+        ctl.register(handle("run2", Arc::new(|| {}), Arc::new(|| {})));
+        ctl.deregister("run2");
+        ctl.deregister("run2"); // 幂等。
+        assert_eq!(ctl.active_count(), 0);
+        assert!(!ctl.pause(), "no active → pause no-op");
+    }
+
+    #[test]
+    fn gate_admit_consume_close_reset() {
+        let gate = InteractGate::new();
+        let ticket = gate.admit().expect("admit open");
+        assert_eq!(gate.inflight(), 1);
+        gate.consume_done(ticket);
+        assert_eq!(gate.inflight(), 0);
+
+        gate.close_and_drain();
+        assert!(gate.closed());
+        assert!(gate.admit().is_none(), "closed gate rejects admit");
+
+        gate.reset();
+        assert!(!gate.closed());
+        let _ = gate.admit().expect("admit after reset");
+    }
+}
