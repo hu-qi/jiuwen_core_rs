@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::effect::Effect;
 use crate::seam::Seam;
+use serde_json::Value;
 
 /// 风险级别。
 #[derive(
@@ -348,6 +349,126 @@ pub fn level_for_action(rule: &FileGuardPathRule, action: FileGuardAction) -> Pe
     }
 }
 
+/// 权限收窄(对齐 agent_teams/security/narrowing.py `narrow_permissions`)。
+///
+/// 逐工具取 base 与 override 的严格者:base 显式级别优先,否则按
+/// `defaults[tool]` → `defaults["*"]` → ASK 解析默认;未列工具不改变。
+/// 其余字段(defaults/rules/approval_overrides 等)原样保留。
+pub fn narrow_permissions(
+    base_config: &serde_json::Value,
+    tools_override: &serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Value {
+    let mut narrowed = base_config.clone();
+    let Some(base_obj) = narrowed.as_object_mut() else {
+        return base_config.clone();
+    };
+    let mut base_tools: serde_json::Map<String, serde_json::Value> = base_obj
+        .get("tools")
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let defaults = base_obj
+        .get("defaults")
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+
+    for (tool_name, override_value) in tools_override {
+        let override_level = match override_value.as_str() {
+            Some(s) => parse_level(s, PermissionLevel::Ask),
+            None => continue,
+        };
+        let narrowed_level = match base_tools.get(tool_name) {
+            Some(Value::String(base_str)) => {
+                let base_level = parse_level(base_str, PermissionLevel::Ask);
+                strictest(&[base_level, override_level])
+            }
+            _ => {
+                let default_str = defaults
+                    .get(tool_name)
+                    .or_else(|| defaults.get("*"))
+                    .and_then(serde_json::Value::as_str);
+                let default_level = match default_str {
+                    Some(s) => parse_level(s, PermissionLevel::Ask),
+                    None => PermissionLevel::Ask,
+                };
+                strictest(&[default_level, override_level])
+            }
+        };
+        base_tools.insert(
+            tool_name.clone(),
+            serde_json::Value::String(narrowed_level.as_str().to_string()),
+        );
+    }
+
+    base_obj.insert("tools".to_string(), serde_json::Value::Object(base_tools));
+    narrowed
+}
+
+/// 格式化基础权限描述(对齐 `format_base_permissions_for_desc`)。
+pub fn format_base_permissions_for_desc(config: &serde_json::Value, lang: &str) -> String {
+    let tools = config
+        .get("tools")
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let defaults = config
+        .get("defaults")
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    if tools.is_empty() && defaults.is_empty() {
+        return String::new();
+    }
+
+    let mut lines: Vec<String> = Vec::new();
+    if lang == "cn" {
+        lines.push("当前 teammate 的基础权限规则：".to_string());
+    } else {
+        lines.push("Current teammate base permissions:".to_string());
+    }
+    let mut tool_names: Vec<&String> = tools.keys().collect();
+    tool_names.sort();
+    for tool in tool_names {
+        let level = tools
+            .get(tool)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        lines.push(format!("- {tool}: {level}"));
+    }
+    if let Some(wildcard) = defaults.get("*").and_then(serde_json::Value::as_str) {
+        if lang == "cn" {
+            lines.push(format!("- 其他未列出的工具: {wildcard} (defaults 兜底)"));
+        } else {
+            lines.push(format!(
+                "- Other tools not listed above: {wildcard} (defaults fallback)"
+            ));
+        }
+    }
+    if lang == "cn" {
+        lines.push(String::new());
+        lines.push(
+            "创建成员的时候，你可以根据任务风险设置更严格的工具权限；例如对只读分析任务禁用写入类工具，或将高风险执行类工具从 allow 收紧为 ask/deny。不得授予比上述基础权限更宽的权限。".to_string(),
+        );
+        lines.push("收窄规则：只能收紧，不能放宽。".to_string());
+        lines.push(
+            "ask → deny ✓  |  allow → ask/deny ✓  |  deny → allow/ask ✗ (自动修正)".to_string(),
+        );
+    } else {
+        lines.push(String::new());
+        lines.push(
+            "When creating a member, you may set stricter tool permissions based on task risk; for example, disable write tools for read-only analysis tasks, or narrow high-risk execution tools from allow to ask/deny. You must not grant permissions broader than the base permissions above.".to_string(),
+        );
+        lines.push("Narrowing rules: only tightening, never loosening.".to_string());
+        lines.push(
+            "ask → deny ✓  |  allow → ask/deny ✓  |  deny → allow/ask ✗ (auto-corrected)"
+                .to_string(),
+        );
+    }
+    lines.join("\n")
+}
+
 /// 是否形如路径(对齐 `_looks_like_path`)。
 pub fn looks_like_path(token: &str) -> bool {
     if token.starts_with("\\\\") || token.starts_with("./") || token.starts_with("../") {
@@ -367,6 +488,7 @@ pub fn looks_like_path(token: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn permission_level_parse_and_strictest() {
@@ -570,5 +692,64 @@ mod tests {
         assert!(looks_like_path("a/b"));
         assert!(!looks_like_path("hello"));
         assert!(!looks_like_path("-flag"));
+    }
+
+    #[test]
+    fn narrow_permissions_tightens_only() {
+        let base = serde_json::json!({
+            "tools": {"read_file": "allow", "write_file": "allow"},
+            "defaults": {"*": "ask"}
+        });
+        // write_file: allow + deny → deny(strictest)。
+        let mut override_map = serde_json::Map::new();
+        override_map.insert("write_file".to_string(), serde_json::json!("deny"));
+        let narrowed = narrow_permissions(&base, &override_map);
+        assert_eq!(narrowed["tools"]["write_file"], "deny");
+        assert_eq!(narrowed["tools"]["read_file"], "allow", "未覆盖工具不变");
+        // defaults 兜底:grep 不在 tools → defaults["*"]=ask + override ask → ask。
+        override_map.insert("grep".to_string(), serde_json::json!("ask"));
+        let narrowed = narrow_permissions(&base, &override_map);
+        assert_eq!(narrowed["tools"]["grep"], "ask");
+        // 其他字段保留。
+        assert_eq!(narrowed["defaults"]["*"], "ask");
+    }
+
+    #[test]
+    fn narrow_permissions_defaults_fallback_and_allow() {
+        let base = serde_json::json!({
+            "tools": {"read_file": "allow"},
+            "defaults": {"read_file": "allow", "*": "ask"}
+        });
+        // read_file 在 defaults 显式 → allow + allow → allow。
+        let mut override_map = serde_json::Map::new();
+        override_map.insert("read_file".to_string(), serde_json::json!("allow"));
+        let narrowed = narrow_permissions(&base, &override_map);
+        assert_eq!(narrowed["tools"]["read_file"], "allow");
+        // tools 未列 + defaults 无该键 + 无 * → ASK + override deny → deny。
+        let mut override_map = serde_json::Map::new();
+        override_map.insert("ghost_tool".to_string(), serde_json::json!("deny"));
+        let narrowed = narrow_permissions(&json!({"tools": {}}), &override_map);
+        assert_eq!(narrowed["tools"]["ghost_tool"], "deny");
+    }
+
+    #[test]
+    fn format_base_permissions_for_desc_bilingual() {
+        let config = serde_json::json!({
+            "tools": {"bash": "ask", "read_file": "allow"},
+            "defaults": {"*": "ask"}
+        });
+        let en = format_base_permissions_for_desc(&config, "en");
+        assert!(en.starts_with("Current teammate base permissions:"));
+        assert!(en.contains("- bash: ask"));
+        assert!(en.contains("Other tools not listed above: ask"));
+        assert!(en.contains("Narrowing rules"));
+        let cn = format_base_permissions_for_desc(&config, "cn");
+        assert!(cn.starts_with("当前 teammate 的基础权限规则："));
+        assert!(cn.contains("收窄规则"));
+        // 空配置 → 空串。
+        assert_eq!(
+            format_base_permissions_for_desc(&serde_json::json!({}), "en"),
+            ""
+        );
     }
 }

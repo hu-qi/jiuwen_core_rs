@@ -8,6 +8,9 @@
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
+> **账目更新**(第 145 回合,协调者实现,partial 收尾推进):
+> - agent_teams/security → 60→72:ah-contracts security 补 narrow_permissions(对齐 narrowing.py:19-63 — 逐工具 strictest(base,override):tools 显式级别优先,否则 defaults[tool] → defaults["*"] → ASK 兜底;`deny<ask<allow` 只收紧不放宽;tools 字段更新,其余字段(defaults/rules/approval_overrides 等)原样保留)+ format_base_permissions_for_desc(对齐 narrowing.py:66-131 — cn/en 双语:显式工具规则清单 + defaults["*"] 兜底行 + 收窄规则说明(ask→deny ✓/allow→ask·deny ✓/deny→allow·ask ✗ 自动修正);空 tools+defaults → 空串);3 契约测试
+>
 > **账目更新**(第 144 回合,协调者实现,partial 收尾推进):
 > - agent_teams/runtime → 75→80:ah-contracts team_pool 补 SwarmflowRunHandle(task_id + abort/abort_sessions/cancel/relaunch 四个 Arc<dyn Fn> 闭包注入,对齐 SwarmflowRunHandle)+ BackgroundTaskController(register 启动注册/deregister finally 幂等注销/pause 三步(abort → abort_sessions → cancel,best-effort)+ 登记 relaunch 到 paused 并移出 active/resume 重放 relaunch 并清 paused/is_paused 是否暂停/active_count·paused_count;空集 pause/resume 返回 false no-op,对齐 background_task_controller.py:26-119);3 契约测试
 >
