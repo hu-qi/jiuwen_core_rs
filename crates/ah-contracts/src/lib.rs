@@ -116,6 +116,7 @@ pub mod tracer_otel;
 pub mod trainer;
 pub mod transport;
 pub mod tune;
+pub mod tune_kit;
 pub mod web;
 pub mod workflow;
 pub mod workspace;
@@ -363,6 +364,12 @@ pub mod prelude {
         AgentCard, AgentHandler, AgentMessage, AgentTransport, TransportError,
     };
     pub use crate::tune::{TuneError, TunePipeline, TuneRequest, TuneResult, TuneRoundResult};
+    pub use crate::tune_kit::{
+        Case, CaseLoader, EvaluatedCase, OptimizeHistory, Progress, TextualParameter, TraceNode,
+        TuneKit, TuneKitError, TuneUtils, create_bad_case_text, evaluate_result_to_score,
+        extract_optimized_prompt_from_response, find_missing_placeholders,
+        find_placeholders_from_prompt, tune_constant,
+    };
     pub use crate::web::{WebError, WebFetchRequest, WebFetchResult, WebProvider};
     pub use crate::workflow::{
         EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError, WorkflowOutput, WorkflowSpec,

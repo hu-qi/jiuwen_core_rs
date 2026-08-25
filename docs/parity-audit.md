@@ -1,7 +1,7 @@
 # 对等审计基线(parity-audit.md)
 
 > 生成时间:第 127 回合;审计基线:`b5c3548`(92 crates / 925 tests)。
-> 当前(第 139 回合):108 crates;本回合新增 ah-contracts team_prompts 7 测试 + ah-plugins-team-prompts 3 测试。
+> 当前(第 140 回合):109 crates;本回合新增 ah-contracts team_prompts 7 测试 + ah-plugins-team-prompts 3 测试。
 > 方法:7 域 97 个子模块,逐模块读 Python 源码(类/函数签名)对照 Rust crate 源码(`pub fn/struct/enum/trait` + `impl`),带 file:line 证据。
 > 判定标准(严格):`done` = 全部核心功能点**含 LLM 驱动能力**(LLM judge/生成/诊断、梯度优化器、embedding/reranker、多后端/多 provider/多拓扑)在 Rust 1:1 对等;Python 是 LLM 驱动而 Rust 只有确定性规则/字符串匹配/简化循环 → `partial`;Rust 无实现 → `missing`。
 > 此表衡量**行为对等度**(含 LLM 能力),不是"有代码就算完成"的功能覆盖率。
@@ -166,7 +166,7 @@
 | 模块 | pct | 主要缺口 |
 | --- | ---: | --- |
 | skill_evaluator | 45 | 多 skill 流水线(tester/judge/safety)、报告落盘 |
-| tune | 40 | CaseLoader、DefaultEvaluator、4 类优化器、ParameterSearcher |
+| tune | 52 | **确定性数据模型/工具已收尾(第 140 回合)**:ah-contracts tune_kit seam(TuneConstant 常量 + Case/EvaluatedCase 模型;CaseLoader(shuffle 确定性 LCG/split 比例切分/assign_case_id,对齐 dataset/case_loader.py);TuneUtils(validate_digital_parameter 范围校验/parse_json_from_llm_response```json```块提取/parse_list_from_llm_response```list```块提取/convert_cases_to_examples few-shot 格式化/convert_dict_to_string,对齐 utils.py);TextualParameter(gradient 存取)/TraceNode/OptimizeHistory(case_id 轨迹 + get_llm_call_history,对齐 optimizer/base.py);Progress(run_epoch/run_batch + best_batch_score 重置,对齐 trainer/base.py);extract_optimized_prompt_from_response(标签提取 + prompt_base 去除)/find_placeholders/find_missing_placeholders/create_bad_case_text(对齐 instruction_optimizer.py 确定性部分)/evaluate_result_to_score(true→1.0,对齐 evaluator.py))+ ah-plugins-tune kit.rs(TuneKit 门面,注册 tune-kit 键);LLM 驱动梯度生成/优化器 backward/DefaultEvaluator 模型调用留待后续 |
 | agent_builder | 20 | LLM 澄清/生成/意图/设计/反思、dl_transformer |
 
 ## 5. 根因与规律

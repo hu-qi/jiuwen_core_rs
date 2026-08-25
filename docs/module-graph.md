@@ -2,7 +2,7 @@
 
 > 等价 DSH 的 module-graph:登记 crate 布局与依赖规则。新增 crate 时必须更新本文件。
 
-## 1. 当前 crate 依赖(全部 108 crates)
+## 1. 当前 crate 依赖(全部 109 crates)
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -34,6 +34,7 @@
 ├─> ah-plugins-optimizer    (文本梯度优化器 backward)                   ──> ah-hub, ah-contracts
 ├─> ah-plugins-trainer      (自进化训练器:验证基线评估)                  ──> ah-hub, ah-contracts
 ├─> ah-plugins-tune         (训练流水线:subagent 委派 + evolving 评估)   ──> ah-hub, ah-contracts
+├─> ah-plugins-tune-kit     (确定性训练工具:CaseLoader/参数校验/块解析/examples 格式化/占位符/进度,对齐 dev_tools/tune 确定性部分) ──> ah-hub, ah-contracts
 ├─> ah-plugins-runner       (回调链:优先级降序执行)                      ──> ah-hub, ah-contracts
 ├─> ah-plugins-rl           (RL 奖励函数;VERL/PPO/LoRA 留待后续)         ──> ah-hub, ah-contracts
 ├─> ah-plugins-rsi          (递归自改进:数据集生成/评估/优化)            ──> ah-hub, ah-contracts
@@ -95,7 +96,7 @@
 ## 2. 规划:完整插件布局(源自 capability-map.md)
 
 ```text
-ah-contracts                契约层:seam / 事件 / effect / 类型(108 crates 之一)
+ah-contracts                契约层:seam / 事件 / effect / 类型(109 crates 之一)
 ah-hub                      内核:Context / EventBus / Plugin 生命周期
 ah-app                      boot 入口 + demo(main)+ ah-cli(交互 CLI,消费会话管理)
 

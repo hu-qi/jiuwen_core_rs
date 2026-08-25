@@ -2,6 +2,10 @@
 //!
 //! 真实训练流水线(dev_tools tune):每轮用当前 prompt 委派 subagent 执行任务,
 //! evolving 评估真实轨迹得分,evolving 优化建议精化 prompt,记录最优 prompt。
+//! 另提供 `tune-kit` seam(确定性训练工具门面,见 kit.rs)。
+
+mod kit;
+pub use kit::{TuneKitImpl, TuneKitPlugin};
 
 use std::sync::Arc;
 

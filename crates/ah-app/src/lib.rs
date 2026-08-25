@@ -119,6 +119,7 @@ use ah_plugins_tools::ToolsPlugin;
 use ah_plugins_tracer_otel::OtelTracerPlugin;
 use ah_plugins_trainer::TrainerPlugin;
 use ah_plugins_transport::TransportPlugin;
+use ah_plugins_tune::TuneKitPlugin;
 use ah_plugins_tune::TunePlugin;
 use ah_plugins_web::WebPlugin;
 use ah_plugins_workflow::WorkflowPlugin;
@@ -496,6 +497,7 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-pregel", Arc::new(PregelPlugin) as DynPlugin),
         ("ah-plugins-tune", Arc::new(TunePlugin) as DynPlugin),
+        ("ah-plugins-tune-kit", Arc::new(TuneKitPlugin) as DynPlugin),
         (
             "ah-plugins-tracer-otel",
             Arc::new(OtelTracerPlugin) as DynPlugin,

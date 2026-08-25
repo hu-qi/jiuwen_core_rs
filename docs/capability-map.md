@@ -148,7 +148,7 @@
 | --- | --- | --- | --- |
 | prompt_builder | ah-plugins-prompt-builder-devtools | meta/feedback/badcase 构建 | 已落地(本回合:ah-contracts prompt_builder_devtools seam + ah-plugins-prompt-builder-devtools — 三构建器确定性编排:校验(空/上限 10/索引边界)/bad-case 拼接/```json 围栏解析/<intent>/<summary> 提取/META_TEMPLATE_ 前缀注册表;LLM 调用经 PromptBuilderModel seam 注入,缺失显式报错) |
 | agent_builder | ah-plugins-agentbuilder | NL→设计→DSL→执行 | 已落地(本回合:确定性意图解析 → WorkflowSpec DSL → WorkflowEngine 真实执行) |
-| tune | ah-plugins-tune | optimizer/evaluator/trainer 流水线 | 已落地(本回合:subagent 执行 + evolving 评估/优化精化 prompt + 最优跟踪) |
+| tune | ah-plugins-tune + `tune-kit` seam + ah-plugins-tune-kit | optimizer/evaluator/trainer 流水线 + 确定性训练工具 | 已落地(本回合:subagent 执行 + evolving 评估/优化精化 prompt + 最优跟踪);确定性工具已落地(第 140 回合:ah-contracts tune_kit seam + ah-plugins-tune kit.rs — TuneConstant/Case/EvaluatedCase + CaseLoader(shuffle/split/case_id)+ TuneUtils(参数校验/json·list 块解析/examples 格式化)+ TextualParameter/TraceNode/OptimizeHistory + Progress + 优化 prompt 标签提取/占位符查找与缺失/bad-case 文本/评估分数决策,对齐 dev_tools/tune 确定性部分);LLM 梯度生成/优化器 backward/DefaultEvaluator/ParameterSearcher 留待后续 |
 | skill_creator/evaluator | ah-plugins-skill-creator + ah-plugins-skill | 技能注册/持久化/评估 | skill_creator 已落地(本回合:ah-contracts skill_creator seam + ah-plugins-skill-creator — slugify/url_to_slug/image_ext/资产编号 dom_NNN/内容过滤/去幻影图片/空行折叠;抓取与 LLM 生成经 SkillFetcher/SkillGenerator seam 注入,缺失显式报错);skill/evaluator 已落地(文件后端 + subagent 委派 + evolving 轨迹评估) |
 | symphony | ah-plugins-symphony | 能力检索/编排/legacy runtime | 已落地(本回合:能力注册 + 语义指纹 + 任务检索 + 可解释计划 + 工具/subagent 真实执行,JSONL 持久化)
 
