@@ -89,7 +89,7 @@ waterfall 决策值 ToolDecision { allow: bool, reason: Option<String>, argument
 | agent/pre-step | waterfall | agent 循环 | rails、上下文注入 | 规划 |
 | agent/request | waterfall | agent 循环 | 模型适配、拦截 | 规划 |
 | fs/* | waterfall | fs seam | 沙箱、策略 | 规划(路径策略经 tools/pre-execute:PathGuardRail/SandboxRail 已落地) |
-| telemetry/* | emit | 各插件 | 导出器 | 规划(telemetry seam 已落地:span 记录 + JSONL 导出,由 agent/step 与 tools/post-execute 驱动;OTLP 留待后续) |
+| telemetry/* | emit | 各插件 | 导出器 | span 记录与 JSONL、OTLP/JSON HTTP 导出已实现;完整 OTel SDK、重试/批处理和 collector production E2E 仍为 partial |
 
 ## 事件登记规则
 

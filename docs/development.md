@@ -1,93 +1,122 @@
-# 开发流程(development.md)
+# 开发流程
 
-> 所有贡献者必读。提交代码前请确保通过本文定义的检查。
+> 所有贡献者必读。架构约束见 `architecture.md`,测试口径见 `testing.md`,当前任务见
+> `ROADMAP.md`。
 
-## 1. 前置条件与搭建
+## 前置条件
 
-- Rust stable toolchain(CI 与本地保持一致);
+- Rust stable toolchain;
 - git 2.26+;
-- 可选:真实 provider 的凭据(OpenAI 等),仅真实 e2e 需要,缺失时自动跳过。
+- 可选的外部服务或凭据,仅对应 production E2E 需要;
+- production profile 当前还依赖本地 Redis、OpenAI 凭据及部分外部命令,不能假定任意环境可直接启动。
 
 ```sh
 cargo build --workspace
 cargo test --workspace
-cargo run -p ah-app        # 从 profiles/dev.toml 启动(全 mock)
+cargo run -p ah-app -- profiles/dev.toml
 ```
 
-## 2. 工作包生命周期
+`dev.toml` 使用 mock LLM 进行本地结构冒烟。它不证明 production profile 或 Python parity。
 
-每个能力(见 capability-map.md)按四阶段推进,每阶段都有独立验收:
+## 工作包生命周期
 
 | 阶段 | 产出 | 验收 |
 | --- | --- | --- |
-| 1. 契约 | ah-contracts 中的 seam trait + 纯类型 + 契约单测 | cargo test -p ah-contracts;契约零实现检查 |
-| 2. Mock | ah-plugins-mock 中的确定性实现 + 插件注册 | 系统可 boot;dev profile 端到端可运行 |
-| 3. 真实 | ah-plugins-* 生产实现 | 真实协议/持久化/子进程路径 + 集成测试;profile 从 mock 切换到真实 |
-| 4. 对等 | 差分契约 + golden fixtures + e2e | 与 agent-core(Python)行为对等;验收证据 file:line |
+| 1. 契约 | `ah-contracts` 中的 seam trait、事件和纯类型 | 契约零实现;类型和序列化单测 |
+| 2. 测试 provider | `ah-plugins-mock` 或测试模块中的确定性替身 | dev/test 可组装;不得进入 prod |
+| 3. 生产实现 | `ah-plugins-*` 中的真实协议、持久化或子进程路径 | 聚焦测试和 production E2E |
+| 4. Rust 回归 | Golden fixture 和 Rust regression reference | Rust 行为稳定 |
+| 5. Python 对等 | 独立 Python/Rust differential | 同 fixture 的公开行为一致 |
 
-**阶段推进规则**:
+阶段 3/4 可并行。阶段 5 未完成时,能力的 parity 状态必须保持 partial/unverified。
 
-- 阶段 3/4 之间允许并行(不同能力);
-- 任何阶段都不得在契约层引入实现;
-- unsupported/todo!/unimplemented! 不允许出现在生产路径——要么实现,
-  要么显式返回错误并登记为 missing。
+## 依赖纪律
 
-## 3. 测试策略
+- `ah-contracts` 不依赖任何本仓库实现 crate;
+- `ah-hub` 只依赖 `ah-contracts`;
+- 除组装层 `ah-app` 外,插件生产 `[dependencies]` 不得依赖其他 `ah-plugins-*`;
+- 测试需要的具体插件放入 `[dev-dependencies]`;
+- consumer 通过 `ctx.service::<dyn Trait>(&KEY)` 获取服务;
+- 所有注册返回 `Effect`,后台任务、子进程和 socket 也必须有可逆生命周期。
 
-### 3.1 测试分层
+目前该依赖纪律主要靠评审,自动 CI 检查仍是 `ROADMAP.md` 的 P1-08。
 
-| 层 | 内容 | 命令 |
-| --- | --- | --- |
-| 单元 | 内核机制、插件内部逻辑 | cargo test -p <crate> |
-| 契约 | 每个 seam 的 golden fixtures(成功/非法输入/序列化/恢复) | fixtures/ 9 个 seam golden + ah-app/tests/golden.rs(已落地) |
-| 差分 | 与 agent-core 行为对等(语言中立 fixtures,不 import Python) | references/ 输出快照 + ah-app/tests/differential.rs(已落地) |
-| e2e | 真实 provider/传输/子进程;缺凭据自动跳过 | cargo test --workspace 中的 integration 标记 |
+## 本地验证
 
-### 3.2 覆盖要求
+先运行聚焦检查,再根据改动范围运行 workspace 门禁:
 
-- workspace 行覆盖率 >= 80%,新改动域不得低于 80%;
-- CI 以 cargo llvm-cov(或等价工具)门禁为准,不以本地手动测量为准。
+```sh
+cargo fmt --all --check
+cargo clippy -p <crate> --all-targets -- -D warnings
+cargo test -p <crate>
+```
 
-## 4. CI 门禁(.github/workflows/ci.yml)
+提交前或共享契约变更后运行:
 
-1. cargo fmt --all --check;
-2. cargo clippy --workspace --all-targets -- -D warnings;
-3. cargo test --workspace;
-4. cargo test --workspace --all-features(所有 feature 必须可编译可测);
-5. **mock 门禁**:展开生产 profile,若包含 ah-plugins-mock 插件则失败;
-   同时拒绝:未批准的 fallback、空 feature、未登记的 Python/外部适配器、覆盖率低于 80%;
-6. 文档门禁:docs 中引用的路径存在、能力状态表与代码证据一致(规划)。
+```sh
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo llvm-cov --workspace --fail-under-lines 80
+```
 
-## 5. 提交规范(Conventional Commits)
+外部协议能力还需相应本地 fixture、服务容器或凭据 E2E。命令未完成或超时时必须如实记录,
+不能沿用历史回合的通过数字。
+
+## 当前 CI 门禁
+
+`.github/workflows/ci.yml` 当前实际执行:
+
+1. `cargo fmt --all --check`;
+2. `cargo clippy --workspace --all-targets -- -D warnings`;
+3. `cargo test -p ah-app --test mock_gate`;
+4. `cargo test --workspace`;
+5. `cargo llvm-cov --workspace --fail-under-lines 80`。
+
+当前 CI **尚未**执行:
+
+- `cargo test --workspace --all-features`;
+- Python/Rust differential;
+- production profile static composition;
+- production `boot()` smoke;
+- 插件生产依赖隔离扫描;
+- 文档路径、数字和状态自动一致性检查;
+- Linux/Windows/macOS 跨平台矩阵。
+
+这些项目未落地前不得写成现有门禁。
+
+## Definition of Done
+
+一个能力可以标记为 implementation done,必须满足:
+
+1. 契约层只有 trait、事件和纯类型;
+2. 生产插件存在可调用实现,不以 mock、静默 fallback 或未注入替身冒充;
+3. 消费方通过 seam 调用,不依赖具体 provider;
+4. 成功、失败、取消、超时、恢复和序列化中适用项有测试;
+5. production E2E 已通过,或状态明确标记 production unverified;
+6. fmt、clippy、测试和覆盖率门禁通过;
+7. capability-map 记录实现位置、测试名和 commit。
+
+只有再满足独立 Python/Rust differential,才可标记 parity done。Golden 或 Rust regression reference
+不能替代 differential。
+
+## 提交规范
 
 ```text
 <type>(<scope>): <subject>
 
-<body: 说明 WHAT 和 WHY>
+<body: WHAT + WHY + verification>
 ```
 
-- type:feat / fix / refactor / docs / test / chore / perf / style;
-- scope:crate 或域,如 ah-hub、ah-contracts、plugins-llm、docs;
-- subject 祈使句、小写开头、<=72 字符、无句号;
-- 一次提交一个逻辑变更;不要混入无关的 fmt/重构。
+- type 使用 feat/fix/refactor/docs/test/chore/perf/style;
+- scope 使用 crate 或能力域;
+- 一次提交一个逻辑变更;
+- 提交说明必须与实际 diff 一致;
+- 状态变更同步更新结构化账本、审计快照和必要技术目录。
 
-示例:feat(ah-hub): support parallel dispatch in EventBus
+## 变更纪律
 
-## 6. 完成定义(Definition of Done)
-
-一个能力达到 done 必须同时满足:
-
-1. 契约层有 trait/类型,且零实现;
-2. 生产插件真实执行路径(非 mock/fallback/unsupported),有测试证据(file:line);
-3. 差分契约或 golden fixture 通过,证明与 agent-core 行为对等;
-4. 相关 e2e(真实 provider/协议)通过或有明确跳过理由;
-5. fmt / clippy / 覆盖率达到门禁;
-6. capability-map.md 状态更新为 done,并附实现路径与测试证据。
-
-## 7. 变更纪律
-
-- **插件,不是改循环**:新行为挂在文档化的扩展点;改 agent 循环/内核需要更新 architecture.md;
-- **注册即 effect**:任何注册返回 Effect,无 guard 的裸注册视为缺陷;
-- **证据优先**:状态变更必须带测试与实现证据,禁止仅凭描述推进;
-- **不静默降级**:真实路径失败必须显式报错,不得切到本地 mock 继续跑。
-
+- 新行为优先挂在 seam 或事件扩展点;
+- 修改 hub/agent-loop 核心语义时同步更新架构、事件和生命周期文档;
+- 真实路径失败必须显式返回错误;
+- 文档中的当前事实必须来自当前 HEAD 实测;
+- 历史文档只作记录,不作为当前验收依据。

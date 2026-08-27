@@ -1,8 +1,7 @@
 # 持久化目录(persistence-catalog.md)
 
-> 等价 DSH 的 persistence-catalog:登记全部持久化格式与版本策略。
-> 本文档由 session log 落地触发创建(docs/README.md 规划表),现按 crates/*/src 实际落盘代码
-> 全面核对补充(2025-08:Redis store/queue、PostgreSQL、graph-memory、RSI checkpoint、evolving 经验等)。
+> 登记持久化格式、版本和迁移策略。当前基线:`agent-harness@cc561c0`。
+> 本文只描述已经在代码中存在的格式;production verification 和 Python parity 另见审计文档。
 
 ## 1. 会话事件日志(已实现)
 
@@ -46,15 +45,21 @@ profiles/*.toml:TOML,name + bundles[].plugins;无版本化需求(配置非持久
 | telemetry(ah-plugins-telemetry) | JSONL | dir/telemetry.jsonl(Span 逐行) | export 把未导出 span 追加写入并 flush;启动统计已导出数 |
 | RSI checkpoint(ah-plugins-rsi) | JSONL | dir/rsi_checkpoints.jsonl(RsiCheckpoint: 含 best_prompt/best_score/cases 等) | append-only;load 取末行(最近一轮);数据集在内存生成(不落盘) |
 | RSI single-harness(ah-plugins-rsi-single-harness) | JSONL | dir/single_harness.jsonl(SingleHarnessCheckpoint: best_prompt/best_score/completed_epochs) | append-only;续跑时加载 checkpoint 跳过已完成 epoch |
+| controller task snapshot | versioned JSON envelope | 默认 workspace/controller/tasks.json,可由 Profile 配置 | 自动保存/恢复;未知版本和 malformed envelope 拒绝;兼容 legacy 裸数组;lock file 冲突显式失败 |
+| ability manager | JSON | AbilityPlugin 配置的状态路径 | ability 注册/启停状态持久化;损坏状态显式失败 |
+| workflow checkpoint | JSON | 由 workflow checkpoint store/config 决定 | 支持部分执行状态保存和续跑;完整流式 checkpoint parity 仍为 partial |
 | 轨迹 codec(ah-plugins-evolving::trajectory_codec) | 无持久化(纯编解码) | 无文件 | Trajectory ↔ OTel Span 树(trajectory_to_spans / spans_to_trajectory 可逆);聚合统计;纯函数,内存往返 |
 
-## 4. 规划中的持久化
+## 4. 未完成的持久化工作
 
-| 能力 | 格式草案 | 触发 |
-| --- | --- | --- |
-| workflow 检查点 | JSON(现有 rp301 迁移) | workflow 引擎已实现但执行状态纯内存,检查点/续跑未落地 |
-| Redis 检查点(通用) | 见 §3 Redis store/queue 已落地 | 若需跨进程检查点,可基于现有 Redis 后端扩展 |
-| OTLP 导出 | telemetry 当前为 JSONL,OTLP 留待后续 | 真实 collector 接入时 |
+| 能力 | 当前缺口 |
+| --- | --- |
+| 统一 envelope/version | session event、workflow checkpoint、部分插件 JSONL 尚未统一版本 envelope |
+| 迁移工具 | 多数格式只有兼容读取或显式拒绝,缺少批量迁移 CLI |
+| 跨进程 checkpoint | 可基于 Redis/store seam 扩展,尚无统一实现和租约语义 |
+| workflow streaming restore | 基础 checkpoint 已有,STREAM/TRANSFORM/COLLECT 中间状态恢复仍不完整 |
+| OTLP | HTTP OTLP/JSON 编码与发送已存在;完整 OTel SDK exporter、重试/批处理/collector E2E 仍为 partial |
+| 并发与原子写 | 多数文件后端仍需统一临时文件+fsync+rename 和跨进程锁策略 |
 
 ## 5. 版本纪律
 

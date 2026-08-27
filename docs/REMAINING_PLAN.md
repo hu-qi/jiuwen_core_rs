@@ -1,5 +1,9 @@
-# 剩余计划(REMAINING PLAN)
+# 历史回合账目(REMAINING PLAN ARCHIVE)
 
+> **历史文档,不再作为当前剩余计划。** 当前任务优先级、状态和验收标准以
+> [`ROADMAP.md`](ROADMAP.md) 为准。本文件保留逐回合实现记录;其中测试数、crate 数、
+> 插件数、百分比和“已验收”声明只代表对应历史时点,不得作为当前 HEAD 的证明。
+>
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
 > 当前约 109 crates;测试、覆盖率、clippy 与 fmt 状态以 CI/本地当前 HEAD 实测为准。

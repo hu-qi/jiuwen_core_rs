@@ -1,49 +1,72 @@
-# 用户文档(usage.md)
+# 使用指南
 
-> 面向插件作者与集成方:如何定义 seam、编写插件、组合 profile、使用事件。
+> 面向插件作者和集成方。架构规则见 `architecture.md`,当前生产验证状态见 `README.md` 和
+> `ROADMAP.md`。
 
-## 1. 快速开始
+## 本地启动
 
 ```sh
-cargo run -p ah-app
+cargo run -p ah-app -- profiles/dev.toml
 ```
 
-输出(dev profile,共 52 个插件):
+`dev.toml` 当前声明 114 个插件并包含 `ah-plugins-mock`,用于无云凭据的开发冒烟。典型输出包含:
 
 ```text
-[boot] mounted services: [ServiceKey("llm"), ServiceKey("tools"), ... 50+ 个]
-[llm] mock: mock final answer; last tool result: ...
+[boot] mounted services: [ServiceKey("llm"), ServiceKey("tools"), ...]
+[llm] mock: ...
 ```
 
-启动流程:读取 profiles/dev.toml → 在插件目录(crates/ah-app/src/lib.rs 的 plugin_catalog)
-中解析插件名 → mount_all(依赖拓扑排序)→ 通过 ctx.service::<dyn ModelProvider>(&ah_contracts::keys::LLM)
-解析 seam → 调用。完整服务键见 ah-contracts/src/keys.rs(58 个)。
+启动流程:
 
-## 2. 编写一个插件
+```text
+Profile -> ah-app catalog -> 参数化插件 -> Context::mount_all -> ctx.service::<dyn Trait>()
+```
 
-以 ah-plugins-mock 为模板,三步:
+生产 Profile:
 
-### 2.1 实现契约
+```sh
+cargo run -p ah-app -- profiles/prod.toml
+```
+
+`prod.toml` 当前声明 112 个插件且不含 mock,但需要 OpenAI 凭据、本地 Redis 和若干外部能力。
+当前 CI 只验证 prod 不含 mock,尚未统一验证完整 production boot。启动失败时应根据显式错误补齐依赖,
+不得回退到 mock 后仍视为生产验证通过。
+
+## 编写插件
+
+### 实现 seam provider
 
 ```rust
 #[async_trait::async_trait]
 impl ModelProvider for MyProvider {
-    fn name(&self) -> &'static str { "my-provider" }
+    fn name(&self) -> &'static str {
+        "my-provider"
+    }
+
     async fn chat(&self, request: ModelRequest) -> Result<ModelResponse, ModelError> {
-        // 真实或确定性实现
+        // Real provider behavior.
     }
 }
 ```
 
-### 2.2 实现 Plugin trait 并注册服务
+### 注册插件
 
 ```rust
 impl Plugin for MyPlugin {
-    fn name(&self) -> &'static str { "ah-plugins-my" }
-    fn provides(&self) -> Vec<ServiceKey> { vec![ah_contracts::keys::LLM] }
-    fn inject(&self) -> Vec<ServiceKey> { vec![] }   // 依赖的服务键
+    fn name(&self) -> &'static str {
+        "ah-plugins-my"
+    }
+
+    fn provides(&self) -> Vec<ServiceKey> {
+        vec![ah_contracts::keys::LLM]
+    }
+
+    fn inject(&self) -> Vec<ServiceKey> {
+        vec![ah_contracts::keys::CREDENTIALS]
+    }
+
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
-        let provider: Arc<dyn ModelProvider> = Arc::new(MyProvider);
+        let provider: Arc<dyn ModelProvider> = Arc::new(MyProvider::new(/* ... */));
         Ok(vec![ctx.register(ah_contracts::keys::LLM, provider)])
     }
 }
@@ -51,14 +74,15 @@ impl Plugin for MyPlugin {
 
 规则:
 
-- provides 声明本插件提供的服务键;inject 声明依赖(挂载前必须已存在);
-- apply 内所有注册必须返回 Effect,随插件卸载回滚;
-- 插件 crate 只依赖 ah-hub + ah-contracts,不依赖其他插件。
+- `provides` 声明服务输出,`inject` 声明依赖;
+- consumer 解析 trait object,不导入具体 provider;
+- 所有注册和后台资源必须绑定 Effect;
+- 插件生产依赖只包含 hub/contracts 和外部基础库;
+- 测试组装需要的具体插件放入 dev-dependencies。
 
-### 2.3 加入 profile
+### 加入 catalog 和 Profile
 
 ```toml
-# profiles/my.toml
 name = "my"
 
 [[bundles]]
@@ -66,106 +90,105 @@ id = "my"
 plugins = ["ah-plugins-my"]
 ```
 
-并在 ah-app 的插件目录中注册名称 → 插件对象映射。
+同时在 `ah-app` catalog 注册稳定名称。新增配置字段需更新 `config-catalog.md` 和非法值测试。
 
-## 3. 定义一个新 seam
+## 定义 seam
 
-1. 在 ah-contracts 中定义 trait(继承 Seam 标记)+ 纯类型;
-2. 定义稳定 ServiceKey(如 `ctx.store` 对应 ServiceKey::new("store"));
-3. 实现:至少一个 Provider(插件)+ 一个 Consumer(消费方)才构成完整 seam;
-4. 契约层不允许出现实现。
+一个完整 seam 包含:
 
-## 4. 事件使用
+1. `ah-contracts` 中的 trait、事件和纯类型;
+2. 稳定 ServiceKey;
+3. 至少一个 provider;
+4. 至少一个通过 Context 解析 trait 的 consumer;
+5. mount/resolve/invoke/unmount 测试;
+6. 对应 capability-map 和 differential fixture。
 
-### 4.1 emit(同步观察)
+只有 Service Definition 没有 provider/consumer,不能视为功能完成。
+
+## ApplicationRuntime
+
+应用层通过 trait seam 调用:
 
 ```rust
-let _effect = ctx.on::<MyEvent>(|event| {
-    println!("observed: {}", event.id());
+let application = ctx
+    .service::<dyn ApplicationRuntime>(&APPLICATION)
+    .ok_or("application service missing")?;
+
+let result = application
+    .invoke(AgentRequest {
+        session_id: "session-1".into(),
+        input: "inspect the workspace".into(),
+        workflow: None,
+        timeout_ms: Some(30_000),
+        restore_checkpoint: None,
+    })
+    .await?;
+```
+
+当前支持命名 session、workflow 路由、checkpoint restore 和部分 controller 命令。执行中取消、
+结构化终止错误、真实 iteration 统计、完整 memory/invoke rails 和 Python parity 仍为 partial。
+
+## 事件
+
+### emit
+
+```rust
+let effect = ctx.on::<MyEvent>(|event| {
+    println!("observed: {:?}", event);
 });
 ctx.emit(MyEvent::new());
+drop(effect);
 ```
 
-### 4.2 serial / parallel(异步)
+### serial/parallel
 
 ```rust
-let _e = ctx.on_serial::<MyEvent, _, _>(|event| async move {
-    // 顺序副作用
+let serial_effect = ctx.on_serial::<MyEvent, _, _>(|event| async move {
+    consume_in_order(event).await;
 });
-let _e = ctx.on_parallel::<MyEvent, _, _>(|event| async move {
-    // 并发执行
+let parallel_effect = ctx.on_parallel::<MyEvent, _, _>(|event| async move {
+    consume_concurrently(event).await;
 });
-ctx.serial(MyEvent::new()).await;
-ctx.parallel(MyEvent::new()).await;
 ```
 
-### 4.3 waterfall(委托链 / 短路)
+### waterfall
 
 ```rust
-// 决策链:任一监听器不调用 next 即短路。
-let _e = ctx.on_waterfall::<Decision, Decision, _, _>(|_event, value, next| async move {
-    if let Some(deny) = policy(&value) {
-        return deny;                    // 短路:下游不再执行
-    }
-    next.next(value).await              // 委托下游
-});
-let final_decision = ctx.waterfall(Decision::new(), Decision::Allow).await;
+let effect = ctx.on_waterfall::<Decision, Decision, _, _>(
+    |_event, value, next| async move {
+        if should_deny(&value) {
+            return Decision::Deny;
+        }
+        next.next(value).await
+    },
+);
 ```
 
-## 5. Profile 组合
+Waterfall handler 不调用 `next()` 即短路。Effect 被 drop 后 listener 立即移除。
 
-- profile = 有序 bundle + 插件清单;插件名去重展开;
-- 挂载顺序由依赖拓扑决定,不是文件顺序;
-- 环境选择通过 profile 表达,不改代码:
-  - dev.toml:51 个真实插件 + ah-plugins-mock(llm boot 桩,共 52 条);
-  - prod.toml:51 个真实插件,无 mock(CI mock 门禁强制);
-  - hybrid:按需混合(未创建,按需加)。
+## Profile 组合
 
-## 6. 扩展点速查(规划中逐步开放)
+- Profile 是 Bundle 和插件名清单;
+- 挂载顺序由 provides/inject 拓扑决定,不是 TOML 顺序;
+- 同一 ServiceKey 的重复 provider 会失败;
+- 缺失依赖和依赖环会失败;
+- prod 不允许 mock;
+- prod 无 mock不等于 prod 可完整启动。
 
-| 想做什么 | 挂在哪里 |
-| --- | --- |
-| 加模型 provider | llm seam(openai-compatible / anthropic,流式 stream_chat 可选) |
-| 加模型可见能力 | tools seam,其 schema 进入 prompt 组装 |
-| 加 shell 执行 | shell seam |
-| 加文件系统策略 | fs seam 或 tools/pre-execute waterfall |
-| 拦截/审核工具调用 | tools/pre-execute waterfall(rails:ShellGuard/PathGuard/ToolBudget/ApprovalRail/Security) |
-| 观察工具执行 | tools/post-execute serial(遥测/审计) |
-| 观察 agent 回合 | agent/step emit |
-| 加会话持久状态 | session/event emit(session-log JSONL) |
-| 编排任务 | workflow seam(Start/End/LLM/Tool/Loop/SubWorkflow/Parallel/Http/Intent/Questioner) |
-| 任务调度 | controller seam(生命周期/优先级/冲突) |
-| 回调链 | runner seam(priority/retry/timeout/rollback) |
-| 自进化 | evolving/operator/optimizer/trainer seam |
-| 知识图谱记忆 | graph-memory seam + graph_* 工具 |
+## CLI
 
-## 7. 常见问题
-
-- **解析不到服务**:检查 provides/inject 是否一致、插件是否已挂载(ah-app 打印 mounted services);
-- **服务被覆盖**:同键重复注册会覆盖,插件层 mount_all 会拒绝重复 provider;
-- **事件没触发**:监听器 Effect 被立即 drop 会反注册——用具名绑定持有 guard;
-- **生产不能用 mock**:profile 门禁会拒绝 ah-plugins-mock 进入生产。
-
-## 交互 CLI(ah-cli)
-
-`cargo run -q --bin ah-cli -- <profile>`(默认 profiles/dev.toml)启动交互式 CLI;
-会话/团队/队列/工作区真实持久化在当前目录 .agent-harness/ 下。
-
-```text
-  <task>                    在当前会话运行一个任务(真实 ReAct 循环)
-  /new <id> | /use <id>     新建/切换会话
-  /fork <from> <to>         分叉会话
-  /teams create <id> <name> 创建团队(SQLite 持久化)
-  /teams run <team> <task>  建任务并真实委派 subagent 执行
-  /teams tasks <team>       列出团队任务
-  /teams msg <team> <from> <content...>
-  /teams msgs <team>        团队消息(经 queue seam)
-  /rsi round <n> <seed>     跑一轮 RSI 评测(数据集生成 + 真实执行 + 评估)
-  /rsi run <n> <seed>      多轮优化编排(评测→精化→checkpoint 续跑)
-  /workspace goals / goal add <id> <title...> / goal done <id>
-  /web fetch <url>          真实 HTTP GET
-  /queue publish <channel> <json> | /queue consume <channel>
-  /code run <code>          真实 python3 执行
+```sh
+cargo run -q --bin ah-cli -- profiles/dev.toml
 ```
 
-e2e 冒烟测试:crates/ah-app/tests/cli_smoke.rs 用真实构建的二进制验证上述子命令。
+CLI 支持会话、团队、队列、工作区、web、code、RSI 等命令。dev profile 下模型由 mock 提供。
+CLI smoke 证明二进制和命令路由可运行,不证明外部 provider 或 Python parity。
+
+## 常见问题
+
+- **解析不到服务**:检查插件是否在 Profile、名称是否在 catalog、provides/inject 是否一致;
+- **重复 provider**:`mount_all` 会拒绝同一 ServiceKey 的两个 provider;
+- **事件未触发**:确认 Effect 仍被持有;
+- **prod 启动失败**:检查 OpenAI 凭据、Redis、MCP/外部命令和目录权限;
+- **测试通过但状态仍 partial**:检查 production E2E 与 Python differential 是否完成;
+- **需要具体插件组装测试**:将依赖放入 dev-dependencies,不要污染插件生产依赖。

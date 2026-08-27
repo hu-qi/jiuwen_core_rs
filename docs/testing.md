@@ -1,82 +1,84 @@
-# 测试与对等验证(testing.md)
+# 测试与对等验证
 
-> 本项目的目标是完整实现 agent-core(Python)全部功能。测试策略围绕一个核心问题:
-> **如何证明 Rust 行为与 Python 对等**。
+本项目的测试必须回答四个不同问题:Rust 实现是否正确、契约是否稳定、生产组合是否可运行、
+以及行为是否与 agent-core(Python)一致。四者不能互相替代。
 
-## 1. 测试分层
+## 测试分层
 
-| 层 | 内容 | 位置/命令 | 必过门禁
+| 层 | 证明什么 | 位置/命令 | 当前状态 |
 | --- | --- | --- | --- |
-| 单元 | 内核机制、插件内部逻辑 | 各 crate 内 #[cfg(test)] | cargo test --workspace
-| 契约 | 每个 seam 的 golden fixtures | fixtures/ + ah-app/tests/golden.rs(已落地:9 seam) | cargo test --workspace
-| 差分 | 与 agent-core 行为对等 | 语言中立 fixtures(规划) | cargo test --workspace
-| e2e | 真实 provider/传输/子进程 | integration 标记;缺凭据自动跳过 | CI 存在性检查
+| 单元测试 | Rust 内核和插件内部逻辑 | 各 crate `#[cfg(test)]`;`cargo test -p <crate>` | 已广泛覆盖 |
+| Golden fixture | Rust seam 对固定语言中立样例的契约稳定性 | `fixtures/` + `ah-app/tests/golden.rs` | 已有 9 个 seam |
+| Rust regression reference | Rust 当前完整可观测输出不发生非预期变化 | `references/` + `ah-app/tests/differential.rs` | 已有 5 个 seam |
+| Python/Rust differential | 同一输入下 Python 与 Rust 的公开行为一致 | 外部 Python runner + 语言中立 fixture + Rust runner | missing |
+| Production composition | prod profile 可解析、依赖闭合且无 mock | profile/catalog/依赖图测试 | 仅 mock exclusion 已验证 |
+| Production boot/E2E | 无 mock 的真实组合可启动并执行 | 本地协议 fixture、服务容器或真实凭据 | partial |
+| 覆盖率 | Rust 测试执行到的代码比例 | `cargo llvm-cov --workspace --fail-under-lines 80` | CI 有门禁;当前 HEAD 数字须以 CI 实测为准 |
 
-## 2. 契约 fixtures(golden fixtures)
+## Golden fixture
 
-每个 seam 至少覆盖六类样例:
+Golden fixture 用于验证一个 Rust seam 的固定输入输出。建议至少覆盖:
 
-1. 成功路径(正常输入 → 期望输出);
-2. 非法输入(错误、拒绝、显式报错);
-3. 超时(超时语义与错误);
-4. 取消(取消传播、状态一致性);
-5. 恢复(断点续跑、崩溃恢复);
-6. 序列化(往返一致、版本兼容)。
+1. 成功路径;
+2. 非法输入和显式错误;
+3. 超时;
+4. 取消;
+5. 恢复;
+6. 序列化和版本兼容。
 
-fixtures 使用语言中立格式(JSON/YAML),不 import Python 代码。
+Golden fixture 不运行 Python,因此不能单独证明 Python parity。
 
-## 3. 差分契约(与 agent-core 对等)
+## Rust regression reference
 
-方法(核心纪律):
+`ah-app/tests/differential.rs` 当前读取 `references/{seam}.json`,比较 Rust 实现的完整可观测
+输出。设置 `AH_REFGEN=1` 时,reference 由 Rust 自己重写。
 
-- 对每个 Python 能力,从 agent-core 的公开行为面(输入/输出/状态迁移/错误/持久化/协议)
-  提炼**语言中立契约**;
-- 同一组 fixtures 分别喂给 Python(参考运行)与 Rust(被测),比较结果;
-- Python 参考运行**不在本仓库内**:本仓库零 Python 源码,fixtures 由外部生成并固化;
-- 差分契约通过 = 行为对等的证据;单靠本地/mock 测试通过 ≠ 完成。
+因此当前 reference 的准确名称是 **Rust regression reference**。它可以防止 Rust 行为意外变化,
+但不是独立的 Python 参考结果。提交 reference 变化时必须解释行为变化,禁止仅为通过测试而重生成。
 
-**现状与实施路径**(mechanism + Rust 基线已落地,Python 参考数据待外部生成):
+## Python/Rust differential
 
-1. **契约载体**:fixtures/ 下的语言中立 JSON 是差分契约的输入面(9 个 seam 已覆盖);
-2. **Rust 基线**:references/ 已固化 5 个 seam 的完整可观测输出(session/security/retrieval/teams/evolving),
-   由 ah-app/tests/differential.rs 生成(设 AH_REFGEN=1 重生成)并默认断言一致(回归保护);
-3. **参考运行**:在外部环境运行 openjiuwen agent-core(Python),用同一组 fixtures 驱动,把输出固化为
-   references/{seam}.json(覆盖 Rust 基线),**零 Python 源码进入本仓库**;
-4. **比对**:同一差分测试读取 references 输出,驱动 Rust 实现,断言行为与参考一致;
-5. **门禁**:差分测试与 golden 测试同属 workspace 测试门禁。
+严格对等需要独立参考运行:
 
+1. 定义语言中立 fixture 和规范化输出 schema;
+2. 在 agent-core 环境运行 Python reference runner;
+3. 在 agent-harness 运行 Rust runner;
+4. 比较输出、错误类型、状态迁移、事件顺序、持久化、取消、超时和恢复;
+5. 将差异作为 CI 失败,并记录两边 commit。
 
-## 4. 覆盖率门禁
+首批范围为 application、agent-loop、session、controller、workflow、tools。Python runner 必须独立于
+Rust reference 生成流程;`AH_REFGEN=1` 不能生成或覆盖 Python reference。
 
-- workspace 行覆盖率 ≥ 80%,新改动域不得低于 80%;
-- CI 用 cargo llvm-cov(或等价工具)统一测量,不以本地手动数字为准;
-- 未覆盖路径必须解释(unsupported 分支、平台差异、外部协议不可测部分)。
+## Production 验证
 
-**现状**:cargo llvm-cov --workspace 实测行覆盖率 **87.94%**(2025-07,commit 后随改动变化);
-CI coverage job 以 `cargo llvm-cov --workspace --fail-under-lines 80` 强制门禁。
+生产验证分三层:
 
-## 5. 凭据与外部依赖策略
+1. **Mock exclusion**:prod profile 不包含 `ah-plugins-mock`;当前已有测试;
+2. **Static composition**:所有插件名可从 catalog 解析,provides/inject 依赖闭合且无重复/环;当前缺完整测试;
+3. **Boot smoke/E2E**:无 mock 完成 `boot()` 和一次 `ApplicationRuntime::invoke`;当前缺统一门禁。
 
-- 真实 provider e2e 需要凭据(如 OPENAI_API_KEY);未设置时自动跳过并标记;
-- 跳过必须有理由,不允许用 mock 冒充真实 e2e;
-- 容器化依赖(Redis/Pulsar/ES 等)在 CI 中用服务容器或测试容器;本地可选。
+真实 provider E2E 可使用本地 HTTP fixture、服务容器或真实凭据。因缺凭据跳过时必须输出明确原因,
+不得以 mock 替代后仍标记 production verified。
 
-## 6. 与 CI 门禁的关系
+## 覆盖率
 
-见 development.md §4。测试门禁要点:
+- CI 要求 workspace 行覆盖率不低于 80%;
+- 新改动域应维持不低于 80%;
+- 历史文档中的覆盖率只代表历史 commit;
+- 当前覆盖率必须引用 CI run 或当前 HEAD 的完整 `cargo llvm-cov` 结果。
 
-1. cargo fmt --all --check;
-2. cargo clippy --workspace --all-targets -- -D warnings;
-3. cargo test --workspace;
-4. cargo test --workspace --all-features;
-5. mock 门禁(生产 profile 无 mock 插件);
-6. 覆盖率 ≥ 80%。
+高覆盖率证明测试执行范围,不证明 Python parity 或 production E2E。
 
-## 7. Definition of Done 中的测试要求
+## Definition of Done 测试要求
 
-能力达到 done 必须同时满足(development.md §6):
+能力标记为严格 parity `done` 必须同时满足:
 
-1. 生产路径真实执行,有测试证据(file:line);
-2. 差分契约或 golden fixture 通过;
-3. 相关 e2e 通过或有明确跳过理由;
-4. 覆盖率达到门禁。
+1. 生产实现可调用,无 mock、静默 fallback 或未注入替身;
+2. 单元/Golden 覆盖成功和失败语义;
+3. Python/Rust differential 通过;
+4. 相关 production E2E 通过,或明确限定该能力不需要外部系统;
+5. 覆盖率和现有 CI 门禁通过;
+6. 证据记录实现路径、测试名和双方 commit。
+
+在 Python differential 建立前,只能将能力标记为 implementation done 或 parity partial/unverified,
+不得笼统宣称与 agent-core 完全对等。

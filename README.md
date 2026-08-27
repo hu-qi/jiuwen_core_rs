@@ -8,11 +8,11 @@ Rust 原生 agent harness,以高解耦插件架构为目标,设计思路参考 D
 ```text
 agent-harness/
   crates/
-    ah-contracts/     契约层: Seam trait + 事件契约 + 纯类型,零实现(47 seam)
+    ah-contracts/     契约层: Seam trait + 事件契约 + 纯类型,零实现
     ah-hub/           插件内核: ServiceRegistry + EventBus + Plugin + Profile
-    ah-plugins-*/     50 个 crate:47 个插件 + 内核/契约/boot
+    ah-plugins-*/     插件 crate(当前共 111 个 crate,其中约 108 个 ah-plugins-*)
     ah-app/           boot 入口: 读取 profile → 组装插件 → 解析 seam + ah-cli
-  profiles/           组合配置: dev(mock,52 条) / prod(真实,51 条)
+  profiles/           组合配置: dev(mock,113 条) / prod(真实,112 条)
   docs/               文档集(架构/能力地图/目录/账本)
 ```
 
@@ -26,10 +26,10 @@ agent-harness/
 - **日志即真相**:会话以 append-only 事件日志(JSONL)为唯一事实来源(已实现)。
 - **Profile 门禁**:生产 profile 不允许出现 mock 插件,CI 校验展开后的插件清单。
 
-## 当前框架能力(已实现,50 crates / 273 tests / clippy 0 / fmt clean)
+## 当前框架能力(已实现,111 crates / 1284 tests / clippy 0 / fmt clean)
 
 - **内核与契约**:ah-hub(ServiceRegistry + EventBus + Plugin/mount_all 拓扑挂载 + Profile)与
-  ah-contracts(47 个 seam 契约 + 6 个事件 + 58 个服务键,零实现)。
+  ah-contracts(全部 seam 契约 + 类型化事件 + 服务键,零实现;数量以代码实测为准,见 docs/event-catalog.md)。
 - **模型 provider**:ah-plugins-openai(OpenAI 兼容,credentials 解析 + SSE 流式)、
   ah-plugins-anthropic(Messages API,system 顶层 + tool_use/tool_result)。
 - **核心 seam**:agent-loop(ReAct)、workflow(Start/End/LLM/Tool/Loop/SubWorkflow/Parallel +
@@ -47,7 +47,7 @@ agent-harness/
   autoharness(六阶段)、rl(reward)、skill、tune、agentbuilder、symphony、controller、runner、
   operator(参数句柄)、optimizer(文本梯度)、trainer(训练循环)、external(外部 CLI agent)、
   oauth(设备码)、git、ci、mcp(stdio + http)。
-- **mock 门禁**:dev profile 含 ah-plugins-mock(llm boot 桩);prod profile 51 个真实插件无 mock,CI 强制。
+- **mock 门禁**:dev profile 含 ah-plugins-mock(llm boot 桩);prod profile 112 个插件无 mock,CI 强制。
 - ah-app:cargo run -p ah-app 从 profiles/dev.toml 启动;ah-cli 交互入口(/new /teams /rsi /queue 等子命令)。
 
 ## 构建与运行

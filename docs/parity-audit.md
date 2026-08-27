@@ -1,19 +1,20 @@
 # 对等审计基线(parity-audit.md)
 
-> 生成时间:第 149 回合;当前审计基线:工作树基于 `62353c9`，新增 agent-control/application seam/plugin 尚未提交。
-> 本回合完成 agent_teams/messager 的基础配置模型与 in-process 传输;此前已完成
-> core/operator、agent_teams/runtime/schema/security 等局部收尾。测试数量与覆盖率不在本文硬编码,
-> 以当前 CI 实测结果为准。
-> 方法:7 域 97 个子模块,逐模块读 Python 源码(类/函数签名)对照 Rust crate 源码(`pub fn/struct/enum/trait` + `impl`),带 file:line 证据。
-> 判定标准(严格):`done` = 全部核心功能点**含 LLM 驱动能力**(LLM judge/生成/诊断、梯度优化器、embedding/reranker、多后端/多 provider/多拓扑)在 Rust 1:1 对等;Python 是 LLM 驱动而 Rust 只有确定性规则/字符串匹配/简化循环 → `partial`;Rust 无实现 → `missing`。
-> 此表衡量**行为对等度**(含 LLM 能力),不是"有代码就算完成"的功能覆盖率。
+> 当前代码基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`。原始逐域估算形成于第 149 回合,
+> 本次仅校正基线、口径和显式矛盾,尚未用结构化账本重新计算全部百分比。
+> 方法:7 域 97 个子模块,逐模块读 Python 源码公开行为面对照 Rust seam/plugin 与测试证据。
+> 判定标准(严格):`done` 要求核心功能点、LLM 驱动能力、错误、状态、持久化和外部协议行为
+> 对等;只有确定性规则、字符串匹配或简化循环时为 `partial`;无可调用实现为 `missing`。
+> 当前尚无独立 Python/Rust differential runner。因此本文百分比是**未校准人工估算**,
+> 不能作为已验证的 Python parity 或生产替代率。Golden 与 Rust regression reference 只证明 Rust 内部稳定。
+> 当前任务和验收顺序以 `ROADMAP.md` 为准。
 
 ## 0. 总览
 
 | 指标 | 值 |
 | --- | --- |
-| **总体对等度** | **≈ 65.5%**(按 Python 文件数加权;excluded 不参与计分) |
-| done / partial / missing / excluded | **6 / 87 / 2 / 2** |
+| **总体对等度** | **历史人工估算约 65.5%,未由 Python differential 验证** |
+| done / partial / missing / excluded | **历史账目 6 / 87 / 2 / 2,待结构化账本重算** |
 > 第 146 回合:agent_teams/messager base 配置模型 + in-process 传输收尾(55→65);第 145 回合:
 > agent_teams/security permission narrowing 收尾(60→72);第 144 回合:agent_teams/runtime
 > BackgroundTaskController(75→80);第 143 回合:harness/schema 停止条件、agent_teams/schema
@@ -67,7 +68,9 @@ skill_creator 均属于此类。rsi/resource、rsi/storage 判 excluded(见 §3b
 | rsi | resource | Python `rsi/resource/manager.py:14-20` `read_text`/`resolve_path` 均为 `NotImplementedError("TODO: ...")` 桩;Rust 不硬造功能 |
 | rsi | storage | Python `rsi/storage/store.py:14-32` 五个 `allocate_*`/`write_result_ref` 均为 `NotImplementedError("TODO: ...")` 桩;Rust 不硬造功能 |
 
-## 4. 需深度推进(partial)—— 90 个
+## 4. 需深度推进(partial)
+
+> 本节保留历史逐域估算。标题不再复制与总览不一致的手工数量;统一计数待 P0-05 自动生成。
 
 ### 4.1 core(16 子模块,53%)
 
@@ -78,7 +81,7 @@ skill_creator 均属于此类。rsi/resource、rsi/storage 判 excluded(见 §3b
 | graph | 60 | StreamActor 流式、可视化 |
 | multi_agent | 55 | 消息总线/订阅拓扑、handoff 编排 |
 | context_engine | 55 | round/dialogue 压缩、会话记忆管理器 |
-| single_agent | 58 | agent-control 已提供稳定 interrupt/callback seam，callback manager 生命周期顺序测试已通过；ability 已提供 AbilityManager 注册/启停/skill 执行、JSON 状态持久化重载；损坏状态和缺失 skill 依赖显式失败。model backup 已提供 ModelBackup seam、命名 provider catalog seam（含 StaticModelProviderCatalog）与顺序尝试插件，Profile Bundle 已能解析插件 config 并驱动 backup provider_names；ModelBackupPolicy seam 已由 AgentLoop 消费，app 可从 Profile Bundle 解析并挂载 policy plugin；dev profile 已声明 model-backup，policy plugin 由 app 按配置动态插入并加入实际挂载列表；app helper 覆盖 provider_names、正数 timeout、负 retry 和非正 timeout 的显式校验，已接入 agent-loop 主调用，主模型失败后按顺序尝试 backup，最终模型错误写入 System session event（模型与 backup 最终失败的精确持久化测试已通过）；agent-loop 9 项测试及 backup fallback/timeout/retry/streaming/retry/sink-close 测试通过；agent-loop 在 session log 记录中断/取消并可继续复用历史；AbilityManager、可配置 timeout、model backup、application 路由仍缺 |
+| single_agent | 58 | agent-control、callback、AbilityManager、model-backup policy 与顺序 fallback、请求级 timeout seam、session 日志恢复和 application 路由均已有部分实现与聚焦测试。主要缺口是宿主真实多 provider catalog 组装、执行中模型/工具取消、跨 provider timeout、完整 rail/kv-cache hooks、结构化运行错误和 Python differential。 |
 | foundation | 50 | 8 个 provider、KV cache 亲和、向量/图/对象存储 |
 | application | 58 | `ah-plugins-application` 通过 `SessionManager` 按 session_id 创建/打开持久会话，并路由 LLM agent/workflow agent；本回合新增 `AgentLoopRuntime` contracts seam，application 只解析 `dyn AgentLoopRuntime`；`AgentLoopRuntime::card()` 已通过 seam 暴露 AgentCard 能力与恢复能力，contracts 提供兼容默认值，移除对 agent-loop 具体类型的生产依赖；timeout 通过 `AgentLoopRuntime::run_in_session_with_timeout` 从请求传入，并仍为轮次边界检查，写入 AgentTimedOut event；取消/中断/超时已映射到 AgentResult 状态；agent-loop 失败会追加带 command/state/error 的 System event；Controller seam 已可选接入 application；`TaskSnapshotStore` seam 已有 in-memory/JSON 实现，LocalController 可选消费 Context snapshot provider 或显式 JSON 路径，ah-app 默认使用 workspace/controller/tasks.json，显式 path plugin mount 测试通过；自动保存/恢复（含失败 error_message、working/parent-child 索引、父子链接持久化（含重挂载/删除 child 的旧索引清理，并避免 link_parent 锁重入）与确定性 pending 排序）、round-trip、损坏输入、不一致/非法字段快照、损坏挂载失败和同实例并发写入与跨实例 lock 冲突显式失败测试已通过；controller 全量 21 项单测通过；versioned envelope、未知版本拒绝、malformed envelope 显式错误与 legacy 裸数组兼容已验证；controller 全量 22 项单测通过，失败 replace 后 lock 清理已验证；controller 全量 19 项单测通过；文本 task-id 控制命令已执行，支持 `verb:task-id` 与自然语言 `task-...` 标识，映射错误并写入 System session event（含 retry:<task_id> 失败任务重置、错误清理与持久化；resume:<task_id> 更新 Submitted 后重新调用 Controller::run_task；非法状态/未知任务显式错误；controller 24 项、application 12 项 focused tests 通过）（保留原始 command 与 intent，非法 task-id 也持久化失败事件），focused persistence tests 通过（含 controller failure），LLM 意图检测和更丰富的结构化 command payload 仍缺（当前已持久化 raw command/intent）；Failed 终态恢复拒绝已由状态机测试覆盖；AgentRequest 已支持命名 checkpoint restore；application 缺失/空 checkpoint failure 与 workflow restore 集成测试通过，JSONL restore persistence test 已有，并覆盖非法 checkpoint 名称/路径穿越 |
 | runner | 45 | 装饰器框架、Pulsar、drunner、资源管理器 |
@@ -191,7 +194,7 @@ skill_creator 均属于此类。rsi/resource、rsi/storage 判 excluded(见 §3b
 
 - **done 只出现在确定性算法上**(dataset/models/dataset_curator 双向都是确定性规则)。
 - **凡 Python 是 LLM 驱动**(LLM 澄清/生成/诊断、梯度优化器、LLM judge、embedding/reranker、9-10 个专职 agent),Rust 一律是「确定性规则 + 字符串匹配 + 简化循环」→ partial。
-- 47.2% 与"看起来都落地了"之间的差距,就是「LLM 驱动能力」的缺失。
+- 历史结构覆盖估算与严格对等之间的差距,主要来自 LLM 驱动能力、外部后端、生产组合验证和 Python differential 缺失。
 
 ## 6. 维护纪律
 

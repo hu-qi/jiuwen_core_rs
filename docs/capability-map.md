@@ -1,8 +1,9 @@
 # 能力地图(capability-map.md)
 
-> 目标:完整实现 agent-core(Python)全部功能。本文是唯一的能力↔seam↔插件↔工作包映射,
-> 规划与验收都以它为准。状态标注:done / partial / missing / excluded,
-> 依据代码证据(测试 + 真实路径),不是文档描述。
+> 目标:完整实现 agent-core(Python)全部公开行为。本文是能力↔seam↔插件映射账本;
+> 当前执行顺序以 `ROADMAP.md` 为准,严格对等结论以 `parity-audit.md` 为准。
+> 历史表格中的 `done` 主要表示 Rust implementation 已落地,不自动表示 production verified 或
+> Python parity verified。后续状态应拆分为 implementation / production / parity 三个维度。
 
 ## 0. 源:agent-core(Python)域规模
 
@@ -59,7 +60,7 @@
 | foundation/tool | `tools` seam | tool 元数据、auth、调用、流式 chunk、校验 | 工具调用链真实执行
 | foundation/prompt | `prompt` seam + ah-plugins-prompt-builder | 模板渲染、结构化 prompt、section 构建器 | 确定性渲染({{var}} + 版本化文件后端已落地);section 构建器已落地(builder + sanitize + report 见上);18 个系统提示 section 素材已落地(本回合:identity/safety/skills/todo/task_tool/session_tools/heartbeat/memory/coding_memory/prompt_attachments/offload/reload/compression_recall/agent_mode/goal/external_memory(参数化)/task_completion/progressive_tool_rules — 双语常量逐字对齐 Python,priority 一致);workspace 动态 section 已落地(本回合:头部/重要文件表/目录描述双语常量 + DirNode 树格式化 + 内容组装 + priority 70);context 动态 section 已落地(本回合:模板检测/名字清洗/身份已填判断 + 内容组装(单文件+每日记忆引导)+ 单文件 context.* section + task_tool 代理行提取);tools 列表 section 已落地(本回合:首选顺序/分组/覆盖摘要 + 去重规则 + bash/task_tool 原则 + priority 30);目录扫描(sys_operation.fs)与 context 文件读取缓存留待集成 |
 | foundation/store(kv/db/vector/message/graph/object) | `store` seam + ah-plugins-store(本地文件后端);redis/gaussdb/elasticsearch/milvus/chroma 待后续 | 持久化(kv/message 已真实落盘) | 本地后端已测;外部后端集成测试留待后续 |
-| application(llm_agent/workflow_agent) | `application` seam + ah-plugins-application | 按请求路由 LLM agent 或 workflow agent,统一 AgentResult | partial: application runtime 已真实调用 agent-loop/workflow seam;Controller 支持 cancel/pause/resume/retry 命令并持久化 System event；控制命令除 `verb:task-id` 外可从自然语言提取 `task-...` 标识并仍经 Controller seam 路由（`routes_natural_language_cancel_intent_to_controller`）；retry 覆盖 Failed→Submitted、error_message 清理、snapshot 持久化、非法状态与未知 task 显式错误；resume 在 Submitted 状态更新成功后调用 `Controller::run_task` 重新调度并将执行失败写入 System event；SessionManager 绑定、LLM 意图识别、取消/超时结果映射与 memory/invoke rails 仍待补齐
+| application(llm_agent/workflow_agent) | `application` seam + ah-plugins-application | 按请求路由 LLM agent 或 workflow agent,统一 AgentResult | partial: 已绑定 SessionManager,调用 agent-loop/workflow seam,支持 checkpoint restore 与 cancel/pause/resume/retry 并持久化 System event。仍缺 LLM 意图、结构化 command、执行中取消/超时、真实 iterations/termination 统计、memory/invoke rails、production boot 和 Python differential。
 | workflow(78 类) | ah-plugins-workflow-engine | 组件、分支、循环、子工作流、检查点、流式 | Http/Intent/Questioner + 检查点续跑已落地;llm 流式 seam + 工作流 LLM 节点流式消费已落地(本回合:run_llm 经 stream_chat 消费,SSE 增量累加 + 工具调用组装);ComponentAbility 已落地(第 143 回合:invoke/stream/collect/transform 四能力名+描述,对齐 base.py);Pregel 见下 |
 | graph/Pregel(53 类) | ah-plugins-pregel | 状态通道、中断、动态路由 | 已落地(本回合:超级步引擎 + missing/present/equals 条件 + halt 中断 + 上限) |
 | controller(57 类) | `controller` seam + ah-plugins-controller | 任务调度/执行器/意图识别 | 已落地(本回合:任务 CRUD/状态机/优先级/父子层级防环;执行器注册表 + 同会话冲突拒绝;终态迁移拒绝;确定性意图识别;LLM 意图留待后续) |
@@ -71,7 +72,7 @@
 | retrieval(84 文件) | `retrieval` seam | indexing/embedding/reranker/vector store/retriever | BM25 + 本地确定性向量(哈希 n-gram TF + 余弦)已落地;reranker 本地确定性融合重排已落地(ah-plugins-rerank:词法+向量归一化加权融合 + 多样性惩罚);外部模型 embedding 留待后续 |
 | security(20 类) | `security` seam | guardrail 后端、sanitizer、风险组合 | 规则+LLM 后端;Shell AST 保守回退扫描器已落地(第 142 回合:parse_shell_for_permission 空→simple/风险结构→parse_unavailable/shlex 风格 argv,对齐 shell_ast.py);文件路径防护已落地(第 142 回合:PermissionLevel/Result 模型 + normalize_path_guard_config(legacy/native)+ FileGuardChecker(workspace 隐式放行/前缀·glob·defaults 解析/拒绝·待批 reason/evaluate/collect_ask/legacy 路径抽取),对齐 file_guard.py);tiered_policy 工具级规则/approval_overrides 留待后续 |
 | sys_operation(56 类) | `fs`/`shell`/`code`/`sandbox` seam + ah-plugins-sysop-* | 本地/远程受限执行 | 现成 sys_operation 资产;补远程沙箱
-| single_agent(60 类) | `interrupt` + `agent-callbacks` + `skill` + `agent-loop` seams; ah-plugins-agent-control/agent-loop/skill | ReAct、协作式中断/取消、生命周期回调、日志恢复、skills 注册/持久化/评估、AbilityManager 注册/启停/skill 执行/JSON 状态持久化与重载；损坏状态和缺失 skill 依赖均显式失败、AgentCard/AgentResult 类型 | partial: agent-loop 真实运行并将取消/中断写入 session log; skill 文件后端与 subagent/evolving 评估已验证; timeout 配置消费、完整 ability manager/model backup/fallback seam、命名 provider catalog seam（`StaticModelProviderCatalog` 实现）；Profile Bundle 已可保留插件 config，宿主已可读取 Bundle config 并参数化替换 backup plugin；ModelBackupPolicy seam 已由 AgentLoop 消费，app 已从 Profile Bundle 解析并挂载 policy plugin；profile 插件列表已包含 model-backup，policy plugin 由 app 按配置动态插入并加入实际挂载列表；app helper 覆盖 provider_names、正数 timeout、负 retry 和非正 timeout 的显式校验；真实多 provider catalog 组装尚缺、顺序尝试插件 `ah-plugins-model-backup` 与 agent-loop consumer；支持单次 timeout、bounded retry、streaming fallback/retry 与 sink 关闭显式失败，主模型失败可恢复到 backup；模型/backup 错误现在写入 System session event（`model_failure_is_persisted_as_system_event` 与 `backup_failure_is_persisted_as_system_event` 已通过）；application 路由仍待补齐；本回合 `AgentLoopRuntime::run_in_session_with_timeout` 将请求级 timeout 通过 contracts seam 传入 agent-loop；新增 `AgentLoopRuntime::card()` 通过同一 seam 暴露 agent 能力与恢复能力；默认实现保持替身兼容，保留轮次边界检查语义；resume 后已可通过 Controller::run_task 重新调度 |
+| single_agent(60 类) | `interrupt` + `agent-callbacks` + `skill` + `agent-loop` seams; ah-plugins-agent-control/agent-loop/ability/model-backup/skill | ReAct、协作式控制、生命周期回调、日志恢复、skills、AbilityManager、backup policy、AgentCard/AgentResult | partial: interrupt/callback、AbilityManager 状态持久化、请求级 timeout seam、顺序 backup/retry/streaming fallback 和失败日志已有实现。仍缺宿主真实多 provider catalog 组装、执行中模型/工具取消、跨 provider timeout、结构化错误、完整 rail/kv-cache hooks、宿主完全去具体 AgentLoop 类型、production E2E 和 Python differential。 |
 | multi_agent(26 类) | 见 agent_teams 域 | handoff/hierarchical/msgbus | 见 2.3
 
 ### 2.2 harness(1613 符号)
@@ -159,9 +160,10 @@
 每个能力按以下生命周期推进(详见 development.md):
 
 1. **契约**(contracts):seam trait + 纯类型 + 单元测试;
-2. **Mock**(plugin-mock):可 boot 的确定性实现,保证系统可运行;
-3. **真实**(plugin-prod):真实协议/持久化/子进程实现;
-4. **对等**(parity):差分契约 + golden fixtures + e2e,证明与 agent-core 行为对等。
+2. **测试 provider**(mock/test):可 boot 的确定性替身,不得进入生产;
+3. **生产实现**(plugin-prod):真实协议、持久化或子进程实现;
+4. **Rust 回归**:Golden fixture + Rust regression reference,证明 Rust 行为稳定;
+5. **Python 对等**:独立 Python/Rust differential + production E2E,证明公开行为一致。
 
-验收铁律:**本地/mock 测试通过 ≠ 完成**。done 状态要求:生产路径真实执行,
-无 unsupported/fallback/mock 替代,并有测试证据(文件:行)。
+验收铁律:**本地/mock/Golden/Rust reference 通过不等于 Python parity done**。状态必须区分
+implementation、production verification 和 parity,并附实现位置、测试名与审计 commit。

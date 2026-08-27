@@ -1,11 +1,10 @@
 # agent-core 未完成插件化功能审计(gap-audit.md)
 
-> 审计口径:以 agent-core(Python)为源规格,逐域核对 agent-harness 当前实现。当前工作树基于
-> `62353c9`，第 147 回合变更尚未提交;测试/覆盖率数字以 CI 实测为准。
-> 状态口径(与 capability-map.md/parity-audit.md 一致):`done`=核心语义真实落地+测试证据;
-> `partial`=已有 seam、插件或部分真实路径,但行为对等仍不完整;`missing`=当前没有可调用实现。
-> 本文件只列 **未完全完成(partial/missing)** 项;done 项见 capability-map.md。
-> 证据基线:当前 Rust 源码、生产 profile、测试与 agent-core Python 源码;文档描述不得替代代码证据。
+> 当前基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`。
+> 本文件只列 **未完全完成(partial/missing)** 项;完整映射见 `capability-map.md`,
+> 严格审计快照见 `parity-audit.md`,执行顺序见 `ROADMAP.md`。
+> `partial` 表示已有 seam、插件或部分真实路径,但 production verification 或 Python parity 不完整;
+> `missing` 表示当前没有可调用实现。Rust 自生成 reference 和 mock 测试不是 Python 对等证据。
 
 ## 0. 总体结论
 
@@ -137,23 +136,23 @@ dataset_generator(确定性+LLM)、dataset_curator、data_loader 分批、rsi-co
 
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
-| 差分契约(与 agent-core 对等) | partial | Rust 基线 5 seam(references/)+ differential.rs 门禁已落地;Python 参考数据待外部生成 |
-| 跨平台验证 | 待办 | Linux/Windows 未跑 |
-| 覆盖率门禁(≥80%) | done | llvm-cov 实测 87.94%,CI --fail-under-lines 80 |
-| 契约 fixtures(G-02) | done | fixtures/ 9 seam golden + ah-app/tests/golden.rs |
-| CI mock 门禁 | done | prod profile 无 mock 插件 |
+| Python/Rust differential | missing | 当前只有 5 个 Rust regression reference;独立 Python runner 与双端比较尚未建立 |
+| production static composition | missing | mock gate 未验证 catalog 解析、依赖闭合、重复 provider 和环 |
+| production boot smoke | missing | 尚无统一的无 mock `boot()` + `ApplicationRuntime::invoke` 门禁 |
+| 跨平台验证 | missing | 尚无 Linux/Windows/macOS CI 矩阵 |
+| 覆盖率门禁(≥80%) | implemented | CI 有 `--fail-under-lines 80`;当前 HEAD 百分比须引用 CI 实测 |
+| Golden fixtures | implemented | 9 个 seam,仅证明 Rust 契约稳定 |
+| Rust regression references | implemented | 5 个 seam,由 Rust 生成,不证明 Python parity |
+| prod mock exclusion | implemented | prod profile 不含 `ah-plugins-mock`;不等于 production boot verified |
 
-## 9. 建议的下一步优先级
+## 9. 下一步
 
-1. **core/single_agent + core/application + core/multi_agent**:这三块是 agent-core
-   "可运行的 agent" 形态(ReAct 之上的 interrupt/skills/ability + llm_agent/workflow_agent 绑定 +
-   handoff/hierarchical 团队);当前已有部分插件承载,但完整行为对等仍是用户可见性最高的缺口;
-2. **core/session 的 vcs/tracer**(session-log 之上补版本化会话与 tracer);
-3. **core/memory 的 manage/migration/process**(记忆生命周期,依赖 lite/graph 已落地基础);
-4. **core/retrieval 的 indexing/embedding/vector_store**(依赖外部 embedding,可先做解析管线与 retriever);
-5. **harness 工具长尾**(browser/lsp/mobile/worktree/cron/powershell)与 rails 长尾;
-6. **agent_evolving/agent_rl 剩余**(VERL/LoRA/gateway,依赖外部训练环境);
-7. **extensions 外部后端**(ES/Pulsar/远程沙箱/Milvus,依赖容器/网络环境)。
+当前统一优先级见 [`ROADMAP.md`](ROADMAP.md):
 
-> 维护纪律:本审计与 capability-map.md / REMAINING_PLAN.md 同源;状态变更必须附测试证据
-> (文件:行),禁止只改文档不改代码。
+1. P0 先建立 Python/Rust differential、production static composition、production boot smoke 和可信审计数据;
+2. P1 再收敛 application/agent-loop/controller/session/workflow 主链与插件生命周期;
+3. P2 推进工具、rails、context、subagents、multi-agent、retrieval/memory;
+4. P3 推进 evolving、RSI、外部基础设施和 vendor-specific provider。
+
+> 维护纪律:本文件只记录缺口,不维护独立百分比或另一套优先级。状态变更必须附实现位置、
+> 测试名、production verification 和 parity 状态。
