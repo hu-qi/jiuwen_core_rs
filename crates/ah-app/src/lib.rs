@@ -663,10 +663,7 @@ fn model_backup_policy(
     })
 }
 
-fn controller_snapshot_path(
-    profile: &Profile,
-    workspace_root: &PathBuf,
-) -> Result<PathBuf, String> {
+fn controller_snapshot_path(profile: &Profile, workspace_root: &Path) -> Result<PathBuf, String> {
     let configured = profile
         .bundles
         .iter()
@@ -706,7 +703,7 @@ fn model_backup_provider_names(profile: &Profile) -> Vec<String> {
                 .iter()
                 .any(|name| name == "ah-plugins-model-backup")
         })
-        .filter_map(|bundle| bundle.config.as_ref())
+        .find_map(|bundle| bundle.config.as_ref())
         .and_then(|config| config.get("backup_providers"))
         .and_then(toml::Value::as_array)
         .map(|values| {
@@ -893,14 +890,14 @@ pub fn boot(
 
 /// agent 循环 + 会话管理器的解析结果。
 pub type AgentManagerPair = (
-    std::sync::Arc<ah_plugins_agent_loop::AgentLoop>,
+    std::sync::Arc<dyn ah_contracts::agent::AgentLoopRuntime>,
     std::sync::Arc<dyn SessionManager>,
 );
 
 /// 解析 agent 循环与会话管理器(CLI 需要)。
 pub fn agent_and_manager(ctx: &Context) -> Result<AgentManagerPair, Box<dyn std::error::Error>> {
     let agent = ctx
-        .service::<ah_plugins_agent_loop::AgentLoop>(&AGENT_LOOP)
+        .service::<dyn ah_contracts::agent::AgentLoopRuntime>(&AGENT_LOOP)
         .ok_or("agent-loop service not registered")?;
     let manager = ctx
         .service::<dyn SessionManager>(&SESSION_MANAGER)

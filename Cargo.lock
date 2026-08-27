@@ -118,6 +118,7 @@ dependencies = [
  "ah-plugins-worktree",
  "serde_json",
  "tokio",
+ "toml",
 ]
 
 [[package]]

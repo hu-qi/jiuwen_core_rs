@@ -7,7 +7,6 @@ use ah_contracts::cli::CliRenderer;
 use ah_contracts::keys::{CLI_RENDERER, CODE, QUEUE, RSI, SESSIONS, TEAMS, WEB, WORKSPACE};
 use ah_contracts::session::{SessionEvent, SessionLog};
 use ah_contracts::workspace::{GoalStatus, WorkspaceService};
-use ah_plugins_agent_loop::AgentLoop;
 
 fn help() {
     println!(
@@ -339,12 +338,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// 在指定会话运行任务(日志驱动;同一会话连续任务共享历史)。
 async fn run_task(
-    agent: &AgentLoop,
+    agent: &std::sync::Arc<dyn ah_contracts::agent::AgentLoopRuntime>,
     session: &std::sync::Arc<dyn SessionLog>,
     task: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     agent
         .run_in_session(session.clone(), task)
         .await
-        .map_err(|e| e.0.into())
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
