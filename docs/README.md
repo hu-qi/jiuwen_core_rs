@@ -48,6 +48,8 @@ persistence-catalog.md 外均尚未创建(文档滞后于代码);如需补写,�
 
 ## 当前实现状态(截至第 50 回合,273 tests / clippy 0 / fmt clean)
 
+> 依赖隔离审计：生产插件的具体插件装配只允许存在于测试依赖/测试代码；生产调用统一通过 ah-contracts seam 与 ServiceKey，详见 architecture.md §5。
+
 全部 50 crates 已落地(ah-app / ah-contracts / ah-hub + 47 个 ah-plugins-*),
 按职责分组如下(每项均为真实实现;完成度只以代码证据为准):
 

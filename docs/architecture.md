@@ -105,7 +105,13 @@ agent-harness/
 7. **行为对等标准**:本地/mock 测试通过 ≠ 完成;完成 = 生产路径真实执行 + 差分契约通过。
 8. **版本/ABI**:跨插件边界的序列化契约(进程插件 JSON-RPC 等)一经发布即为 API,需版本化。
 
-## 5. 迁移资产(来自 agent-core_rs 的现成实现)
+## 5. 依赖隔离审计
+
+生产插件的 `[dependencies]` 只能包含 `ah-contracts`、`ah-hub` 及通用第三方库；其他 `ah-plugins-*` 只能出现在 `[dev-dependencies]`，用于集成测试装配。生产源码的跨能力调用必须通过 contracts trait 与 `ServiceKey`，不得 `use ah_plugins_*` 或引用其他插件的具体类型。提交前应分别检查 Cargo manifest 和 `src` 中非 `#[cfg(test)]` 区域。
+
+当前审计结论：`ah-plugins-agent-loop`、`ah-plugins-application`、`ah-plugins-model-backup` 均符合该规则；agent-loop/application 的具体插件装配仅存在于测试代码。完整工作区的生产依赖扫描未发现具体插件依赖。
+
+## 6. 迁移资产(来自 agent-core_rs 的现成实现)
 
 | 资产 | 迁移为 | 状态
 | --- | --- | --- |
