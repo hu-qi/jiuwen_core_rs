@@ -491,14 +491,14 @@ impl Controller for LocalController {
         }
         let previous_parent = child_to_parent.get(task_id).cloned();
         drop(child_to_parent);
-        if let Some(previous_parent) = previous_parent {
-            if previous_parent != parent_task_id {
-                self.parent_to_children
-                    .lock()
-                    .unwrap()
-                    .get_mut(&previous_parent)
-                    .map(|children| children.remove(task_id));
-            }
+        if let Some(previous_parent) = previous_parent
+            && previous_parent != parent_task_id
+        {
+            self.parent_to_children
+                .lock()
+                .unwrap()
+                .get_mut(&previous_parent)
+                .map(|children| children.remove(task_id));
         }
         self.child_to_parent
             .lock()
@@ -749,7 +749,11 @@ mod tests {
         ));
         let _ = std::fs::remove_file(&path);
         let task = Task::submitted("session", "legacy", "agent", "run", 1);
-        std::fs::write(&path, serde_json::to_vec(&[task.clone()]).unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            serde_json::to_vec(std::slice::from_ref(&task)).unwrap(),
+        )
+        .unwrap();
         assert_eq!(
             JsonTaskSnapshotStore::new(&path).load().unwrap(),
             vec![task]

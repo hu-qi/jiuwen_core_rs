@@ -716,93 +716,6 @@ fn model_backup_provider_names(profile: &Profile) -> Vec<String> {
         .unwrap_or_default()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{controller_snapshot_path, model_backup_policy, model_backup_provider_names};
-    use ah_hub::profile::Profile;
-
-    #[test]
-    #[test]
-    fn parses_controller_snapshot_path_and_rejects_escape() {
-        let profile = Profile::from_toml(
-            r#"name = "test"
-            [[bundles]]
-            id = "controller"
-            plugins = ["ah-plugins-controller"]
-            [bundles.config]
-            task_snapshot_path = "state/tasks.json"
-        "#,
-        )
-        .unwrap();
-        let root = std::path::PathBuf::from("/tmp/workspace");
-        assert_eq!(
-            controller_snapshot_path(&profile, &root).unwrap(),
-            root.join("state/tasks.json")
-        );
-        let invalid = Profile::from_toml(
-            r#"name = "test"
-            [[bundles]]
-            id = "controller"
-            plugins = ["ah-plugins-controller"]
-            [bundles.config]
-            task_snapshot_path = "../escape.json"
-        "#,
-        )
-        .unwrap();
-        assert!(controller_snapshot_path(&invalid, &root).is_err());
-    }
-
-    #[test]
-    fn parses_backup_policy_and_names_from_profile() {
-        let profile = Profile::from_toml(
-            r#"name = "test"
-            [[bundles]]
-            id = "models"
-            plugins = ["ah-plugins-model-backup"]
-            [bundles.config]
-            backup_providers = ["secondary"]
-            retries_per_model = 2
-            attempt_timeout_ms = 1500
-        "#,
-        )
-        .unwrap();
-        assert_eq!(model_backup_provider_names(&profile), vec!["secondary"]);
-        let policy = model_backup_policy(&profile).unwrap();
-        assert_eq!(policy.retries_per_model, 2);
-        assert_eq!(policy.attempt_timeout_ms, Some(1500));
-    }
-
-    #[test]
-    fn rejects_non_positive_timeout() {
-        let profile = Profile::from_toml(
-            r#"name = "test"
-            [[bundles]]
-            id = "models"
-            plugins = ["ah-plugins-model-backup"]
-            [bundles.config]
-            attempt_timeout_ms = 0
-        "#,
-        )
-        .unwrap();
-        assert!(model_backup_policy(&profile).is_err());
-    }
-
-    #[test]
-    fn rejects_negative_retries() {
-        let profile = Profile::from_toml(
-            r#"name = "test"
-            [[bundles]]
-            id = "models"
-            plugins = ["ah-plugins-model-backup"]
-            [bundles.config]
-            retries_per_model = -1
-        "#,
-        )
-        .unwrap();
-        assert!(model_backup_policy(&profile).is_err());
-    }
-}
-
 /// 按 profile 组装插件的结果:Context + 必须持有的注册 Effects。
 pub type BootResult = (Context, Vec<ah_contracts::Effect>);
 
@@ -850,15 +763,14 @@ pub fn boot(
             .unwrap_or(catalog.len());
         catalog.insert(insert_at, ("ah-plugins-model-backup-policy", policy_plugin));
     }
-    if !configured_backup_names.is_empty() {
-        if let Some((_, plugin)) = catalog
+    if !configured_backup_names.is_empty()
+        && let Some((_, plugin)) = catalog
             .iter_mut()
             .find(|(name, _)| *name == "ah-plugins-model-backup")
-        {
-            *plugin = Arc::new(
-                ModelBackupPlugin::new(Vec::new()).with_provider_names(configured_backup_names),
-            ) as DynPlugin;
-        }
+    {
+        *plugin = Arc::new(
+            ModelBackupPlugin::new(Vec::new()).with_provider_names(configured_backup_names),
+        ) as DynPlugin;
     }
     let mut plugin_names = profile.plugin_names();
     if configured_backup_policy != ah_contracts::model_backup::ModelBackupPolicy::default()
@@ -945,5 +857,91 @@ impl ah_contracts::skill_creator::SkillGenerator for UninjectedSkillGenerator {
             "no LLM generator injected for skill-creator (slug: {})",
             spec.slug
         )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{controller_snapshot_path, model_backup_policy, model_backup_provider_names};
+    use ah_hub::profile::Profile;
+
+    #[test]
+    fn parses_controller_snapshot_path_and_rejects_escape() {
+        let profile = Profile::from_toml(
+            r#"name = "test"
+            [[bundles]]
+            id = "controller"
+            plugins = ["ah-plugins-controller"]
+            [bundles.config]
+            task_snapshot_path = "state/tasks.json"
+        "#,
+        )
+        .unwrap();
+        let root = std::path::PathBuf::from("/tmp/workspace");
+        assert_eq!(
+            controller_snapshot_path(&profile, &root).unwrap(),
+            root.join("state/tasks.json")
+        );
+        let invalid = Profile::from_toml(
+            r#"name = "test"
+            [[bundles]]
+            id = "controller"
+            plugins = ["ah-plugins-controller"]
+            [bundles.config]
+            task_snapshot_path = "../escape.json"
+        "#,
+        )
+        .unwrap();
+        assert!(controller_snapshot_path(&invalid, &root).is_err());
+    }
+
+    #[test]
+    fn parses_backup_policy_and_names_from_profile() {
+        let profile = Profile::from_toml(
+            r#"name = "test"
+            [[bundles]]
+            id = "models"
+            plugins = ["ah-plugins-model-backup"]
+            [bundles.config]
+            backup_providers = ["secondary"]
+            retries_per_model = 2
+            attempt_timeout_ms = 1500
+        "#,
+        )
+        .unwrap();
+        assert_eq!(model_backup_provider_names(&profile), vec!["secondary"]);
+        let policy = model_backup_policy(&profile).unwrap();
+        assert_eq!(policy.retries_per_model, 2);
+        assert_eq!(policy.attempt_timeout_ms, Some(1500));
+    }
+
+    #[test]
+    fn rejects_non_positive_timeout() {
+        let profile = Profile::from_toml(
+            r#"name = "test"
+            [[bundles]]
+            id = "models"
+            plugins = ["ah-plugins-model-backup"]
+            [bundles.config]
+            attempt_timeout_ms = 0
+        "#,
+        )
+        .unwrap();
+        assert!(model_backup_policy(&profile).is_err());
+    }
+
+    #[test]
+    fn rejects_negative_retries() {
+        let profile = Profile::from_toml(
+            r#"name = "test"
+            [[bundles]]
+            id = "models"
+            plugins = ["ah-plugins-model-backup"]
+            [bundles.config]
+            retries_per_model = -1
+        "#,
+        )
+        .unwrap();
+        assert!(model_backup_policy(&profile).is_err());
     }
 }
