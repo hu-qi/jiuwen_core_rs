@@ -9,9 +9,12 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "ah-plugins-a2a",
+ "ah-plugins-ability",
+ "ah-plugins-agent-control",
  "ah-plugins-agent-loop",
  "ah-plugins-agentbuilder",
  "ah-plugins-anthropic",
+ "ah-plugins-application",
  "ah-plugins-autoharness",
  "ah-plugins-bridge-compose",
  "ah-plugins-checkpointer",
@@ -42,6 +45,7 @@ dependencies = [
  "ah-plugins-memory-lite",
  "ah-plugins-mock",
  "ah-plugins-model-allocator",
+ "ah-plugins-model-backup",
  "ah-plugins-model-catalog",
  "ah-plugins-oauth",
  "ah-plugins-openai",
@@ -148,13 +152,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "ah-plugins-ability"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-agent-control"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "ah-plugins-agent-loop"
 version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "ah-plugins-agent-control",
  "ah-plugins-context",
  "ah-plugins-mock",
+ "ah-plugins-model-backup",
  "ah-plugins-prompt",
  "ah-plugins-session-log",
  "ah-plugins-sysop",
@@ -192,6 +220,25 @@ dependencies = [
  "serde",
  "serde_json",
  "tiny_http",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-application"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-agent-control",
+ "ah-plugins-agent-loop",
+ "ah-plugins-mock",
+ "ah-plugins-model-backup",
+ "ah-plugins-session-log",
+ "ah-plugins-sysop",
+ "ah-plugins-tools",
+ "ah-plugins-workflow",
+ "async-trait",
+ "serde_json",
  "tokio",
 ]
 
@@ -308,6 +355,7 @@ dependencies = [
  "ah-plugins-sysop",
  "ah-plugins-tools",
  "async-trait",
+ "serde",
  "serde_json",
  "tokio",
 ]
@@ -543,6 +591,16 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "serde_json",
+]
+
+[[package]]
+name = "ah-plugins-model-backup"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "async-trait",
+ "tokio",
 ]
 
 [[package]]

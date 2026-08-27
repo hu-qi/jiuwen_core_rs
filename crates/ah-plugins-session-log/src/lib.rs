@@ -32,6 +32,7 @@ fn now_ms() -> u64 {
 
 /// 真实 JSONL 会话日志。
 pub struct JsonlSessionLog {
+    id: String,
     file: Mutex<File>,
     events: Mutex<Vec<SessionEvent>>,
     next_seq: AtomicU64,
@@ -66,7 +67,13 @@ impl JsonlSessionLog {
         }
 
         let next_seq = events.last().map(|e| e.seq + 1).unwrap_or(0);
+        let id = path
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or("default")
+            .to_string();
         Ok(Self {
+            id,
             file: Mutex::new(file),
             events: Mutex::new(events),
             next_seq: AtomicU64::new(next_seq),
@@ -84,6 +91,10 @@ impl JsonlSessionLog {
 impl Seam for JsonlSessionLog {}
 
 impl SessionLog for JsonlSessionLog {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
     fn append(&self, kind: SessionEventKind, payload: Value) -> Result<SessionEvent, SessionError> {
         let event = SessionEvent {
             seq: self.next_seq.fetch_add(1, Ordering::SeqCst),
@@ -198,6 +209,18 @@ impl SessionManagerImpl {
     fn checkpoint_path(&self, name: &str) -> PathBuf {
         self.dir.join("checkpoints").join(format!("{name}.jsonl"))
     }
+
+    fn validate_checkpoint_name(name: &str) -> Result<(), SessionError> {
+        if name.trim().is_empty()
+            || name == "."
+            || name == ".."
+            || name.contains('/')
+            || name.contains('\\')
+        {
+            return Err(SessionError("invalid checkpoint name".into()));
+        }
+        Ok(())
+    }
 }
 
 impl Seam for SessionManagerImpl {}
@@ -229,6 +252,7 @@ impl SessionManager for SessionManagerImpl {
     }
 
     fn checkpoint(&self, id: &str, name: &str) -> Result<(), SessionError> {
+        Self::validate_checkpoint_name(name)?;
         let src = self.path_for(id);
         if !src.exists() {
             return Err(SessionError(format!("session not found: {id}")));
@@ -248,6 +272,7 @@ impl SessionManager for SessionManagerImpl {
         id: &str,
         name: &str,
     ) -> Result<std::sync::Arc<dyn SessionLog>, SessionError> {
+        Self::validate_checkpoint_name(name)?;
         let src = self.checkpoint_path(name);
         if !src.exists() {
             return Err(SessionError(format!("checkpoint not found: {name}")));
@@ -476,6 +501,8 @@ mod tests {
         // 不存在的检查点报错。
         assert!(manager.restore("s1", "missing").is_err());
         assert!(manager.checkpoint("missing", "cp2").is_err());
+        assert!(manager.checkpoint("s1", "../escape").is_err());
+        assert!(manager.restore("s1", "../escape").is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

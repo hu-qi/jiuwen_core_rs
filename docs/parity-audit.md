@@ -1,7 +1,9 @@
 # 对等审计基线(parity-audit.md)
 
-> 生成时间:第 127 回合;审计基线:`b5c3548`(92 crates / 925 tests)。
-> 当前(第 141 回合):109 crates;本回合 core/operator 收尾 done(5 契约 + 2 插件测试)+ agent_teams/monitor stream_logger 收尾(7 测试)。
+> 生成时间:第 149 回合;当前审计基线:工作树基于 `62353c9`，新增 agent-control/application seam/plugin 尚未提交。
+> 本回合完成 agent_teams/messager 的基础配置模型与 in-process 传输;此前已完成
+> core/operator、agent_teams/runtime/schema/security 等局部收尾。测试数量与覆盖率不在本文硬编码,
+> 以当前 CI 实测结果为准。
 > 方法:7 域 97 个子模块,逐模块读 Python 源码(类/函数签名)对照 Rust crate 源码(`pub fn/struct/enum/trait` + `impl`),带 file:line 证据。
 > 判定标准(严格):`done` = 全部核心功能点**含 LLM 驱动能力**(LLM judge/生成/诊断、梯度优化器、embedding/reranker、多后端/多 provider/多拓扑)在 Rust 1:1 对等;Python 是 LLM 驱动而 Rust 只有确定性规则/字符串匹配/简化循环 → `partial`;Rust 无实现 → `missing`。
 > 此表衡量**行为对等度**(含 LLM 能力),不是"有代码就算完成"的功能覆盖率。
@@ -11,8 +13,12 @@
 | 指标 | 值 |
 | --- | --- |
 | **总体对等度** | **≈ 65.5%**(按 Python 文件数加权;excluded 不参与计分) |
-| done / partial / missing / excluded | **6 / 89 / 0 / 2** |
-> 第 146 回合:agent_teams/messager base 配置模型 + inprocess 传输收尾(55→65);第 145 回合:agent_teams/security permission narrowing 收尾(60→72);第 144 回合:agent_teams/runtime BackgroundTaskController(75→80);第 143 回合:harness/schema 停止条件(35→45)+ agent_teams/schema 事件主题(86→89)+ rsi learner 检索(25→50)+ workflow ComponentAbility(85→86);harness/security Shell AST + file_guard(第 142 回合,25→48)。
+| done / partial / missing / excluded | **6 / 87 / 2 / 2** |
+> 第 146 回合:agent_teams/messager base 配置模型 + in-process 传输收尾(55→65);第 145 回合:
+> agent_teams/security permission narrowing 收尾(60→72);第 144 回合:agent_teams/runtime
+> BackgroundTaskController(75→80);第 143 回合:harness/schema 停止条件、agent_teams/schema
+> 事件主题、rsi learner 检索、workflow ComponentAbility;第 142 回合:harness/security Shell AST + file_guard。
+> 以上百分比是子模块行为对等估算,不是插件数量或代码行覆盖率。
 > 第 141 回合:core/operator 收尾 done;harness/prompts 附件 CRUD/XML 渲染/注入(55→68);harness/workspace 目录构建器(40→55);agent_teams/monitor TeamStreamLogger(80→95)。
 > 第 129 回合:context 90 / config 95 / data_loader 92(仍计 partial,未达 done 判定线 100 或 LLM 无缺) |
 | 上一基线(第 75 回合) | ≈ 31% |
@@ -40,9 +46,19 @@
 | harness / kv_cache | 90 | `ah-contracts/src/kv_cache.rs:77/94/131/186` + `ah-plugins-kv-cache/src/lib.rs:21-118` affinity/sticky/session-id 判定 + prefetch/offload/evict 信号 1:1 |
 | core / operator | 100 | **done(第 141 回合)**:`ah-contracts/src/operator.rs:71/96/128` Operator.apply_update 兼容行为(replace/state→set_parameter+前后状态比较,其余显式错误)+ PreviewableOperator(preview_update 抽象 + apply_update 路由预览)+ TunableKind::SkillExperience;`ah-plugins-operator/src/lib.rs:434-548` SkillExperienceOperator(operator_id=skill_experience_{skill},tunables experiences/kind skill_experience/path content/preview_update 目标+mode/effect 校验→records+lifecycle_stage=local_apply_completed+metadata.skill_name/set_parameter 通知消费方/get_state={}/load_state 无副作用),1:1 对齐 operator/base.py:114-181 + skill_call/base.py:22-117;ApplyResult 补 records/lifecycle_stage/pending_change_id(evolving.rs:230) |
 
-## 3. 完全未实现(missing)—— 0 个
+## 3. 完全未实现(missing)—— 2 个
 
-全部 11 个 missing 模块已补到至少 partial(第 127-128 回合):manifest、resources、worktree、checkpointer、kv_cache(harness)、lsp、kv_cache(agent_teams)、prompt_builder、skill_creator;rsi/resource、rsi/storage 判 excluded(见 §3b)。
+当前仍有两个能力子模块没有可调用的 Rust 实现:
+
+| 域 | 模块 | 缺口 |
+| --- | --- | --- |
+| rsi | updater | `multi_dim.py`、`single_dim.py`、`protocol.py` |
+| extensions | vendor_specific | 各厂商专用重排/嵌入实现 |
+
+原先标记为 missing 的其他模块均已至少有 seam、插件、确定性逻辑或部分真实路径,
+因此已改为 `partial`;这不代表 Python 行为已完成对等。manifest、resources、worktree、
+checkpointer、kv_cache(harness)、lsp、kv_cache(agent_teams)、prompt_builder、
+skill_creator 均属于此类。rsi/resource、rsi/storage 判 excluded(见 §3b)。
 
 ## 3b. 排除(excluded)—— 2 个(Python 侧亦为 TODO 桩,无真实功能)
 
@@ -62,9 +78,9 @@
 | graph | 60 | StreamActor 流式、可视化 |
 | multi_agent | 55 | 消息总线/订阅拓扑、handoff 编排 |
 | context_engine | 55 | round/dialogue 压缩、会话记忆管理器 |
-| single_agent | 55 | AbilityManager、中断恢复、远程技能 |
+| single_agent | 58 | agent-control 已提供稳定 interrupt/callback seam，callback manager 生命周期顺序测试已通过；ability 已提供 AbilityManager 注册/启停/skill 执行、JSON 状态持久化重载；损坏状态和缺失 skill 依赖显式失败。model backup 已提供 ModelBackup seam、命名 provider catalog seam（含 StaticModelProviderCatalog）与顺序尝试插件，Profile Bundle 已能解析插件 config 并驱动 backup provider_names；ModelBackupPolicy seam 已由 AgentLoop 消费，app 可从 Profile Bundle 解析并挂载 policy plugin；dev profile 已声明 model-backup，policy plugin 由 app 按配置动态插入并加入实际挂载列表；app helper 覆盖 provider_names、正数 timeout、负 retry 和非正 timeout 的显式校验，已接入 agent-loop 主调用，主模型失败后按顺序尝试 backup，最终模型错误写入 System session event（模型与 backup 最终失败的精确持久化测试已通过）；agent-loop 9 项测试及 backup fallback/timeout/retry/streaming/retry/sink-close 测试通过；agent-loop 在 session log 记录中断/取消并可继续复用历史；AbilityManager、可配置 timeout、model backup、application 路由仍缺 |
 | foundation | 50 | 8 个 provider、KV cache 亲和、向量/图/对象存储 |
-| application | 45 | LLM 意图检测/任务分发 |
+| application | 58 | `ah-plugins-application` 通过 `SessionManager` 按 session_id 创建/打开持久会话，并路由 LLM agent/workflow agent；本回合新增 `AgentLoopRuntime` contracts seam，application 只解析 `dyn AgentLoopRuntime`；`AgentLoopRuntime::card()` 已通过 seam 暴露 AgentCard 能力与恢复能力，contracts 提供兼容默认值，移除对 agent-loop 具体类型的生产依赖；timeout 通过 `AgentLoopRuntime::run_in_session_with_timeout` 从请求传入，并仍为轮次边界检查，写入 AgentTimedOut event；取消/中断/超时已映射到 AgentResult 状态；agent-loop 失败会追加带 command/state/error 的 System event；Controller seam 已可选接入 application；`TaskSnapshotStore` seam 已有 in-memory/JSON 实现，LocalController 可选消费 Context snapshot provider 或显式 JSON 路径，ah-app 默认使用 workspace/controller/tasks.json，显式 path plugin mount 测试通过；自动保存/恢复（含失败 error_message、working/parent-child 索引、父子链接持久化（含重挂载/删除 child 的旧索引清理，并避免 link_parent 锁重入）与确定性 pending 排序）、round-trip、损坏输入、不一致/非法字段快照、损坏挂载失败和同实例并发写入与跨实例 lock 冲突显式失败测试已通过；controller 全量 21 项单测通过；versioned envelope、未知版本拒绝、malformed envelope 显式错误与 legacy 裸数组兼容已验证；controller 全量 22 项单测通过，失败 replace 后 lock 清理已验证；controller 全量 19 项单测通过；文本 task-id 控制命令已执行，支持 `verb:task-id` 与自然语言 `task-...` 标识，映射错误并写入 System session event（含 retry:<task_id> 失败任务重置、错误清理与持久化；resume:<task_id> 更新 Submitted 后重新调用 Controller::run_task；非法状态/未知任务显式错误；controller 24 项、application 12 项 focused tests 通过）（保留原始 command 与 intent，非法 task-id 也持久化失败事件），focused persistence tests 通过（含 controller failure），LLM 意图检测和更丰富的结构化 command payload 仍缺（当前已持久化 raw command/intent）；Failed 终态恢复拒绝已由状态机测试覆盖；AgentRequest 已支持命名 checkpoint restore；application 缺失/空 checkpoint failure 与 workflow restore 集成测试通过，JSONL restore persistence test 已有，并覆盖非法 checkpoint 名称/路径穿越 |
 | runner | 45 | 装饰器框架、Pulsar、drunner、资源管理器 |
 | sys_operation | 45 | 沙箱网关/容器隔离、code 操作、进程注册表 |
 | common | 40 | HTTP/LLM 客户端池、后台任务、日志异常体系 |

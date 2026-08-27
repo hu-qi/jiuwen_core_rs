@@ -19,6 +19,12 @@ pub const SHELL: ServiceKey = ServiceKey::new("shell");
 
 /// `agent-loop` 服务键(agent 循环)。
 pub const AGENT_LOOP: ServiceKey = ServiceKey::new("agent-loop");
+pub const APPLICATION: ServiceKey = ServiceKey::new("application");
+pub const ABILITIES: ServiceKey = ServiceKey::new("abilities");
+/// `interrupt` seam service key.
+pub const INTERRUPT: ServiceKey = ServiceKey::new("interrupt");
+/// Agent lifecycle callback manager seam service key.
+pub const AGENT_CALLBACKS: ServiceKey = ServiceKey::new("agent-callbacks");
 
 /// `sessions` seam 服务键(会话事件日志)。
 pub const SESSIONS: ServiceKey = ServiceKey::new("sessions");
@@ -162,6 +168,10 @@ pub const EXPERIENCE_SCORER: ServiceKey = ServiceKey::new("experience-scorer");
 pub const JSON_PARSER: ServiceKey = ServiceKey::new("json-parser");
 pub const KVC_HOOKS: ServiceKey = ServiceKey::new("kvc-hooks");
 pub const MODEL_CATALOG: ServiceKey = ServiceKey::new("model-catalog");
+pub const MODEL_BACKUP: ServiceKey = ServiceKey::new("model-backup");
+pub const MODEL_PROVIDER_CATALOG: ServiceKey = ServiceKey::new("model-provider-catalog");
+pub const MODEL_BACKUP_POLICY: ServiceKey = ServiceKey::new("model-backup-policy");
+pub const TASK_SNAPSHOT_STORE: ServiceKey = ServiceKey::new("task-snapshot-store");
 pub const SIGNALS: ServiceKey = ServiceKey::new("signals");
 pub const DATASET_CURATOR: ServiceKey = ServiceKey::new("dataset-curator");
 pub const DATA_LOADER: ServiceKey = ServiceKey::new("data-loader");

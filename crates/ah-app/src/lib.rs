@@ -12,9 +12,12 @@ use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
 use ah_plugins_a2a::A2APlugin;
+use ah_plugins_ability::AbilityPlugin;
+use ah_plugins_agent_control::AgentControlPlugin;
 use ah_plugins_agent_loop::AgentLoopPlugin;
 use ah_plugins_agentbuilder::AgentBuilderPlugin;
 use ah_plugins_anthropic::AnthropicPlugin;
+use ah_plugins_application::ApplicationPlugin;
 use ah_plugins_autoharness::AutoHarnessPlugin;
 use ah_plugins_bridge_compose::BridgeComposePlugin;
 use ah_plugins_checkpointer::CheckpointerPlugin;
@@ -46,6 +49,7 @@ use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_memory_lite::MemoryLitePlugin;
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_model_allocator::ModelAllocatorPlugin;
+use ah_plugins_model_backup::{ModelBackupPlugin, ModelBackupPolicyPlugin};
 use ah_plugins_model_catalog::ModelCatalogPlugin;
 use ah_plugins_oauth::OAuthPlugin;
 use ah_plugins_openai::OpenAiPlugin;
@@ -242,7 +246,9 @@ pub fn plugin_catalog(
         ),
         (
             "ah-plugins-controller",
-            Arc::new(ControllerPlugin) as DynPlugin,
+            Arc::new(ControllerPlugin::with_snapshot_path(
+                workspace_root.join("controller/tasks.json"),
+            )) as DynPlugin,
         ),
         (
             "ah-plugins-store",
@@ -580,8 +586,24 @@ pub fn plugin_catalog(
             Arc::new(TelemetryPlugin::new(telemetry_dir)) as DynPlugin,
         ),
         (
+            "ah-plugins-agent-control",
+            Arc::new(AgentControlPlugin) as DynPlugin,
+        ),
+        (
             "ah-plugins-agent-loop",
             Arc::new(AgentLoopPlugin::default()) as DynPlugin,
+        ),
+        (
+            "ah-plugins-application",
+            Arc::new(ApplicationPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-ability",
+            Arc::new(AbilityPlugin::default()) as DynPlugin,
+        ),
+        (
+            "ah-plugins-model-backup",
+            Arc::new(ModelBackupPlugin::new(Vec::new())) as DynPlugin,
         ),
         (
             // 真实外部成员客户端工厂(ExternalTeamClient):依赖 external-format /
@@ -604,6 +626,186 @@ pub fn plugin_catalog(
     catalog
 }
 
+fn model_backup_policy(
+    profile: &Profile,
+) -> Result<ah_contracts::model_backup::ModelBackupPolicy, String> {
+    let config = profile
+        .bundles
+        .iter()
+        .filter(|bundle| {
+            bundle
+                .plugins
+                .iter()
+                .any(|name| name == "ah-plugins-model-backup")
+        })
+        .find_map(|bundle| bundle.config.as_ref());
+    let retries_per_model = match config.and_then(|value| value.get("retries_per_model")) {
+        None => 0,
+        Some(value) => value
+            .as_integer()
+            .filter(|value| *value >= 0)
+            .ok_or_else(|| "retries_per_model must be a non-negative integer".to_string())?
+            as usize,
+    };
+    let attempt_timeout_ms = match config.and_then(|value| value.get("attempt_timeout_ms")) {
+        None => None,
+        Some(value) => Some(
+            value
+                .as_integer()
+                .filter(|value| *value > 0)
+                .ok_or_else(|| "attempt_timeout_ms must be a positive integer".to_string())?
+                as u64,
+        ),
+    };
+    Ok(ah_contracts::model_backup::ModelBackupPolicy {
+        attempt_timeout_ms,
+        retries_per_model,
+    })
+}
+
+fn controller_snapshot_path(
+    profile: &Profile,
+    workspace_root: &PathBuf,
+) -> Result<PathBuf, String> {
+    let configured = profile
+        .bundles
+        .iter()
+        .filter(|bundle| {
+            bundle
+                .plugins
+                .iter()
+                .any(|name| name == "ah-plugins-controller")
+        })
+        .find_map(|bundle| bundle.config.as_ref())
+        .and_then(|config| config.get("task_snapshot_path"));
+    let Some(value) = configured else {
+        return Ok(workspace_root.join("controller/tasks.json"));
+    };
+    let path = value
+        .as_str()
+        .filter(|path| !path.trim().is_empty())
+        .ok_or_else(|| "task_snapshot_path must be a non-empty string".to_string())?;
+    let relative = PathBuf::from(path);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| component == std::path::Component::ParentDir)
+    {
+        return Err("task_snapshot_path must remain within workspace".to_string());
+    }
+    Ok(workspace_root.join(relative))
+}
+
+fn model_backup_provider_names(profile: &Profile) -> Vec<String> {
+    profile
+        .bundles
+        .iter()
+        .filter(|bundle| {
+            bundle
+                .plugins
+                .iter()
+                .any(|name| name == "ah-plugins-model-backup")
+        })
+        .filter_map(|bundle| bundle.config.as_ref())
+        .and_then(|config| config.get("backup_providers"))
+        .and_then(toml::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(toml::Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{controller_snapshot_path, model_backup_policy, model_backup_provider_names};
+    use ah_hub::profile::Profile;
+
+    #[test]
+    #[test]
+    fn parses_controller_snapshot_path_and_rejects_escape() {
+        let profile = Profile::from_toml(
+            r#"name = "test"
+            [[bundles]]
+            id = "controller"
+            plugins = ["ah-plugins-controller"]
+            [bundles.config]
+            task_snapshot_path = "state/tasks.json"
+        "#,
+        )
+        .unwrap();
+        let root = std::path::PathBuf::from("/tmp/workspace");
+        assert_eq!(
+            controller_snapshot_path(&profile, &root).unwrap(),
+            root.join("state/tasks.json")
+        );
+        let invalid = Profile::from_toml(
+            r#"name = "test"
+            [[bundles]]
+            id = "controller"
+            plugins = ["ah-plugins-controller"]
+            [bundles.config]
+            task_snapshot_path = "../escape.json"
+        "#,
+        )
+        .unwrap();
+        assert!(controller_snapshot_path(&invalid, &root).is_err());
+    }
+
+    #[test]
+    fn parses_backup_policy_and_names_from_profile() {
+        let profile = Profile::from_toml(
+            r#"name = "test"
+            [[bundles]]
+            id = "models"
+            plugins = ["ah-plugins-model-backup"]
+            [bundles.config]
+            backup_providers = ["secondary"]
+            retries_per_model = 2
+            attempt_timeout_ms = 1500
+        "#,
+        )
+        .unwrap();
+        assert_eq!(model_backup_provider_names(&profile), vec!["secondary"]);
+        let policy = model_backup_policy(&profile).unwrap();
+        assert_eq!(policy.retries_per_model, 2);
+        assert_eq!(policy.attempt_timeout_ms, Some(1500));
+    }
+
+    #[test]
+    fn rejects_non_positive_timeout() {
+        let profile = Profile::from_toml(
+            r#"name = "test"
+            [[bundles]]
+            id = "models"
+            plugins = ["ah-plugins-model-backup"]
+            [bundles.config]
+            attempt_timeout_ms = 0
+        "#,
+        )
+        .unwrap();
+        assert!(model_backup_policy(&profile).is_err());
+    }
+
+    #[test]
+    fn rejects_negative_retries() {
+        let profile = Profile::from_toml(
+            r#"name = "test"
+            [[bundles]]
+            id = "models"
+            plugins = ["ah-plugins-model-backup"]
+            [bundles.config]
+            retries_per_model = -1
+        "#,
+        )
+        .unwrap();
+        assert!(model_backup_policy(&profile).is_err());
+    }
+}
+
 /// 按 profile 组装插件的结果:Context + 必须持有的注册 Effects。
 pub type BootResult = (Context, Vec<ah_contracts::Effect>);
 
@@ -620,7 +822,12 @@ pub fn boot(
     telemetry_dir: &PathBuf,
 ) -> Result<BootResult, Box<dyn std::error::Error>> {
     let profile = Profile::load(profile_path)?;
-    let catalog = plugin_catalog(
+    let configured_backup_names = model_backup_provider_names(&profile);
+    let configured_controller_snapshot = controller_snapshot_path(&profile, workspace_root)
+        .map_err(|message| format!("invalid controller profile configuration: {message}"))?;
+    let configured_backup_policy = model_backup_policy(&profile)
+        .map_err(|message| format!("invalid model-backup profile configuration: {message}"))?;
+    let mut catalog = plugin_catalog(
         workspace_root,
         session_path,
         session_dir,
@@ -628,8 +835,43 @@ pub fn boot(
         retrieval_dir,
         telemetry_dir,
     );
-    let plugins: Vec<DynPlugin> = profile
-        .plugin_names()
+    if let Some((_, plugin)) = catalog
+        .iter_mut()
+        .find(|(name, _)| *name == "ah-plugins-controller")
+    {
+        *plugin = Arc::new(ControllerPlugin::with_snapshot_path(
+            configured_controller_snapshot,
+        )) as DynPlugin;
+    }
+    if configured_backup_policy != ah_contracts::model_backup::ModelBackupPolicy::default() {
+        let policy_plugin = Arc::new(ModelBackupPolicyPlugin {
+            policy: configured_backup_policy,
+        }) as DynPlugin;
+        let insert_at = catalog
+            .iter()
+            .position(|(name, _)| *name == "ah-plugins-model-backup")
+            .unwrap_or(catalog.len());
+        catalog.insert(insert_at, ("ah-plugins-model-backup-policy", policy_plugin));
+    }
+    if !configured_backup_names.is_empty() {
+        if let Some((_, plugin)) = catalog
+            .iter_mut()
+            .find(|(name, _)| *name == "ah-plugins-model-backup")
+        {
+            *plugin = Arc::new(
+                ModelBackupPlugin::new(Vec::new()).with_provider_names(configured_backup_names),
+            ) as DynPlugin;
+        }
+    }
+    let mut plugin_names = profile.plugin_names();
+    if configured_backup_policy != ah_contracts::model_backup::ModelBackupPolicy::default()
+        && !plugin_names
+            .iter()
+            .any(|name| name == "ah-plugins-model-backup-policy")
+    {
+        plugin_names.push("ah-plugins-model-backup-policy".to_string());
+    }
+    let plugins: Vec<DynPlugin> = plugin_names
         .iter()
         .map(|name| {
             catalog

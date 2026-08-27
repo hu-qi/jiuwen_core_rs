@@ -294,7 +294,10 @@ impl CliRenderer for TerminalRenderer {
                     result: output.to_string(),
                 }]
             }
-            SessionEventKind::AgentStep => Vec::new(),
+            SessionEventKind::AgentStep
+            | SessionEventKind::AgentInterrupted
+            | SessionEventKind::AgentCanceled
+            | SessionEventKind::AgentTimedOut => Vec::new(),
         }
     }
 

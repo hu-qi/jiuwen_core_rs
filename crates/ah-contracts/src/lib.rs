@@ -11,6 +11,7 @@
 //! - 机制类型([`Effect`]、[`ServiceKey`])也定义在此层,供 seam 接口使用。
 
 pub mod a2a;
+pub mod ability;
 pub mod agent;
 pub mod agent_builder;
 pub mod analyzer;
@@ -49,6 +50,7 @@ pub mod memory;
 pub mod memory_lite;
 pub mod messager;
 pub mod model_allocator;
+pub mod model_backup;
 pub mod model_catalog;
 pub mod oauth;
 pub mod operator;
@@ -137,7 +139,11 @@ pub mod prelude {
         serialize_param_payload, to_a2a_agent_card, to_a2a_part, to_a2a_request, to_struct,
         with_session_id,
     };
-    pub use crate::agent::AgentStep;
+    pub use crate::ability::{Ability, AbilityError, AbilityExecution, AbilityManager};
+    pub use crate::agent::{
+        AgentCallbackContext, AgentCallbackManager, AgentCard, AgentControl, AgentControlError,
+        AgentRequest, AgentResult, AgentRunState, AgentStep, ApplicationRuntime, InterruptRuntime,
+    };
     pub use crate::agent_builder::{AgentBuilder, AgentDesign, BuildError};
     pub use crate::analyzer::{
         AnalysisArtifact, AnalysisSignal, AnalyzerCase, AnalyzerError, CaseAnalysisInput,
@@ -168,7 +174,8 @@ pub mod prelude {
         MemoryEvolver, MemoryEvolverError, MemoryInjection, TaskMemory, TrajectorySummary,
     };
     pub use crate::controller::{
-        Controller, ControllerError, Intent, IntentType, Task, TaskExecutor, TaskFilter, TaskStatus,
+        Controller, ControllerError, Intent, IntentType, Task, TaskExecutor, TaskFilter,
+        TaskSnapshotStore, TaskStatus,
     };
     pub use crate::credentials::{Credential, CredentialError, CredentialProvider};
     pub use crate::effect::Effect;
@@ -191,8 +198,8 @@ pub mod prelude {
         AddMemoryResult, Entity, Episode, GraphHit, GraphMemory, GraphMemoryError, Relation,
     };
     pub use crate::keys::{
-        AGENT_LOOP, CREDENTIALS, FS, LLM, MCP, MEMORY, RETRIEVAL, SESSION_MANAGER, SESSIONS, SHELL,
-        TELEMETRY, TOOLS, WORKFLOW,
+        AGENT_CALLBACKS, AGENT_LOOP, APPLICATION, CREDENTIALS, FS, INTERRUPT, LLM, MCP, MEMORY,
+        RETRIEVAL, SESSION_MANAGER, SESSIONS, SHELL, TELEMETRY, TOOLS, WORKFLOW,
     };
     pub use crate::kv_cache::{
         ControlDomain, KvcAffinityModel, KvcCacheIdentity, KvcError, KvcHooks, KvcTeamAction,
@@ -224,6 +231,10 @@ pub mod prelude {
         MemberOptimizerError, OptimizationPlan, PublishResult, Verification,
     };
     pub use crate::memory::{MemoryError, MemoryProvider, MemoryRecord};
+    pub use crate::model_backup::{
+        ModelBackup, ModelBackupError, ModelBackupPolicy, ModelBackupPolicyProvider,
+    };
+    pub use crate::model_catalog::{ModelCatalogError, ModelProviderCatalog};
     pub use crate::oauth::{
         DeviceAuthRequest, DeviceCode, OAuthClient, OAuthError, PollResult, TokenResponse,
     };
@@ -363,9 +374,7 @@ pub mod prelude {
         validate_sample_rate, workflow_attrs, workflow_call_start_attrs, workflow_span_name,
     };
     pub use crate::trainer::{TrainEpoch, TrainRequest, TrainResult, Trainer, TrainerError};
-    pub use crate::transport::{
-        AgentCard, AgentHandler, AgentMessage, AgentTransport, TransportError,
-    };
+    pub use crate::transport::{AgentHandler, AgentMessage, AgentTransport, TransportError};
     pub use crate::tune::{TuneError, TunePipeline, TuneRequest, TuneResult, TuneRoundResult};
     pub use crate::tune_kit::{
         Case, CaseLoader, EvaluatedCase, OptimizeHistory, Progress, TextualParameter, TraceNode,

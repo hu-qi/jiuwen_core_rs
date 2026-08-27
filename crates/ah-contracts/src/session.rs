@@ -19,6 +19,12 @@ pub enum SessionEventKind {
     System,
     /// agent 每轮步进。
     AgentStep,
+    /// agent execution was interrupted and can be resumed.
+    AgentInterrupted,
+    /// agent execution was cancelled by the caller.
+    AgentCanceled,
+    /// agent execution exceeded its deadline.
+    AgentTimedOut,
 }
 
 /// 一条会话事件(append-only 日志的最小单元)。
@@ -58,6 +64,9 @@ impl std::error::Error for SessionError {}
 /// 对齐 DSH 的 session log 原则:**模型可见即已记录**——
 /// 任何到达模型请求的输入都必须能从本日志重建。
 pub trait SessionLog: Seam {
+    /// Stable identifier used by interrupt, callback, and recovery controls.
+    fn id(&self) -> &str;
+
     /// 追加一条事件并落盘,返回带序号的完整事件。
     fn append(&self, kind: SessionEventKind, payload: Value) -> Result<SessionEvent, SessionError>;
 

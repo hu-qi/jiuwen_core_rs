@@ -2,9 +2,10 @@
 
 > 目标(已修正):**用 Rust 独立实现 agent-core 全部功能,不依赖 Python agent-core 运行时**
 > (Python 源码仅在 /Volumes/coder/开源/rs_jiuwen/agent-core 作为规格参考;capability-map 为核对账本)。
-> 当前 1000+ tests / 109 crates,clippy -D warnings 0,fmt clean。
+> 当前约 109 crates;测试、覆盖率、clippy 与 fmt 状态以 CI/本地当前 HEAD 实测为准。
 >
-> **第三梯队 A(teams / evolving / rsi)已全部完成**(df5584f)。
+> teams / evolving / rsi 的主要确定性管线已落地,但严格行为对等仍有 partial 项;
+> 详见 `docs/parity-audit.md` 与 `docs/gap-audit.md`,不要将“管线已落地”理解为整个域 100% 完成。
 > **B-1 契约 fixtures(G-02)已落地**:fixtures/ 9 个 seam 的语言中立 golden + ah-app/tests/golden.rs 驱动真实实现验证。
 > **B-2 覆盖率门禁已落地**:cargo llvm-cov 实测 workspace 行覆盖率 87.94%,CI 以 --fail-under-lines 80 强制。
 >
@@ -25,7 +26,7 @@
 > **账目更新**(第 142 回合,协调者实现,partial 收尾推进):
 > - harness/security → 25→48:ah-plugins-security 新增 `shell_ast.rs`(对齐 shell_ast.py:34-186 — parse_shell_for_permission 保守回退:空→simple/风险结构(管道·`&&`·`;`·重定向·命令/进程替换·参数展开·heredoc)→parse_unavailable(`tree-sitter backend unavailable and fallback detected shell structure`)/shlex 风格分词 shlex_split_posix(单引号字面/双引号内 `$``"`\` 换行转义/引号外反斜杠/未闭合→None→`fallback lexer failed to tokenize command safely`)/ShellStructureFlags.has_risky_structure/运算符标记收集)+ `file_guard.rs`(对齐 file_guard.py:81-747 + models.py + tiered_policy.py 确定性部分 — PermissionLevel(allow/ask/deny)/PermissionResult(is_allowed/is_denied/needs_approval)/FileGuardMode·Match·Action/AxisDefaults/PathRule/EffectiveFileGuardConfig 纯类型;parse_level/strictest(deny>ask>allow)/axis_from_star/apply_implications(Write|Exec⇒Read,显式 deny 优先)/compile_path_entry(空·`*`·prefix 无 `/` 跳过)/match_glob(手写分段匹配 **/ */?)/looks_like_path(UNC·盘符·相对前缀);normalize_path_guard_config(enabled=显式或有 external_directory/trusted_dirs;native 判定:defaults·workspace 轴·glob·无旧 external_directory)+ legacy(workspace 隐式 allow 前缀 + external_directory 具名键 + file_guard.paths 并入)+ native(defaults 迁移自 external_directory["*"] + paths(prefix/glob)+ workspace 轴 + trusted_dirs allow + 旧键迁移源去重);FileGuardChecker(evaluate:legacy 路径抽取(shell 命令·路径类工具)→(path,action),resolve_one 最长前缀·glob 命中·deny>ask>allow·未命中 defaults,全 ALLOW→None,reason `Access to paths outside workspace is {denied|requires approval}`/`file_guard {denied|requires approval}` + matched_rule `external_directory.*`/`file_guard:prefix:{path}`/`file_guard:glob`/`file_guard:defaults`;collect_ask_accesses 仅 ASK 去重;extract_paths_legacy/_extract_paths_from_command(路径感知命令 + _looks_like_path + 工作目录拼接));8 契约 + 7 插件测试;tiered_policy 工具级规则/权限引擎组合/approval_overrides 留待后续
 >
-> **账目更新**(第 141 回合,协调者实现,partial 收尾推进):
+> **历史账目更新**(第 141 回合及更早,协调者实现,partial 收尾推进;仅作变更记录):
 > - core/operator → **done**:ah-contracts operator seam 补 `Operator.apply_update`(对齐 base.py:114-148 — replace/state → set_parameter + 前后状态比较判定 applied,其余 mode/effect 显式错误 `unsupported update mode/effect for compatibility operator: {m}/{e}`)+ `PreviewableOperator` trait(preview_update 抽象 + apply_update 路由预览,对齐 base.py:167-181)+ `TunableKind::SkillExperience`;`ApplyResult` 补 records/lifecycle_stage/pending_change_id 字段(对齐 types.py:37-55);ah-plugins-operator 新增 `SkillExperienceOperator`(对齐 skill_call/base.py:22-117 — operator_id=skill_experience_{skill}/get_tunables→experiences(kind=skill_experience,path=content,constraint={type:record})/preview_update:目标非 experiences 或 effect≠pending_change 或 mode∉{append,merge} 显式错误,合法则 records=payload 列表化 + applied=!records.empty + lifecycle_stage=local_apply_completed + metadata.skill_name/set_parameter 通知消费方(items 列表)/get_state={}/load_state 无副作用);5 契约测试 + 2 插件测试
 > - agent_teams/monitor → 80→95:ah-plugins-team-monitor 新增 `stream_logger.rs`(对齐 stream_logger.py:90-427 — TeamStreamLogger:11 个 chunk 类型常量 + ACCUMULATING_TYPES(llm_output/llm_reasoning)+ runtime_ready 事件分拆 + TOOL_RESULT_CAP 2000/TOOL_ARGS_CAP 500/GENERIC_CAP 2000 三级截断(`… (truncated)`)+ category_level 类别→级别表 + classify 分类 + tool_call/tool_result/tool_update/controller_output/runtime_ready/interaction/generic 摘要(缺标准键整包兜底)+ 按 (member,role) 来源独立 run 缓冲、类别切换冲刷、离散 chunk 立即写、answer 去重(llm_output 已见即弃)、未标记 chunk 跳过(isinstance 语义)、`[INFO] stream end, N chunks` 收尾、本地毫秒时间戳(自实现 civil 历法 + date +%z 偏移));7 测试(含真实文件落盘);TeamMonitor 单查/消息过滤留待后续
 > - harness/prompts → 55→68:ah-contracts prompt_attachment 补渲染纯函数 + store seam(xml_text(html.escape quote=False)/xml_attr(quote=True + `&apos;`)/kind_value/stable_sort_key((priority,source,section))/is_expired/render(`<system-reminder>` 块,DEFAULT_MAX_PROMPT_ATTACHMENT_CHARS=12000/DEFAULT_MAX_RENDERED_CHARS=48000,单附件超限截断标记、总量截断重写标记)/inject_messages(追加独立 user 消息)+ PromptAttachmentStore seam(add_section/clear_section/get_by_id/update_by_id/remove_by_id/list_by_filter/remove_by_filter(无过滤+allow_all=false 显式 `destructive prompt attachment operation requires at least one filter`)/clear_session/clear_all/collect_for_session(过期剔除)),对齐 prompt_attachment_manager.py:74-661 确定性部分)+ ah-plugins-prompt-attachment InMemoryPromptAttachmentStore(真实实现:section_value 净化、id=session.{safe}.{safe}、metadata 合并 {section,source}、normalize_for_write(UTC ISO 时间戳+内容 sha256+metadata.section 注入)、update_by_id 不可变字段回写+缺失显式 `prompt attachment not found`、稳定排序);注册 prompt-attachment-store 键;6 契约 + 6 插件测试;PromptAttachmentContextWriter(上下文会话绑定)与 make_window_mutator 留待上下文接线
@@ -70,7 +71,7 @@
 > - rsi/data_loader → 92:ah-plugins-data-loader BatchPlanStore(write_dataset_profile/write_batch_plan 真实 YAML 落盘,对齐 plan_store.py)+ json_to_yaml;2 新测试
 >
 > **账目更新**(第 128 回合,missing 11 → 0,协调者实现):
-> - 全部 11 个 missing 模块补到至少 partial / done:
+> - 历史记录:原先标记的 11 个 missing 模块已补到至少 partial / done;当前状态以 parity-audit.md 为准:
 >   - **done**:harness/kv_cache(ah-contracts/src/kv_cache.rs:77-131 + ah-plugins-kv-cache,affinity/sticky/session-id 判定 + prefetch/offload/evict 信号 1:1)
 >   - **partial**:harness/resources(ah-contracts/src/resources.rs + ah-plugins-resources:spec 模型/MCP 归一化/模板渲染/路径校验/resolver);agent_teams/worktree(ah-contracts/src/worktree.rs + ah-plugins-worktree:naming/member_state/session_scope 确定性部分);extensions/checkpointer(ah-contracts/src/checkpointer.rs + ah-plugins-checkpointer:TTL 换算/key 构造/四存储/钩子编排);agent_teams/kv_cache(ah-contracts/src/kv_cache.rs team 部分:状态机/manageable/control domain);harness/lsp(ah-contracts/src/lsp.rs + ah-plugins-lsp:状态机/诊断注册表/5 语言 server 配置);dev_tools/prompt_builder(ah-contracts/src/prompt_builder_devtools.rs + ah-plugins-prompt-builder-devtools:三构建器校验/解析/模板编排,LLM 经 seam 注入);dev_tools/skill_creator(ah-contracts/src/skill_creator.rs + ah-plugins-skill-creator:slugify/资产编号/过滤/去幻影,抓取与 LLM 经 seam 注入)
 > - 第 127 回合(上一条):rsi/resource + rsi/storage 判 excluded;harness/manifest done
@@ -97,7 +98,7 @@
 > **账目更新**(第 121 回合,882 tests / clippy 0 / fmt clean,协调者实现):
 > - 检查点类型补全 ah-plugins-evolving checkpoint_types.rs 重写(1:1 对齐 checkpointing/types.py):EvolutionPatch(action ∈ append/merge/replace/skip 校验/target ∈ description/body/script 归一/skip 动作豁免 section 校验/section ∈ VALID_SECTIONS;to_dict 可选字段非空带出/from_dict 默认 target=body·section=Troubleshooting·action=append)+ EvolutionRecord(make:id=ev_{8hex}/UTC ISO/usage_stats 默认/is_pending/to_dict(from_dict 默认 source=unknown·score=0.6·applied=false))+ EvolutionLog.entries 改类型化 Vec<EvolutionRecord>(pending_entries 按 is_pending);6 测试(143 总)
 >
-> **账目更新**(第 120 回合,880 tests / clippy 0 / fmt clean,协调者实现):
+> **历史账目更新**(第 120 回合,旧测试/工程状态,协调者实现;仅作变更记录):
 > - 检查点类型 ah-plugins-evolving += checkpoint_types.rs(新模块文件,1:1 对齐 checkpointing/types.py 的 UsageStats/EvolutionLog):UsageStats(times_presented/used/positive/negative + last_*_at,to_dict 省略空 Option/from_dict 缺失取 0)+ EvolutionLog(skill_id/version=1.0.0 默认/updated_at=UTC ISO/entries JSON,pending_entries(applied==false 过滤),to_dict/from_dict/empty);完整 EvolutionRecord/EvolutionPatch 类型留待后续;4 测试(141 总)
 >
 > **账目更新**(第 119 回合,876 tests / clippy 0 / fmt clean,协调者实现):

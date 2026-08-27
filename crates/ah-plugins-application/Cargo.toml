@@ -1,21 +1,23 @@
 [package]
-name = "ah-plugins-controller"
+name = "ah-plugins-application"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Real controller: task lifecycle/priority/hierarchy, executor-registry scheduling with conflict handling, deterministic intent recognition"
+description = "Application routing seam for LLM and workflow agents"
 
 [dependencies]
 ah-contracts = { workspace = true }
 ah-hub = { workspace = true }
 async-trait = "0.1"
-serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1", features = ["macros", "rt"] }
 
 [dev-dependencies]
+ah-plugins-agent-loop = { workspace = true }
 ah-plugins-mock = { workspace = true }
 ah-plugins-tools = { workspace = true }
 ah-plugins-sysop = { workspace = true }
 ah-plugins-session-log = { workspace = true }
-ah-plugins-subagent = { workspace = true }
+ah-plugins-agent-control = { workspace = true }
+ah-plugins-model-backup = { workspace = true }
+ah-plugins-workflow = { workspace = true }

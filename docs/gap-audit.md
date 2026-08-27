@@ -1,31 +1,33 @@
 # agent-core 未完成插件化功能审计(gap-audit.md)
 
-> 审计口径:以 agent-core(Python)为源规格,逐域核对 agent-harness 当前实现(第 120 回合,
-> 91 crates / 文档记录 880 tests / clippy 0 / fmt clean;本审计实测 workspace 构建通过,
-> 测试抽样 71+ 个测试二进制 0 失败)。
-> 状态口径(与 capability-map.md 一致):`done`=核心语义真实落地+测试证据;
-> `partial`=部分落地;`missing`=无实现。
+> 审计口径:以 agent-core(Python)为源规格,逐域核对 agent-harness 当前实现。当前工作树基于
+> `62353c9`，第 147 回合变更尚未提交;测试/覆盖率数字以 CI 实测为准。
+> 状态口径(与 capability-map.md/parity-audit.md 一致):`done`=核心语义真实落地+测试证据;
+> `partial`=已有 seam、插件或部分真实路径,但行为对等仍不完整;`missing`=当前没有可调用实现。
 > 本文件只列 **未完全完成(partial/missing)** 项;done 项见 capability-map.md。
-> 证据基线:capability-map.md(代码证据)+ 本审计对 crate 目录 / 工具 / seam 的实测核对。
+> 证据基线:当前 Rust 源码、生产 profile、测试与 agent-core Python 源码;文档描述不得替代代码证据。
 
 ## 0. 总体结论
 
-- 第三梯队 A(teams / evolving / rsi)与内核/契约/多数 harness 插件已真实落地;
-- **最大缺口集中在 `core` 域(796 文件 / 2226 符号)**:application、multi_agent、
-  single_agent 的 interrupt/skills/rail、session 的 vcs/tracer/checkpointer、memory 的
-  manage/migration/process、retrieval 的 indexing/embedding/vector_store 等基本未动;
-- **其次为 harness 工具与 rails 长尾**:browser/lsp/mobile/multimodal/worktree/cron/
-  powershell 等工具、约 15+ 条 rails、manifest/kv_cache/lsp/task_loop 子模块 0%;
-- 全仓生产路径 **0 处 `todo!()`/`unimplemented!()`**,partial 项均为"留待后续"的显式
-  文档化缺口,不是残桩。
+- teams/evolving/rsi 的主要确定性管线、内核/契约和多数 harness 插件已有真实实现;
+- **最大缺口仍集中在 `core` 域(796 文件 / 2226 符号)**:application 与 multi_agent
+  已有 agentbuilder/controller/teams/workflow 等部分承载,但 Python 的完整 agent 绑定、
+  handoff/hierarchical 拓扑仍未对等;single_agent 的 interrupt/skills/rail、session 的
+  vcs/tracer/checkpointer、memory 的 manage/migration/process、retrieval 的
+  indexing/embedding/vector_store 仍为主要 partial;
+- **其次为 harness 工具与 rails 长尾**:browser/mobile/multimodal、LSP 进程客户端、
+  worktree/cron/powershell 等完整语义、约 15+ 条 rails 与 task_loop 仍未完成;
+- 当前生产路径未发现 `todo!()`/`unimplemented!()` 残桩;partial 项通常是显式错误、
+  未注入依赖或简化实现,不能据此判定能力完成。审计表仍保留两个明确的 `missing` 子模块
+  (`rsi/updater`、`extensions/vendor_specific`);它们与 Python 源规格存在真实能力缺口。
 
 ## 1. core(2226 符号 / 796 文件)—— 缺口最大
 
 | Python 子模块 | 状态 | 已落地 | 未完成(缺口) |
 | --- | --- | --- | --- |
-| application(llm_agent/workflow_agent) | **missing** | — | llm_agent.py/llm_controller.py/rails(invoke_result_adapter_rail、memory_rail);workflow_agent.py/workflow_controller.py/workflow_event_handler.py/workflow_task_executor.py。无 ah-plugins-core-application crate |
-| multi_agent(handoff/hierarchical/msgbus) | **missing** | — | handoff 团队(container_agent/handoff_orchestrator/handoff_signal/handoff_tool/interrupt)、hierarchical_msgbus(supervisor_agent/p2p_ability_manager)、hierarchical_tools、team_runtime(message_bus/message_router/subscription_manager/communicable_agent/envelope)、team_card。无 ah-plugins-core-multi-agent crate |
-| single_agent | partial | agent-loop(ReAct)已落地;prompts/builder 部分由 prompt-builder 覆盖 | interrupt(exception/handler/response/state)、skills(skill_manager/skill_util/remote_skill_util)、ability_manager、agent_callback_manager、rail(base/model_backup)、kv_cache(kv_cache_hooks)、schema(agent_card/agent_result)、agents(react_agent/multi_task_agent/react_agent_evolve) |
+| application(llm_agent/workflow_agent) | **partial** | agentbuilder 已提供 NL→设计→DSL→workflow 执行;controller/workflow/agent-loop 提供部分运行时能力;agent-control 可供上层发起控制，callback manager 已覆盖生命周期顺序与快照读取 | `llm_agent.py`/`llm_controller.py`/`workflow_agent.py`/`workflow_controller.py`/`workflow_event_handler.py`/`workflow_task_executor.py` 的完整绑定、LLM 澄清/路由、交互恢复、invoke-result/memory rail 仍未对等;已新增 `ah-plugins-application`，通过 SessionManager 按 session_id 路由并持久化 LLM/workflow 请求；控制命令支持 `verb:task-id` 及自然语言 `task-...` 标识提取并经 Controller seam 路由（`routes_natural_language_cancel_intent_to_controller`）；本回合 application 改为仅消费 ah-contracts 的 `AgentLoopRuntime` seam，移除对 agent-loop 具体类型的生产依赖；Controller retry seam 与 `retry:<task_id>` 路由已落地并覆盖 Failed→Submitted、错误清理、持久化和非法错误；`resume:<task_id>` 会在状态恢复后重新调用 `Controller::run_task`；controller 24 项与 application 13 项 focused tests 已通过；agent-loop 失败会追加带 command/state/error 的 System event；`AgentLoopRuntime::card()` 已提供 AgentCard 能力描述，具体 agent-loop 覆盖为 tool-use/interrupt/cancel/timeout/session-recovery；完整 application 绑定仍未对等；timeout 已通过 AgentLoopRuntime contracts seam 进入 ApplicationRequest→AgentLoop 配置，并在轮次边界返回 TimedOut AgentResult；仍未覆盖阻塞中的模型/工具调用 |
+| multi_agent(handoff/hierarchical/msgbus) | **partial** | teams/teams-sqlite/teams-workflow、team-message、team-dispatch、team-pool、messager in-process 已落地部分能力 | handoff 团队(container_agent/handoff_orchestrator/handoff_signal/handoff_tool/interrupt)、hierarchical_msgbus(supervisor_agent/p2p_ability_manager)、完整 hierarchical_tools/team_runtime 消息拓扑、跨进程 pyzmq 与 team_card 仍未对等;当前无独立 core-multi-agent crate |
+| single_agent | partial | agent-loop(ReAct)已落地;agent-control 提供 interrupt/callback seam;session log 记录取消/中断;skills 文件后端注册、持久化和 subagent/evolving 评估已落地;prompts/builder 部分由 prompt-builder 覆盖 | 可配置 timeout 的完整消费、remote skills、生产 backup provider 配置（catalog seam 与 StaticModelProviderCatalog 已实现，真实多 provider catalog 宿主组装尚缺；Profile 配置已能传入 backup provider_names；retry/timeout 数值已由 app 解析并通过 policy plugin 注入 AgentLoop；dev profile 已声明 model-backup，policy plugin 由 app 按配置动态插入并加入实际挂载列表；helper 已覆盖非法 retry/timeout；完整 app 测试仍受 workspace 编译时限限制；真实 catalog 组装仍缺）、跨 provider cancellation 传播与跨 provider timeout；基础主模型失败恢复且最终错误持久化（AgentLoop 模型与 backup 失败持久化精确测试已通过）、单次 timeout、bounded retry、streaming fallback/retry 和 sink-close 显式失败已完成、rail、kv_cache hooks、application 层完整 agent 类型/生命周期、Controller task 真实磁盘持久化；`TaskSnapshotStore` seam、in-memory/JSON 实现与 round-trip/损坏输入测试已完成；LocalController 已支持通过 `with_snapshot_store` 自动保存恢复（含失败 error_message 与 working session 冲突索引）；原始 order 序号持久化仍缺；父子链接持久化及重挂载/删除 child 的旧索引清理已验证，link_parent 锁重入已修复；working/parent-child 索引恢复与确定性 pending 排序已验证；app 已默认配置 JSON task snapshot 路径并通过 plugin mount 测试；跨进程并发锁语义（当前为 lock-file 冲突显式失败，无等待/租约恢复；controller 全量 22 项单测已通过；失败 replace 后 lock 清理已验证；versioned envelope、未知版本拒绝、malformed envelope 显式错误与 legacy 裸数组读取已验证；更高版本迁移仍缺）、路径 profile 配置字段和完整 app boot 验证仍缺；同实例写入已串行化；损坏、不一致和非法字段 snapshot 已显式阻止 controller 挂载、LLM 意图识别和更丰富结构化 payload 仍缺；文本控制命令成功/失败/非法 task-id 结果已写入 System session event，并保留原始 command/intent，有 focused persistence test（含 controller failure）；application 已可通过 AgentRequest.restore_checkpoint 调用 SessionManager::restore；Controller retry seam 与 `retry:<task_id>` application 路由已落地（Failed→Submitted、清除 error_message、snapshot 持久化、非法状态/未知任务显式错误）；缺失 checkpoint 显式失败，checkpoint TTL/版本兼容/过期、并发访问和复杂 agent 恢复后续执行仍缺；空/缺失 checkpoint 已显式校验；AbilityManager 已有注册/启停/skill 执行、JSON 状态持久化重载；损坏状态和缺失 skill 依赖显式失败；仍缺执行中的取消、跨 provider timeout 和完整恢复语义 |
 | session | partial | append-only 日志 + 多会话 create/open/fork/list + checkpoint/fork/restore;stream 管道(emitter/manager/writer) | vcs(adapter/backend/codec/config/delta/jsonl_backend/kv_backend/manager/models/protocol)、tracer(data/decorator/handler/span/tracer/workflow_tracer)、interaction(base/interaction/interactive_input)、state(agent_state/workflow_state)、session_controller(chain_session/global_controller/data_container/scope/scope_factory/schema/utils)、checkpointer(base/checkpointer/inmemory/persistence)、agent/agent_team/workflow 内部包装与 node/store |
 | common | partial | 错误模型/日志类型 | background_tasks、task_manager、clients(注册表)、constants/schema/security/utils 的完整语义 |
 | foundation/llm(11 provider) | partial | openai-compatible + anthropic + SSE 流式 + json-parser | dashscope、deepseek 及其余 provider;llm/schema、llm/utils |
@@ -34,7 +36,7 @@
 | foundation/tool | partial | Tool + ToolRegistry + 真实工具(web/code/fs/shell/memory/retrieval/graph/mcp/subagent) | auth、form_handler、function 完整语义、service_api、utils、mcp client 变体 |
 | workflow(78 类) | partial | 引擎 + Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + Http/Intent/Questioner + 检查点续跑 + LLM 节点流式消费 | condition 组件(array/number/expression)、llm/react(react_component/react_config/react_executable)、resource 组件(knowledge_retrieval/memory_retrieval/memory_write)、branch_router/branch_comp 细化、loop callback(intermediate_loop_var/loop_callback/output)、intent_detection_comp |
 | graph(53 类) | partial | Pregel 超级步引擎(missing/present/equals 条件 + halt + 上限) | graph 基础(atomic_node/vertex/executable/graph_state)、store(inmemory/serde)、stream_actor(base/manager)、visualization(drawable*) |
-| controller(57 类) | partial | 任务 CRUD/状态机/优先级/父子防环/执行器注册表/确定性意图 | LLM 意图识别;legacy(config/event/reasoner/task)、modules、schema |
+| controller(57 类) | partial | 任务 CRUD/状态机/优先级/父子防环/执行器注册表/确定性意图；Failed 等终态恢复显式拒绝 | LLM 意图识别;legacy(config/event/reasoner/task)、modules、schema |
 | operator(8 类) | partial | LLM/tool/memory/skill 四算子 + freeze + 回调 + 检查点 | legacy(llm_call) |
 | runner(46 类) | partial | 回调链(优先级/retry/timeout/break/rollback + 指标);资源标签管理(TagMgr) | resources_manager(agent/tool/model/workflow/sys_operation 管理器与取消)、drunner(dmessage_queue/dsubscription/remote_client/server_adapter)、spawn |
 | context_engine(72 文件) | partial | 预算组装/摘录压缩+LLM 总结/offload/reinject + 精确 tokenizer(BPE-lite) | forked 处理器(compressor/offloader/rule_compression)、token 子模块、schema、向量化 |
@@ -57,7 +59,7 @@
 | resources | partial(第 128 回合) | ah-plugins-resources:Spec 模型/MCP 归一化/模板渲染/路径校验/ExtensionParts 解析 | manifest 发现/文件读取(FS 接线) |
 | schema | partial | 部分类型 | stop_condition/task/config/interaction/agent_mode/loop_event/extension_spec/build_context/deep_agent_spec/state 字段对等 |
 | security(harness) | partial | ah-plugins-security 规则 | suggestions/patterns/models/host/tiered_policy/core/factory/file_guard/shell_ast/checker/files registry/extract |
-| task_loop | **missing** | — | event_manager/loop_coordinator/loop_queues/session_spawn_executor/task_loop_controller/task_loop_event_executor/task_loop_event_handler |
+| task_loop | **partial** | agent-loop、runner、queue、subagent 已覆盖部分循环/队列/委派语义 | event_manager/loop_coordinator/loop_queues/session_spawn_executor/task_loop_controller/task_loop_event_executor/task_loop_event_handler 的完整 task-loop 生命周期与事件接线仍未对等 |
 | cli | done | Claude Code 风格渲染 + ah-cli 子命令 | (done,无缺口) |
 
 ## 3. agent_teams(1104 符号 / 276 文件)
@@ -143,9 +145,9 @@ dataset_generator(确定性+LLM)、dataset_curator、data_loader 分批、rsi-co
 
 ## 9. 建议的下一步优先级
 
-1. **core/single_agent + core/application + core/multi_agent**(当前 0%):这三块是 agent-core
+1. **core/single_agent + core/application + core/multi_agent**:这三块是 agent-core
    "可运行的 agent" 形态(ReAct 之上的 interrupt/skills/ability + llm_agent/workflow_agent 绑定 +
-   handoff/hierarchical 团队),是完成度最低且用户可见性最高的缺口;
+   handoff/hierarchical 团队);当前已有部分插件承载,但完整行为对等仍是用户可见性最高的缺口;
 2. **core/session 的 vcs/tracer**(session-log 之上补版本化会话与 tracer);
 3. **core/memory 的 manage/migration/process**(记忆生命周期,依赖 lite/graph 已落地基础);
 4. **core/retrieval 的 indexing/embedding/vector_store**(依赖外部 embedding,可先做解析管线与 retriever);

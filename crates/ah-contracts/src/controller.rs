@@ -90,6 +90,7 @@ pub enum IntentType {
     CreateTask,
     PauseTask,
     ResumeTask,
+    RetryTask,
     ContinueTask,
     SupplementTask,
     CancelTask,
@@ -120,6 +121,13 @@ pub trait TaskExecutor: Send + Sync {
     fn can_pause(&self, _task: &Task) -> bool {
         false
     }
+}
+
+/// 可持久化任务快照存储 seam。
+#[async_trait]
+pub trait TaskSnapshotStore: Seam {
+    fn save(&self, tasks: &[Task]) -> Result<(), ControllerError>;
+    fn load(&self) -> Result<Vec<Task>, ControllerError>;
 }
 
 /// 控制器 Seam(Service Definition):任务生命周期 + 调度 + 意图识别。
@@ -161,6 +169,9 @@ pub trait Controller: Seam {
 
     /// 取消任务(working 可取消;completed 不可)。
     async fn cancel_task(&self, task_id: &str) -> Result<(), ControllerError>;
+
+    /// 将失败任务重置为 submitted，并清除上次错误。
+    fn retry_task(&self, task_id: &str) -> Result<(), ControllerError>;
 
     // ---- 意图识别 ----
 

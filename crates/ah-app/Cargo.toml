@@ -22,6 +22,10 @@ ah-plugins-tokenizer = { workspace = true }
 ah-plugins-sysop = { workspace = true }
 ah-plugins-openai = { workspace = true }
 ah-plugins-agent-loop = { workspace = true }
+ah-plugins-agent-control = { workspace = true }
+ah-plugins-application = { workspace = true }
+ah-plugins-ability = { workspace = true }
+ah-plugins-model-backup = { workspace = true }
 ah-plugins-rails = { workspace = true }
 ah-plugins-session-log = { workspace = true }
 ah-plugins-workflow = { workspace = true }

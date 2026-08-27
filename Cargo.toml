@@ -85,6 +85,10 @@ members = [
     "crates/ah-plugins-sysop",
     "crates/ah-plugins-openai",
     "crates/ah-plugins-agent-loop",
+    "crates/ah-plugins-agent-control",
+    "crates/ah-plugins-application",
+    "crates/ah-plugins-ability",
+    "crates/ah-plugins-model-backup",
     "crates/ah-plugins-rails",
     "crates/ah-plugins-session-log",
     "crates/ah-plugins-workflow",
@@ -200,6 +204,10 @@ ah-plugins-tokenizer = { path = "crates/ah-plugins-tokenizer" }
 ah-plugins-sysop = { path = "crates/ah-plugins-sysop" }
 ah-plugins-openai = { path = "crates/ah-plugins-openai" }
 ah-plugins-agent-loop = { path = "crates/ah-plugins-agent-loop" }
+ah-plugins-agent-control = { path = "crates/ah-plugins-agent-control" }
+ah-plugins-application = { path = "crates/ah-plugins-application" }
+ah-plugins-ability = { path = "crates/ah-plugins-ability" }
+ah-plugins-model-backup = { path = "crates/ah-plugins-model-backup" }
 ah-plugins-rails = { path = "crates/ah-plugins-rails" }
 ah-plugins-session-log = { path = "crates/ah-plugins-session-log" }
 ah-plugins-workflow = { path = "crates/ah-plugins-workflow" }

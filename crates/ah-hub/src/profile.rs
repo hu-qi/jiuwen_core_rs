@@ -21,6 +21,9 @@ pub struct Bundle {
     pub id: String,
     #[serde(default)]
     pub plugins: Vec<String>,
+    /// Optional plugin configuration kept as data for the host composer.
+    #[serde(default)]
+    pub config: Option<toml::Value>,
 }
 
 /// Profile 解析错误。
@@ -90,11 +93,33 @@ plugins = ["ah-plugins-mock", "ah-plugins-otel"]
         let profile = Profile::from_toml(toml).expect("parse");
         assert_eq!(profile.name, "dev");
         assert_eq!(profile.bundles.len(), 2);
+        assert!(profile.bundles[0].config.is_none());
         // 去重且保持顺序。
         assert_eq!(
             profile.plugin_names(),
             vec!["ah-plugins-mock", "ah-plugins-otel"]
         );
+    }
+
+    #[test]
+    fn preserves_plugin_configuration_for_host_composer() {
+        let profile = Profile::from_toml(
+            r#"name = "prod"
+            [[bundles]]
+            id = "models"
+            plugins = ["ah-plugins-model-backup"]
+            [bundles.config]
+            backup_providers = ["secondary"]
+            retries_per_model = 1
+            "#,
+        )
+        .expect("parse config");
+        let config = profile.bundles[0].config.as_ref().unwrap();
+        assert_eq!(
+            config["backup_providers"].as_array().unwrap()[0].as_str(),
+            Some("secondary")
+        );
+        assert_eq!(config["retries_per_model"].as_integer(), Some(1));
     }
 
     #[test]

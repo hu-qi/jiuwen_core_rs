@@ -120,7 +120,11 @@ impl EvolvingRuntime for EvolvingRuntimeImpl {
 
         for event in events {
             match event.kind {
-                SessionEventKind::User | SessionEventKind::System => {}
+                SessionEventKind::User
+                | SessionEventKind::System
+                | SessionEventKind::AgentInterrupted
+                | SessionEventKind::AgentCanceled
+                | SessionEventKind::AgentTimedOut => {}
                 SessionEventKind::AgentStep => {
                     let iter = event
                         .payload

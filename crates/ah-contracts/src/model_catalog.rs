@@ -46,7 +46,16 @@ impl core::fmt::Display for ModelCatalogError {
 
 impl std::error::Error for ModelCatalogError {}
 
+use crate::llm::ModelProvider;
 /// OpenAI 账号模型目录 Seam(Service Definition)。
+use std::sync::Arc;
+
+/// Named provider resolution seam used by fallback consumers.
+pub trait ModelProviderCatalog: Seam {
+    fn resolve(&self, name: &str) -> Result<Arc<dyn ModelProvider>, ModelCatalogError>;
+    fn names(&self) -> Vec<String>;
+}
+
 pub trait ModelCatalog: Seam {
     /// 解析模型负载为有序模型 id 列表(过滤/排序/去重/前向兼容)。
     fn parse_model_ids(&self, payload: &Value) -> Vec<String>;
