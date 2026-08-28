@@ -37,17 +37,17 @@ fn sections(path: &Path) -> Vec<(String, Vec<String>)> {
             ));
             continue;
         }
-        if let Some((_, deps)) = current.as_mut() {
-            if let Some((name, _)) = line.split_once('=') {
-                let name = name.trim();
-                let is_ah = name.starts_with("ah-");
-                let well_formed = !name.is_empty()
-                    && name
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-                if is_ah && well_formed {
-                    deps.push(name.to_string());
-                }
+        if let Some((_, deps)) = current.as_mut()
+            && let Some((name, _)) = line.split_once('=')
+        {
+            let name = name.trim();
+            let is_ah = name.starts_with("ah-");
+            let well_formed = !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+            if is_ah && well_formed {
+                deps.push(name.to_string());
             }
         }
     }
