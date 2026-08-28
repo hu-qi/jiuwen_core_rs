@@ -35,6 +35,20 @@ pub enum AgentRunState {
     Failed,
 }
 
+/// 结构化失败种类(P1-02):消费方直接读字段判定,禁止解析错误字符串。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentFailure {
+    InvalidInput,
+    Interrupted,
+    Cancelled,
+    TimedOut,
+    Session,
+    Model,
+    Context,
+    IterationLimit,
+}
+
 /// Public result returned by an agent execution.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AgentResult {
@@ -42,6 +56,13 @@ pub struct AgentResult {
     pub state: AgentRunState,
     pub answer: Option<String>,
     pub iterations: usize,
+    /// 实际执行的工具调用总数(含失败/被拒,均已入日志)。
+    #[serde(default)]
+    pub tool_calls: usize,
+    /// 结构化失败种类:Failed 状态下的精确原因;正常完成/中断/取消/超时为对应值。
+    #[serde(default)]
+    pub failure: Option<AgentFailure>,
+    /// 人类可读错误消息(非正常完成时)。
     pub error: Option<String>,
 }
 
@@ -113,20 +134,21 @@ pub trait AgentLoopRuntime: Seam {
         }
     }
 
-    async fn run(&self, input: &str) -> Result<String, AgentControlError>;
+    /// 运行一轮任务并返回结构化结果(状态/终止原因/统计,不再依赖错误字符串)。
+    async fn run(&self, input: &str) -> AgentResult;
 
     async fn run_in_session(
         &self,
         session: std::sync::Arc<dyn crate::session::SessionLog>,
         input: &str,
-    ) -> Result<String, AgentControlError>;
+    ) -> AgentResult;
 
     async fn run_in_session_with_timeout(
         &self,
         session: std::sync::Arc<dyn crate::session::SessionLog>,
         input: &str,
         _timeout_ms: Option<u64>,
-    ) -> Result<String, AgentControlError> {
+    ) -> AgentResult {
         self.run_in_session(session, input).await
     }
 }

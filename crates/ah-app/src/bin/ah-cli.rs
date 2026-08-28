@@ -342,8 +342,13 @@ async fn run_task(
     session: &std::sync::Arc<dyn SessionLog>,
     task: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    agent
-        .run_in_session(session.clone(), task)
-        .await
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    let result = agent.run_in_session(session.clone(), task).await;
+    match result.answer {
+        Some(answer) => Ok(answer),
+        None => Err(Box::new(ah_contracts::agent::AgentControlError(
+            result
+                .error
+                .unwrap_or_else(|| format!("{:?}", result.state)),
+        ))),
+    }
 }

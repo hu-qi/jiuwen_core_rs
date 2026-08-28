@@ -10,7 +10,8 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use ah_contracts::agent::{
-    AgentCallbackContext, AgentCallbackManager, AgentControl, AgentRunState, InterruptRuntime,
+    AgentCallbackContext, AgentCallbackManager, AgentControl, AgentFailure, AgentResult,
+    AgentRunState, InterruptRuntime,
 };
 use ah_contracts::context::ContextEngine;
 use ah_contracts::keys::{
@@ -30,18 +31,8 @@ use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
-/// agent 循环错误。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AgentLoopFailure {
-    InvalidInput,
-    Interrupted,
-    Cancelled,
-    TimedOut,
-    Session,
-    Model,
-    Context,
-    IterationLimit,
-}
+/// agent 循环失败种类:契约层结构化枚举(消费方直接读字段,不解析错误字符串)。
+pub use ah_contracts::agent::AgentFailure as AgentLoopFailure;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentLoopError {
@@ -198,8 +189,63 @@ impl AgentLoop {
             .collect()
     }
 
+    /// 执行中取消/超时(P1-03):轮询控制状态与截止时间,命中即中止正在运行的
+    /// future(模型调用/工具执行)。未挂 interrupt 且无截止时间时直接透传。
+    async fn race_control<R>(
+        &self,
+        session_id: &str,
+        deadline: Option<tokio::time::Instant>,
+        fut: impl std::future::Future<Output = R>,
+    ) -> Result<R, AgentLoopError> {
+        if self.interrupt.is_none() && deadline.is_none() {
+            return Ok(fut.await);
+        }
+        tokio::select! {
+            biased;
+            _ = self.poll_control(session_id, deadline) => {
+                if deadline.is_some_and(|dl| tokio::time::Instant::now() >= dl) {
+                    Err(AgentLoopError::new(
+                        AgentLoopFailure::TimedOut,
+                        "agent run timed out",
+                    ))
+                } else {
+                    match self.control(session_id) {
+                        AgentControl::Interrupt => Err(AgentLoopError::new(
+                            AgentLoopFailure::Interrupted,
+                            "agent run interrupted; resume the session to continue",
+                        )),
+                        AgentControl::Cancel => Err(AgentLoopError::new(
+                            AgentLoopFailure::Cancelled,
+                            "agent run cancelled",
+                        )),
+                        AgentControl::Continue => Err(AgentLoopError::new(
+                            AgentLoopFailure::Model,
+                            "control raced unexpectedly",
+                        )),
+                    }
+                }
+            }
+            result = fut => Ok(result),
+        }
+    }
+
+    /// 每 25ms 轮询:命中截止时间或控制状态非 Continue 即返回。
+    async fn poll_control(&self, session_id: &str, deadline: Option<tokio::time::Instant>) {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            if deadline.is_some_and(|dl| tokio::time::Instant::now() >= dl) {
+                return;
+            }
+            if let Some(runtime) = &self.interrupt
+                && runtime.state(session_id) != AgentControl::Continue
+            {
+                return;
+            }
+        }
+    }
+
     /// 在默认会话上运行一轮任务。
-    pub async fn run(&self, input: &str) -> Result<String, AgentLoopError> {
+    pub async fn run(&self, input: &str) -> AgentResult {
         self.run_in_session(self.sessions.clone(), input).await
     }
 
@@ -221,117 +267,193 @@ impl AgentLoop {
         self
     }
 
-    pub async fn run_in_session(
-        &self,
-        session: Arc<dyn SessionLog>,
-        input: &str,
-    ) -> Result<String, AgentLoopError> {
-        if input.trim().is_empty() {
-            return Err(AgentLoopError::new(
-                AgentLoopFailure::InvalidInput,
-                "input must not be empty",
-            ));
+    /// 统一构造 AgentResult(统计字段由调用方传入)。
+    fn result_for(
+        session_id: &str,
+        state: AgentRunState,
+        failure: Option<AgentFailure>,
+        error: Option<String>,
+        answer: Option<String>,
+        iteration: usize,
+        tool_calls: usize,
+    ) -> AgentResult {
+        AgentResult {
+            session_id: session_id.to_string(),
+            state,
+            answer,
+            iterations: iteration,
+            tool_calls,
+            failure,
+            error,
         }
+    }
+
+    /// 执行中被 race_control 中止(超时/中断/取消)的统一收尾:
+    /// 由错误种类推导 state/failure/会话事件,并清空控制状态。
+    async fn race_finish(
+        &self,
+        session: &Arc<dyn SessionLog>,
+        session_id: &str,
+        iteration: usize,
+        error: AgentLoopError,
+        tool_calls: usize,
+    ) -> AgentResult {
+        let (state, failure, event) = match error.kind {
+            AgentLoopFailure::TimedOut => (
+                AgentRunState::TimedOut,
+                AgentFailure::TimedOut,
+                SessionEventKind::AgentTimedOut,
+            ),
+            AgentLoopFailure::Interrupted => (
+                AgentRunState::Interrupted,
+                AgentFailure::Interrupted,
+                SessionEventKind::AgentInterrupted,
+            ),
+            AgentLoopFailure::Cancelled => (
+                AgentRunState::Cancelled,
+                AgentFailure::Cancelled,
+                SessionEventKind::AgentCanceled,
+            ),
+            _ => (
+                AgentRunState::Failed,
+                AgentFailure::Model,
+                SessionEventKind::System,
+            ),
+        };
+        let _ = session.append(event, json!({"iteration": iteration}));
+        let _ = self.notify(session_id, state, iteration, Value::Null).await;
+        if let Some(runtime) = &self.interrupt {
+            runtime.clear(session_id);
+        }
+        Self::result_for(
+            session_id,
+            state,
+            Some(failure),
+            Some(error.message),
+            None,
+            iteration,
+            tool_calls,
+        )
+    }
+
+    /// 在指定会话上运行一轮任务:日志驱动的 ReAct 循环,返回结构化 AgentResult。
+    ///
+    /// - 会话可为 resume(已有历史)或 fork 出的新会话;历史经日志投影自动保留。
+    /// - 终止原因结构化(P1-02):state + failure 字段,消费方无需解析错误字符串。
+    /// - 执行中取消/超时(P1-03):模型调用与工具执行期间轮询控制状态与截止时间,
+    ///   命中即中止在途 future(跨 provider:backup 链上的任意 provider 同被中止)。
+    pub async fn run_in_session(&self, session: Arc<dyn SessionLog>, input: &str) -> AgentResult {
         let session_id = session.id().to_string();
         let deadline = self
             .timeout_ms
             .map(|ms| tokio::time::Instant::now() + std::time::Duration::from_millis(ms));
-        self.notify(
-            &session_id,
-            AgentRunState::Running,
-            0,
-            json!({"input": input}),
-        )
-        .await?;
+        let mut total_tool_calls: usize = 0;
+
+        if input.trim().is_empty() {
+            return Self::result_for(
+                &session_id,
+                AgentRunState::Failed,
+                Some(AgentFailure::InvalidInput),
+                Some("input must not be empty".to_string()),
+                None,
+                0,
+                total_tool_calls,
+            );
+        }
+        if self
+            .notify(
+                &session_id,
+                AgentRunState::Running,
+                0,
+                json!({"input": input}),
+            )
+            .await
+            .is_err()
+        {
+            return Self::result_for(
+                &session_id,
+                AgentRunState::Failed,
+                Some(AgentFailure::Context),
+                Some("callback notify failed".to_string()),
+                None,
+                0,
+                total_tool_calls,
+            );
+        }
         // 1) 用户消息入日志。
-        session
+        if session
             .append(SessionEventKind::User, json!({ "content": input }))
-            .map_err(|e| {
-                AgentLoopError::new(
-                    AgentLoopFailure::Session,
-                    format!("session append failed: {e}"),
-                )
-            })?;
+            .is_err()
+        {
+            return Self::result_for(
+                &session_id,
+                AgentRunState::Failed,
+                Some(AgentFailure::Session),
+                Some("session append failed".to_string()),
+                None,
+                0,
+                total_tool_calls,
+            );
+        }
 
         for iteration in 0..self.max_iterations {
-            if let Some(deadline) = deadline
-                && tokio::time::Instant::now() >= deadline
-            {
-                let _ = session.append(
-                    SessionEventKind::AgentTimedOut,
-                    json!({"iteration": iteration}),
-                );
-                self.notify(&session_id, AgentRunState::TimedOut, iteration, Value::Null)
-                    .await?;
-                return Err(AgentLoopError::new(
-                    AgentLoopFailure::TimedOut,
-                    "agent run timed out",
-                ));
+            // 快速路径:轮次边界检查(与执行中 race 互补)。
+            if deadline.is_some_and(|dl| tokio::time::Instant::now() >= dl) {
+                return self
+                    .race_finish(
+                        &session,
+                        &session_id,
+                        iteration,
+                        AgentLoopError::new(AgentLoopFailure::TimedOut, "agent run timed out"),
+                        total_tool_calls,
+                    )
+                    .await;
             }
             match self.control(&session_id) {
                 AgentControl::Interrupt => {
-                    session
-                        .append(
-                            SessionEventKind::AgentInterrupted,
-                            json!({"iteration": iteration}),
-                        )
-                        .map_err(|e| {
+                    return self
+                        .race_finish(
+                            &session,
+                            &session_id,
+                            iteration,
                             AgentLoopError::new(
-                                AgentLoopFailure::Session,
-                                format!("session append failed: {e}"),
-                            )
-                        })?;
-                    self.notify(
-                        &session_id,
-                        AgentRunState::Interrupted,
-                        iteration,
-                        Value::Null,
-                    )
-                    .await?;
-                    return Err(AgentLoopError::new(
-                        AgentLoopFailure::Interrupted,
-                        "agent run interrupted; resume the session to continue",
-                    ));
+                                AgentLoopFailure::Interrupted,
+                                "agent run interrupted; resume the session to continue",
+                            ),
+                            total_tool_calls,
+                        )
+                        .await;
                 }
                 AgentControl::Cancel => {
-                    session
-                        .append(
-                            SessionEventKind::AgentCanceled,
-                            json!({"iteration": iteration}),
+                    return self
+                        .race_finish(
+                            &session,
+                            &session_id,
+                            iteration,
+                            AgentLoopError::new(AgentLoopFailure::Cancelled, "agent run cancelled"),
+                            total_tool_calls,
                         )
-                        .map_err(|e| {
-                            AgentLoopError::new(
-                                AgentLoopFailure::Session,
-                                format!("session append failed: {e}"),
-                            )
-                        })?;
-                    self.notify(
-                        &session_id,
-                        AgentRunState::Cancelled,
-                        iteration,
-                        Value::Null,
-                    )
-                    .await?;
-                    return Err(AgentLoopError::new(
-                        AgentLoopFailure::Cancelled,
-                        "agent run cancelled",
-                    ));
+                        .await;
                 }
                 AgentControl::Continue => {}
             }
             // 2) 模型可见消息:优先经 context seam 按预算组装(压缩时注入摘要),
             //    未挂载时用日志投影直通(日志即真相:完整历史始终在日志)。
             let messages = if let Some(context) = &self.context {
-                context
-                    .assemble(session.as_ref(), self.token_budget)
-                    .await
-                    .map_err(|e| {
-                        AgentLoopError::new(
-                            AgentLoopFailure::Context,
-                            format!("context assemble failed: {e}"),
-                        )
-                    })?
-                    .messages
+                match context.assemble(session.as_ref(), self.token_budget).await {
+                    Ok(assembled) => assembled.messages,
+                    Err(e) => {
+                        return Self::result_for(
+                            &session_id,
+                            AgentRunState::Failed,
+                            Some(AgentFailure::Context),
+                            Some(format!("context assemble failed: {e}")),
+                            None,
+                            iteration,
+                            total_tool_calls,
+                        );
+                    }
+                }
             } else {
                 session.derive_messages()
             };
@@ -348,65 +470,95 @@ impl AgentLoop {
                 tools: self.tool_schemas(),
                 ..Default::default()
             };
-            let response = if let Some(backup) = &self.backup {
-                backup
-                    .chat_with_policy(self.llm.as_ref(), request, self.backup_policy)
-                    .await
-                    .map_err(|e| format!("model backup failed: {e}"))
-            } else {
-                self.llm
-                    .chat(request)
-                    .await
-                    .map_err(|e| format!("model error: {e}"))
+            // 3) 模型调用:执行中可被取消/超时中止(backup 链上的任意 provider 同被中止)。
+            let model_call = async {
+                if let Some(backup) = &self.backup {
+                    backup
+                        .chat_with_policy(self.llm.as_ref(), request, self.backup_policy)
+                        .await
+                        .map_err(|e| format!("model backup failed: {e}"))
+                } else {
+                    self.llm
+                        .chat(request)
+                        .await
+                        .map_err(|e| format!("model error: {e}"))
+                }
             };
-            let response = match response {
-                Ok(response) => response,
-                Err(message) => {
-                    let error = AgentLoopError::new(AgentLoopFailure::Model, message);
+            let response = match self.race_control(&session_id, deadline, model_call).await {
+                Ok(Ok(response)) => response,
+                Ok(Err(message)) => {
                     let _ = session.append(
                         SessionEventKind::System,
                         json!({
                             "event": "agent_error",
-                            "failure": format!("{:?}", error.kind),
-                            "message": error.message,
+                            "failure": "Model",
+                            "message": message,
                         }),
                     );
-                    return Err(error);
+                    return Self::result_for(
+                        &session_id,
+                        AgentRunState::Failed,
+                        Some(AgentFailure::Model),
+                        Some(message),
+                        None,
+                        iteration,
+                        total_tool_calls,
+                    );
+                }
+                Err(error) => {
+                    return self
+                        .race_finish(&session, &session_id, iteration, error, total_tool_calls)
+                        .await;
                 }
             };
 
             if response.tool_calls.is_empty() {
-                // 3) 最终回答入日志,结束。
-                session
+                // 4) 最终回答入日志,结束。
+                if session
                     .append(
                         SessionEventKind::Assistant,
                         json!({ "content": response.content }),
                     )
-                    .map_err(|e| {
-                        AgentLoopError::new(
-                            AgentLoopFailure::Session,
-                            format!("session append failed: {e}"),
-                        )
-                    })?;
+                    .is_err()
+                {
+                    return Self::result_for(
+                        &session_id,
+                        AgentRunState::Failed,
+                        Some(AgentFailure::Session),
+                        Some("session append failed".to_string()),
+                        None,
+                        iteration,
+                        total_tool_calls,
+                    );
+                }
                 self.ctx.emit(AgentStep {
                     iteration,
                     tool_calls: 0,
                     done: true,
                 });
-                self.notify(
-                    &session_id,
-                    AgentRunState::Completed,
-                    iteration,
-                    json!({"answer": response.content}),
-                )
-                .await?;
+                let _ = self
+                    .notify(
+                        &session_id,
+                        AgentRunState::Completed,
+                        iteration,
+                        json!({"answer": response.content}),
+                    )
+                    .await;
                 if let Some(runtime) = &self.interrupt {
                     runtime.clear(&session_id);
                 }
-                return Ok(response.content);
+                return Self::result_for(
+                    &session_id,
+                    AgentRunState::Completed,
+                    None,
+                    None,
+                    Some(response.content),
+                    iteration,
+                    total_tool_calls,
+                );
             }
 
-            // 4) 助手工具调用入日志。
+            // 5) 助手工具调用入日志。
             let calls: Vec<Value> = response
                 .tool_calls
                 .iter()
@@ -418,23 +570,41 @@ impl AgentLoop {
                     })
                 })
                 .collect();
-            session
+            if session
                 .append(SessionEventKind::Assistant, json!({ "tool_calls": calls }))
-                .map_err(|e| {
-                    AgentLoopError::new(
-                        AgentLoopFailure::Session,
-                        format!("session append failed: {e}"),
-                    )
-                })?;
+                .is_err()
+            {
+                return Self::result_for(
+                    &session_id,
+                    AgentRunState::Failed,
+                    Some(AgentFailure::Session),
+                    Some("session append failed".to_string()),
+                    None,
+                    iteration,
+                    total_tool_calls,
+                );
+            }
 
-            // 5) 真实执行工具。工具失败/被拒**不中断循环**,错误作为工具结果回喂模型
-            //    (模型据此换方案),符合真实 agent 语义。
+            // 6) 真实执行工具。工具失败/被拒**不中断循环**,错误作为工具结果回喂模型
+            //    (模型据此换方案),符合真实 agent 语义;执行中取消/超时则中止循环。
             for call in &response.tool_calls {
-                let output = match self.tools.invoke(&call.name, call.arguments.clone()).await {
-                    Ok(value) => value.to_string(),
-                    Err(error) => format!("tool error: {error}"),
+                let invoke = self.tools.invoke(&call.name, call.arguments.clone());
+                let output = match self.race_control(&session_id, deadline, invoke).await {
+                    Ok(Ok(value)) => {
+                        total_tool_calls += 1;
+                        value.to_string()
+                    }
+                    Ok(Err(error)) => {
+                        total_tool_calls += 1;
+                        format!("tool error: {error}")
+                    }
+                    Err(error) => {
+                        return self
+                            .race_finish(&session, &session_id, iteration, error, total_tool_calls)
+                            .await;
+                    }
                 };
-                session
+                if session
                     .append(
                         SessionEventKind::ToolResult,
                         json!({
@@ -442,12 +612,18 @@ impl AgentLoop {
                             "output": output,
                         }),
                     )
-                    .map_err(|e| {
-                        AgentLoopError::new(
-                            AgentLoopFailure::Session,
-                            format!("session append failed: {e}"),
-                        )
-                    })?;
+                    .is_err()
+                {
+                    return Self::result_for(
+                        &session_id,
+                        AgentRunState::Failed,
+                        Some(AgentFailure::Session),
+                        Some("session append failed".to_string()),
+                        None,
+                        iteration,
+                        total_tool_calls,
+                    );
+                }
             }
 
             self.ctx.emit(AgentStep {
@@ -456,17 +632,26 @@ impl AgentLoop {
                 done: false,
             });
         }
-        self.notify(
+        let _ = self
+            .notify(
+                &session_id,
+                AgentRunState::Failed,
+                self.max_iterations,
+                Value::Null,
+            )
+            .await;
+        Self::result_for(
             &session_id,
             AgentRunState::Failed,
+            Some(AgentFailure::IterationLimit),
+            Some(format!(
+                "max iterations exceeded: {max}",
+                max = self.max_iterations
+            )),
+            None,
             self.max_iterations,
-            Value::Null,
+            total_tool_calls,
         )
-        .await?;
-        Err(AgentLoopError::new(
-            AgentLoopFailure::IterationLimit,
-            format!("max iterations exceeded: {max}", max = self.max_iterations),
-        ))
     }
 }
 
@@ -491,20 +676,16 @@ impl ah_contracts::agent::AgentLoopRuntime for AgentLoop {
         }
     }
 
-    async fn run(&self, input: &str) -> Result<String, ah_contracts::agent::AgentControlError> {
-        AgentLoop::run(self, input)
-            .await
-            .map_err(|error| ah_contracts::agent::AgentControlError(error.message))
+    async fn run(&self, input: &str) -> ah_contracts::agent::AgentResult {
+        AgentLoop::run(self, input).await
     }
 
     async fn run_in_session(
         &self,
         session: Arc<dyn SessionLog>,
         input: &str,
-    ) -> Result<String, ah_contracts::agent::AgentControlError> {
-        AgentLoop::run_in_session(self, session, input)
-            .await
-            .map_err(|error| ah_contracts::agent::AgentControlError(error.message))
+    ) -> ah_contracts::agent::AgentResult {
+        AgentLoop::run_in_session(self, session, input).await
     }
 
     async fn run_in_session_with_timeout(
@@ -512,11 +693,10 @@ impl ah_contracts::agent::AgentLoopRuntime for AgentLoop {
         session: Arc<dyn SessionLog>,
         input: &str,
         timeout_ms: Option<u64>,
-    ) -> Result<String, ah_contracts::agent::AgentControlError> {
+    ) -> ah_contracts::agent::AgentResult {
         AgentLoop::with_timeout(self.clone(), timeout_ms)
             .run_in_session(session, input)
             .await
-            .map_err(|error| ah_contracts::agent::AgentControlError(error.message))
     }
 }
 
@@ -666,10 +846,14 @@ mod tests {
         let agent = ctx
             .service::<dyn ah_contracts::agent::AgentLoopRuntime>(&AGENT_LOOP)
             .expect("agent-loop service");
-        let answer = agent.run("explore the workspace").await.expect("run");
+        let result = agent.run("explore the workspace").await;
+        assert_eq!(result.state, AgentRunState::Completed);
+        let answer = result.answer.unwrap();
 
         assert!(answer.contains("mock final answer"));
         assert!(answer.contains("probe.txt"));
+        assert!(result.iterations >= 1);
+        assert!(result.tool_calls >= 1, "list_dir 已真实执行");
 
         // 会话日志:从文件重开,事件完整、消息可投影。
         let sessions = ctx.service::<dyn SessionLog>(&SESSIONS).expect("sessions");
@@ -730,10 +914,9 @@ mod tests {
         let agent = ctx
             .service::<dyn ah_contracts::agent::AgentLoopRuntime>(&AGENT_LOOP)
             .expect("agent-loop service");
-        let answer = agent
-            .run("go")
-            .await
-            .expect("loop must not crash on tool error");
+        let result = agent.run("go").await;
+        assert_eq!(result.state, AgentRunState::Completed);
+        let answer = result.answer.unwrap_or_default();
 
         // 错误被回喂:最终回答引用了工具错误文本。
         assert!(answer.contains("mock final answer"));
@@ -778,10 +961,9 @@ mod tests {
 
         // 第一轮:task-a
         let a = manager.create("task-a").expect("create");
-        let answer = agent
-            .run_in_session(a.clone(), "first task")
-            .await
-            .expect("run1");
+        let result = agent.run_in_session(a.clone(), "first task").await;
+        assert_eq!(result.state, AgentRunState::Completed);
+        let answer = result.answer.unwrap();
         assert!(answer.contains("mock final answer"));
         let a_events = a.events().len();
         assert!(a_events >= 2);
@@ -789,10 +971,7 @@ mod tests {
         // fork 到 task-b:历史复制,续跑追加
         let b = manager.fork("task-a", "task-b").expect("fork");
         assert_eq!(b.events().len(), a_events);
-        let _ = agent
-            .run_in_session(b.clone(), "follow up")
-            .await
-            .expect("run2");
+        let _ = agent.run_in_session(b.clone(), "follow up").await;
         assert!(b.events().len() > a_events, "resume 追加了事件");
         assert_eq!(a.events().len(), a_events, "原会话不受影响");
 
@@ -835,12 +1014,9 @@ mod tests {
             2,
         )
         .with_controls(Some(interrupt.clone()), None, None);
-        assert!(
-            agent
-                .run_in_session(session.clone(), "cancel me")
-                .await
-                .is_err()
-        );
+        let cancelled = agent.run_in_session(session.clone(), "cancel me").await;
+        assert_eq!(cancelled.state, AgentRunState::Cancelled);
+        assert_eq!(cancelled.failure, Some(AgentFailure::Cancelled));
         assert!(
             session
                 .events()
@@ -852,12 +1028,9 @@ mod tests {
             .request(session.id(), AgentControl::Interrupt)
             .await
             .unwrap();
-        assert!(
-            agent
-                .run_in_session(session.clone(), "interrupt me")
-                .await
-                .is_err()
-        );
+        let interrupted = agent.run_in_session(session.clone(), "interrupt me").await;
+        assert_eq!(interrupted.state, AgentRunState::Interrupted);
+        assert_eq!(interrupted.failure, Some(AgentFailure::Interrupted));
         assert!(
             session
                 .events()
@@ -876,7 +1049,9 @@ mod tests {
         let agent = ctx
             .service::<dyn ah_contracts::agent::AgentLoopRuntime>(&AGENT_LOOP)
             .expect("agent-loop");
-        assert!(agent.run("  ").await.is_err());
+        let result = agent.run("  ").await;
+        assert_eq!(result.state, AgentRunState::Failed);
+        assert_eq!(result.failure, Some(AgentFailure::InvalidInput));
         let sessions = ctx.service::<dyn SessionLog>(&SESSIONS).expect("sessions");
         assert!(sessions.events().is_empty());
         drop(effects);
@@ -901,7 +1076,7 @@ mod tests {
         let agent = ctx
             .service::<dyn ah_contracts::agent::AgentLoopRuntime>(&AGENT_LOOP)
             .expect("agent-loop service");
-        let _ = agent.run("go").await.expect("run");
+        let _ = agent.run("go").await;
 
         assert!(steps.load(Ordering::SeqCst) >= 2);
 
@@ -945,10 +1120,9 @@ mod tests {
         let tools = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
         let _ = agent; // 插件路径循环已生效;此处构造小预算实例做消费验证。
         let tight = AgentLoop::new(llm, tools, sessions, ctx.clone(), 3).with_context(context, 10);
-        let answer = tight
-            .run("explore the workspace")
-            .await
-            .expect("run with tight budget");
+        let result = tight.run("explore the workspace").await;
+        assert_eq!(result.state, AgentRunState::Completed);
+        let answer = result.answer.unwrap();
         assert!(answer.contains("mock final answer"));
         // 日志即真相:完整历史仍在日志(压缩只影响模型可见窗口)。
         let sessions2 = ctx.service::<dyn SessionLog>(&SESSIONS).expect("sessions");
@@ -1060,8 +1234,9 @@ mod tests {
             1,
         )
         .with_model_backup(Some(StdArc::new(DirectFailingBackupRuntime)));
-        let error = agent.run("fail").await.expect_err("backup must fail");
-        assert_eq!(error.kind, AgentLoopFailure::Model);
+        let result = agent.run("fail").await;
+        assert_eq!(result.state, AgentRunState::Failed);
+        assert_eq!(result.failure, Some(AgentFailure::Model));
         let event = session
             .events()
             .into_iter()
@@ -1093,8 +1268,9 @@ mod tests {
             ctx,
             1,
         );
-        let error = agent.run("fail").await.expect_err("model must fail");
-        assert_eq!(error.kind, AgentLoopFailure::Model);
+        let result = agent.run("fail").await;
+        assert_eq!(result.state, AgentRunState::Failed);
+        assert_eq!(result.failure, Some(AgentFailure::Model));
         let event = session
             .events()
             .into_iter()
@@ -1149,8 +1325,9 @@ mod tests {
             1,
         )
         .with_model_backup(Some(StdArc::new(DirectBackupRuntime)));
-        let answer = agent.run("recover").await.expect("backup answer");
-        assert_eq!(answer, "backup answer");
+        let result = agent.run("recover").await;
+        assert_eq!(result.state, AgentRunState::Completed);
+        assert_eq!(result.answer.as_deref(), Some("backup answer"));
     }
 
     #[tokio::test]
@@ -1203,7 +1380,9 @@ mod tests {
             3,
         )
         .with_prompt(prompts, "agent");
-        let answer = agent.run("explore the workspace").await.expect("run");
+        let result = agent.run("explore the workspace").await;
+        assert_eq!(result.state, AgentRunState::Completed);
+        let answer = result.answer.unwrap();
         assert!(answer.contains("mock final answer"));
 
         // 首次请求的首条消息是渲染出的 system 提示。
@@ -1221,5 +1400,313 @@ mod tests {
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---------- P1-02/03:结构化 AgentResult 与执行中取消/超时 ----------
+
+    /// 精确统计:两次工具调用后作答 → iterations=2、tool_calls=2、Completed。
+    #[tokio::test]
+    async fn agent_result_reports_exact_iterations_and_tool_calls() {
+        use ah_contracts::llm::ToolCall;
+        use ah_contracts::tools::{Tool, ToolError};
+        use serde_json::Value;
+
+        struct NoopTool;
+        #[async_trait]
+        impl Tool for NoopTool {
+            fn name(&self) -> &'static str {
+                "noop"
+            }
+            fn description(&self) -> &'static str {
+                "no-op tool"
+            }
+            fn parameters(&self) -> Value {
+                json!({ "type": "object", "properties": {} })
+            }
+            async fn invoke(&self, _: Value) -> Result<Value, ToolError> {
+                Ok(json!({ "ok": true }))
+            }
+        }
+
+        struct TwoToolModel {
+            calls: AtomicUsize,
+        }
+        impl Seam for TwoToolModel {}
+        #[async_trait]
+        impl ModelProvider for TwoToolModel {
+            fn name(&self) -> &'static str {
+                "two-tool"
+            }
+            async fn chat(
+                &self,
+                _: ModelRequest,
+            ) -> Result<ModelResponse, ah_contracts::llm::ModelError> {
+                let n = self.calls.fetch_add(1, Ordering::SeqCst);
+                if n < 2 {
+                    Ok(ModelResponse {
+                        content: String::new(),
+                        tool_calls: vec![ToolCall {
+                            id: format!("c{n}"),
+                            name: "noop".to_string(),
+                            arguments: json!({}),
+                        }],
+                    })
+                } else {
+                    Ok(ModelResponse {
+                        content: "final answer".to_string(),
+                        tool_calls: vec![],
+                    })
+                }
+            }
+        }
+
+        let ctx = Context::new();
+        let session_dir =
+            std::env::temp_dir().join(format!("ah-loop-stats-{}", std::process::id()));
+        let session_path = session_dir.join("default.jsonl");
+        let _ = std::fs::remove_dir_all(&session_dir);
+        let registry = StdArc::new(ah_plugins_tools::LocalToolRegistry::new(ctx.clone()));
+        let _tool_effect = registry.register(StdArc::new(NoopTool));
+        let session = StdArc::new(
+            ah_plugins_session_log::JsonlSessionLog::open(&session_path, ctx.clone()).unwrap(),
+        );
+        let agent = AgentLoop::new(
+            StdArc::new(TwoToolModel {
+                calls: AtomicUsize::new(0),
+            }),
+            registry,
+            session,
+            ctx,
+            5,
+        );
+        let result = agent.run("stats").await;
+        assert_eq!(result.state, AgentRunState::Completed);
+        assert_eq!(result.answer.as_deref(), Some("final answer"));
+        assert_eq!(result.iterations, 2, "两轮工具轮 + 一轮作答");
+        assert_eq!(result.tool_calls, 2, "两个工具调用均已统计");
+        let _ = std::fs::remove_dir_all(&session_dir);
+    }
+
+    /// 超时中止**在途**模型调用(而非仅轮次边界):300ms 超时下 10s 睡眠模型
+    /// 必须很快以 TimedOut 返回。
+    #[tokio::test]
+    async fn timeout_aborts_in_flight_model_call() {
+        struct SleepingModel;
+        impl Seam for SleepingModel {}
+        #[async_trait]
+        impl ModelProvider for SleepingModel {
+            fn name(&self) -> &'static str {
+                "sleeping"
+            }
+            async fn chat(
+                &self,
+                _: ModelRequest,
+            ) -> Result<ModelResponse, ah_contracts::llm::ModelError> {
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                Ok(ModelResponse {
+                    content: "slow done".to_string(),
+                    tool_calls: vec![],
+                })
+            }
+        }
+
+        let ctx = Context::new();
+        let session_dir = std::env::temp_dir().join(format!("ah-loop-slow-{}", std::process::id()));
+        let session_path = session_dir.join("default.jsonl");
+        let _ = std::fs::remove_dir_all(&session_dir);
+        let session = StdArc::new(
+            ah_plugins_session_log::JsonlSessionLog::open(&session_path, ctx.clone()).unwrap(),
+        );
+        let agent = AgentLoop::new(
+            StdArc::new(SleepingModel),
+            StdArc::new(ah_plugins_tools::LocalToolRegistry::new(ctx.clone())),
+            session,
+            ctx,
+            3,
+        )
+        .with_timeout(Some(300));
+        let start = std::time::Instant::now();
+        let result = agent.run("slow").await;
+        let elapsed_ms = start.elapsed().as_millis();
+        assert_eq!(result.state, AgentRunState::TimedOut);
+        assert_eq!(result.failure, Some(AgentFailure::TimedOut));
+        assert!(
+            elapsed_ms < 2000,
+            "必须中止在途模型调用,实际耗时 {elapsed_ms}ms"
+        );
+        let _ = std::fs::remove_dir_all(&session_dir);
+    }
+
+    /// 中断中止**在途**模型调用:运行中请求 Interrupt,10s 睡眠模型应快速中止。
+    #[tokio::test]
+    async fn interrupt_aborts_in_flight_model_call() {
+        use ah_contracts::keys::INTERRUPT;
+
+        struct SleepingModel;
+        impl Seam for SleepingModel {}
+        #[async_trait]
+        impl ModelProvider for SleepingModel {
+            fn name(&self) -> &'static str {
+                "sleeping"
+            }
+            async fn chat(
+                &self,
+                _: ModelRequest,
+            ) -> Result<ModelResponse, ah_contracts::llm::ModelError> {
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                Ok(ModelResponse {
+                    content: "slow done".to_string(),
+                    tool_calls: vec![],
+                })
+            }
+        }
+
+        let ctx = Context::new();
+        let session_dir =
+            std::env::temp_dir().join(format!("ah-loop-int-mid-{}", std::process::id()));
+        let default_path = session_dir.join("default.jsonl");
+        let effects = ctx
+            .mount_all(vec![
+                StdArc::new(ah_plugins_agent_control::AgentControlPlugin),
+                StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                    &default_path,
+                    &session_dir,
+                )),
+            ])
+            .expect("mount");
+        let interrupt = ctx
+            .service::<dyn InterruptRuntime>(&INTERRUPT)
+            .expect("interrupt");
+        let session = ctx.service::<dyn SessionLog>(&SESSIONS).expect("session");
+        let sid = session.id().to_string();
+        let i2 = interrupt.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            let _ = i2.request(&sid, AgentControl::Interrupt).await;
+        });
+        let agent = AgentLoop::new(
+            StdArc::new(SleepingModel),
+            StdArc::new(ah_plugins_tools::LocalToolRegistry::new(ctx.clone())),
+            session.clone(),
+            ctx,
+            3,
+        )
+        .with_controls(Some(interrupt.clone()), None, None);
+        let start = std::time::Instant::now();
+        let result = agent.run("slow").await;
+        let elapsed_ms = start.elapsed().as_millis();
+        assert_eq!(result.state, AgentRunState::Interrupted);
+        assert_eq!(result.failure, Some(AgentFailure::Interrupted));
+        assert!(
+            elapsed_ms < 2000,
+            "必须中止在途模型调用,实际耗时 {elapsed_ms}ms"
+        );
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&session_dir);
+    }
+
+    /// 中断中止**在途**工具调用:模型先请求一个睡眠工具,运行中 Interrupt。
+    #[tokio::test]
+    async fn interrupt_aborts_in_flight_tool_call() {
+        use ah_contracts::keys::INTERRUPT;
+        use ah_contracts::llm::ToolCall;
+        use ah_contracts::tools::{Tool, ToolError};
+        use serde_json::Value;
+
+        struct SleepyTool;
+        #[async_trait]
+        impl Tool for SleepyTool {
+            fn name(&self) -> &'static str {
+                "sleepy"
+            }
+            fn description(&self) -> &'static str {
+                "sleeps forever"
+            }
+            fn parameters(&self) -> Value {
+                json!({ "type": "object", "properties": {} })
+            }
+            async fn invoke(&self, _: Value) -> Result<Value, ToolError> {
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                Ok(json!({}))
+            }
+        }
+
+        struct ToolThenAnswerModel {
+            calls: AtomicUsize,
+        }
+        impl Seam for ToolThenAnswerModel {}
+        #[async_trait]
+        impl ModelProvider for ToolThenAnswerModel {
+            fn name(&self) -> &'static str {
+                "tool-then-answer"
+            }
+            async fn chat(
+                &self,
+                _: ModelRequest,
+            ) -> Result<ModelResponse, ah_contracts::llm::ModelError> {
+                if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Ok(ModelResponse {
+                        content: String::new(),
+                        tool_calls: vec![ToolCall {
+                            id: "c1".to_string(),
+                            name: "sleepy".to_string(),
+                            arguments: json!({}),
+                        }],
+                    })
+                } else {
+                    Ok(ModelResponse {
+                        content: "done".to_string(),
+                        tool_calls: vec![],
+                    })
+                }
+            }
+        }
+
+        let ctx = Context::new();
+        let session_dir =
+            std::env::temp_dir().join(format!("ah-loop-tool-int-{}", std::process::id()));
+        let default_path = session_dir.join("default.jsonl");
+        let effects = ctx
+            .mount_all(vec![
+                StdArc::new(ah_plugins_agent_control::AgentControlPlugin),
+                StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                    &default_path,
+                    &session_dir,
+                )),
+            ])
+            .expect("mount");
+        let interrupt = ctx
+            .service::<dyn InterruptRuntime>(&INTERRUPT)
+            .expect("interrupt");
+        let session = ctx.service::<dyn SessionLog>(&SESSIONS).expect("session");
+        let registry = StdArc::new(ah_plugins_tools::LocalToolRegistry::new(ctx.clone()));
+        let _tool_effect = registry.register(StdArc::new(SleepyTool));
+        let sid = session.id().to_string();
+        let i2 = interrupt.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            let _ = i2.request(&sid, AgentControl::Interrupt).await;
+        });
+        let agent = AgentLoop::new(
+            StdArc::new(ToolThenAnswerModel {
+                calls: AtomicUsize::new(0),
+            }),
+            registry,
+            session.clone(),
+            ctx,
+            3,
+        )
+        .with_controls(Some(interrupt.clone()), None, None);
+        let start = std::time::Instant::now();
+        let result = agent.run("slow tool").await;
+        let elapsed_ms = start.elapsed().as_millis();
+        assert_eq!(result.state, AgentRunState::Interrupted);
+        assert_eq!(result.failure, Some(AgentFailure::Interrupted));
+        assert!(
+            elapsed_ms < 2000,
+            "必须中止在途工具调用,实际耗时 {elapsed_ms}ms"
+        );
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&session_dir);
     }
 }

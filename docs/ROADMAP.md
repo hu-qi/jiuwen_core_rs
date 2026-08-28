@@ -36,8 +36,8 @@ Python parity 标记为 verified。
 | ID | 任务 | 当前状态 | 完成标准 |
 | --- | --- | --- | --- |
 | P1-01 | 宿主只消费 `dyn AgentLoopRuntime` | done(`4c47628`) | `ah-app`/CLI 不解析具体 `AgentLoop`;替换 provider 无需修改宿主 |
-| P1-02 | 结构化运行错误和真实统计 | partial | 取消/中断/超时不依赖错误字符串;AgentResult 返回真实 iterations、tool calls 和终止原因 |
-| P1-03 | timeout/cancel/interrupt 全链传播 | partial | 可中断阻塞中的模型、流式和工具调用;事件顺序与恢复行为通过 differential |
+| P1-02 | 结构化运行错误和真实统计 | done(`AgentResult` 结构化) | 取消/中断/超时不依赖错误字符串;AgentResult 返回真实 iterations、tool calls 和终止原因。`AgentLoopRuntime` 三个方法均返回 `AgentResult`(state + `failure: AgentFailure` + iterations + tool_calls + answer/error);application 已删除错误字符串 contains 判定,直接消费结构化状态 |
+| P1-03 | timeout/cancel/interrupt 全链传播 | done(执行中中止,差分待首批六 seam 接入) | 可中断阻塞中的模型、流式和工具调用;事件顺序与恢复行为通过 differential。`race_control` 在模型调用/工具执行期间轮询控制状态与截止时间(25ms),命中即中止在途 future;run 级截止时间约束 backup 链全 provider(跨 provider timeout)。differential 覆盖待 P0-01 六 seam 接入后验证 |
 | P1-04 | session/checkpoint 完整恢复 | partial | 崩溃、部分 tool call、fork/restore、幂等、版本兼容和并发访问均有契约测试 |
 | P1-05 | application 完整绑定 | partial | 结构化 command、LLM intent、memory/invoke rails 和请求级配置与 Python 公开行为对等 |
 | P1-06 | controller 完整行为 | partial | LLM intent、状态机、父子任务、并发调度和 snapshot 迁移通过 differential |
@@ -87,7 +87,7 @@ Python parity 标记为 verified。
 | 1 | P0-01 Python/Rust differential runner(MVP) | ✅ 已落地(`8f735a4`):`differential/`(run_python.py/compare.py/run.sh/README)+ CI job;stop_condition 4/4、messager_inprocess 2/2 一致,1 个已知差异已记录;首批六 seam 待接入 |
 | 2 | P0-02 production 静态组合验证 → CI | ✅ 已落地:`ah-app/tests/static_composition.rs`(catalog 解析 + 无重复/缺失 provider + 无环),dev/prod 双 profile 通过;修复 prod 缺 `ah-plugins-model-backup` 的真实 bug |
 | 3 | P1-08 插件依赖隔离 CI | 机械检查:除 `ah-app` 外,生产 `[dependencies]` 禁止引用其他 `ah-plugins-*` |
-| 4 | P1-02/03 agent-loop 结构化错误与执行中取消 | AgentResult 返回真实 iterations/tool calls/终止原因;模型与工具调用可中断;跨 provider timeout 传播 |
+| 4 | P1-02/03 agent-loop 结构化错误与执行中取消 | ✅ 已落地:`AgentLoopRuntime` 返回结构化 `AgentResult`(state/failure/iterations/tool_calls,application 不再解析错误字符串);`race_control` 中止在途模型/工具调用 + run 级截止时间约束 backup 链;4 个新聚焦测试(timeout/interrupt 中止在途调用、精确统计) |
 | 5 | P2-01 确定性工具补齐 | edit/glob/grep/todo/cron/memory 等无 LLM 工具(工作量可控、对等易验证、直接提升日常可用性) |
 | 6 | P1-07 workflow 流式执行 | STREAM/TRANSFORM/COLLECT、增量工具结果、中断与 checkpoint 续跑完整接线 |
 | 7 | P1-05/06 application/controller LLM 意图 | 结构化 command 载荷 + LLM intent 识别替换关键字匹配 |

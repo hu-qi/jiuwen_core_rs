@@ -120,6 +120,8 @@ impl ApplicationRuntime for LocalApplicationRuntime {
                         state,
                         answer,
                         iterations: 0,
+                        tool_calls: 0,
+                        failure: None,
                         error,
                     });
                 }
@@ -151,59 +153,56 @@ impl ApplicationRuntime for LocalApplicationRuntime {
                 state: AgentRunState::Completed,
                 answer: Some(output.output.to_string()),
                 iterations: output.executed.len(),
+                tool_calls: 0,
+                failure: None,
                 error: None,
             });
         }
         let session_id = request.session_id.clone();
-        let answer = match self
+        // agent 循环返回结构化 AgentResult(P1-02):状态/终止原因/统计直接可用,
+        // 不再解析错误字符串判定 interrupted/cancelled/timed out。
+        let result = self
             .agent
             .run_in_session_with_timeout(session.clone(), &request.input, request.timeout_ms)
-            .await
-        {
-            Ok(answer) => answer,
-            Err(error) => {
-                let message = error.0;
-                let state = if message.contains("interrupted") {
-                    AgentRunState::Interrupted
-                } else if message.contains("cancelled") {
-                    AgentRunState::Cancelled
-                } else if message.contains("timed out") {
-                    AgentRunState::TimedOut
-                } else {
-                    AgentRunState::Failed
-                };
-                if let Err(log_error) = session.append(
-                    SessionEventKind::System,
-                    serde_json::json!({
-                        "command": request.input,
-                        "state": format!("{:?}", state).to_lowercase(),
-                        "error": message,
-                    }),
-                ) {
-                    return Ok(AgentResult {
-                        session_id,
-                        state: AgentRunState::Failed,
-                        answer: None,
-                        iterations: 0,
-                        error: Some(format!(
-                            "{message}; failure event logging failed: {log_error}"
-                        )),
-                    });
-                }
+            .await;
+        if result.state != AgentRunState::Completed {
+            // 失败/中断/取消/超时:结构化状态写入 System 事件,原样返回 result。
+            if let Err(log_error) = session.append(
+                SessionEventKind::System,
+                serde_json::json!({
+                    "command": request.input,
+                    "state": format!("{:?}", result.state).to_lowercase(),
+                    "failure": result
+                        .failure
+                        .map(|f| format!("{:?}", f).to_lowercase())
+                        .unwrap_or_default(),
+                    "error": result.error,
+                    "iterations": result.iterations,
+                    "tool_calls": result.tool_calls,
+                }),
+            ) {
                 return Ok(AgentResult {
                     session_id,
-                    state,
+                    state: AgentRunState::Failed,
                     answer: None,
-                    iterations: 0,
-                    error: Some(message),
+                    iterations: result.iterations,
+                    tool_calls: result.tool_calls,
+                    failure: Some(ah_contracts::agent::AgentFailure::Session),
+                    error: Some(format!(
+                        "{}; failure event logging failed: {log_error}",
+                        result.error.unwrap_or_default()
+                    )),
                 });
             }
-        };
+            return Ok(result);
+        }
         Ok(AgentResult {
             session_id: request.session_id,
             state: AgentRunState::Completed,
-            answer: Some(answer),
-            iterations: 1,
+            answer: result.answer,
+            iterations: result.iterations,
+            tool_calls: result.tool_calls,
+            failure: None,
             error: None,
         })
     }
@@ -927,16 +926,32 @@ mod tests {
     impl Seam for FailingAgentLoop {}
     #[async_trait]
     impl ah_contracts::agent::AgentLoopRuntime for FailingAgentLoop {
-        async fn run(&self, _: &str) -> Result<String, AgentControlError> {
-            Err(AgentControlError("model unavailable".into()))
+        async fn run(&self, _: &str) -> ah_contracts::agent::AgentResult {
+            ah_contracts::agent::AgentResult {
+                session_id: String::new(),
+                state: ah_contracts::agent::AgentRunState::Failed,
+                answer: None,
+                iterations: 0,
+                tool_calls: 0,
+                failure: Some(ah_contracts::agent::AgentFailure::Model),
+                error: Some("model unavailable".into()),
+            }
         }
 
         async fn run_in_session(
             &self,
             _: Arc<dyn ah_contracts::session::SessionLog>,
             _: &str,
-        ) -> Result<String, AgentControlError> {
-            Err(AgentControlError("model unavailable".into()))
+        ) -> ah_contracts::agent::AgentResult {
+            ah_contracts::agent::AgentResult {
+                session_id: String::new(),
+                state: ah_contracts::agent::AgentRunState::Failed,
+                answer: None,
+                iterations: 0,
+                tool_calls: 0,
+                failure: Some(ah_contracts::agent::AgentFailure::Model),
+                error: Some("model unavailable".into()),
+            }
         }
     }
 

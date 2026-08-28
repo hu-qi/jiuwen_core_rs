@@ -151,12 +151,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let (agent, manager) = ah_app::agent_and_manager(&ctx)?;
     let task_a = manager.create("task-a").expect("create task-a");
-    let answer = agent
+    let result = agent
         .run_in_session(task_a.clone(), "explore the workspace")
-        .await?;
-    println!("[agent] task-a answer: {answer}");
+        .await;
+    println!(
+        "[agent] task-a answer: {}",
+        result.answer.as_deref().unwrap_or("(no answer)")
+    );
     let task_b = manager.fork("task-a", "task-b").expect("fork task-b");
-    let _ = agent.run_in_session(task_b.clone(), "follow up").await?;
+    let _ = agent.run_in_session(task_b.clone(), "follow up").await;
     println!(
         "[session] task-b events after resume: {} (task-a unchanged: {})",
         task_b.events().len(),
