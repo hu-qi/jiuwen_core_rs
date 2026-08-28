@@ -1,0 +1,46 @@
+{
+  "cases": [
+    {
+      "decisions": [
+        false,
+        true,
+        true
+      ],
+      "name": "max_rounds_boundary"
+    },
+    {
+      "decisions": [
+        false,
+        true,
+        true
+      ],
+      "name": "token_budget_boundary"
+    },
+    {
+      "decisions": [
+        false,
+        true,
+        true
+      ],
+      "name": "timeout_boundary"
+    },
+    {
+      "name": "completion_promise_state_machine",
+      "results": [
+        false,
+        false,
+        false,
+        true,
+        {
+          "confirmation_count": 2,
+          "fulfilled": true,
+          "matched_text": "DONE",
+          "required_confirmations": 2
+        },
+        true,
+        false
+      ]
+    }
+  ],
+  "seam": "stop_condition"
+}

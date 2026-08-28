@@ -22,7 +22,7 @@ Python parity 标记为 verified。
 
 | ID | 任务 | 当前状态 | 完成标准 |
 | --- | --- | --- | --- |
-| P0-01 | 建立真实 Python/Rust differential runner | missing | 同一语言中立 fixture 分别驱动 Python 与 Rust;CI 比较输出、错误、状态、日志、恢复、取消和超时 |
+| P0-01 | 建立真实 Python/Rust differential runner | partial(`differential/`) | 同一语言中立 fixture 分别驱动 Python 与 Rust;CI 比较输出、错误、状态、日志、恢复、取消和超时。MVP 已落地:隔离加载的 Python runner(`run_python.py`)+ Rust reference(`differential.rs` 复用 `settle()`)+ `compare.py`(known_divergence 报告/未标记差异失败)+ CI job;stop_condition 4/4、messager_inprocess 2/2 一致,已记录 1 个真实差异(messager 进程全局总线 vs Rust 每实例总线)。首批 application/agent-loop/session/controller/workflow/tools 六 seam 仍待接入 |
 | P0-02 | production profile 静态组合验证 | missing | profile 每个插件可由 catalog 解析;provides/inject 无缺失、重复和环 |
 | P0-03 | production boot smoke | missing | 无 mock,使用本地协议 fixture 和临时持久化目录完成 boot 与一次 `ApplicationRuntime::invoke` |
 | P0-04 | `mount_all` 失败原子性验证 | partial | 后续插件 apply 失败后,此前服务和事件监听器全部回滚,Context 回到调用前状态 |

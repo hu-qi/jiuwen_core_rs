@@ -1,0 +1,40 @@
+{
+  "seam": "messager_inprocess",
+  "description": "agent_teams/messager inprocess pub-sub + p2p — Python openjiuwen/agent_teams/messager/inprocess.py vs Rust ah-contracts/src/messager.rs",
+  "note": "Language-neutral. Outcome: per case, 'deliveries' = ordered list of messages the handler received (with sender_id stamping applied by publish). Cases marked known_divergence document real semantic gaps found by this differential and are reported but non-fatal.",
+  "cases": [
+    {
+      "name": "single_agent_pubsub_stamp_and_unsubscribe",
+      "config": { "node_id": "leader" },
+      "steps": [
+        { "op": "subscribe", "topic": "team:alpha:broadcast" },
+        { "op": "publish", "topic": "team:alpha:broadcast", "message": { "kind": "hello", "sender_id": "" } },
+        { "op": "publish", "topic": "team:alpha:broadcast", "message": { "kind": "world", "sender_id": "other" } },
+        { "op": "unsubscribe", "topic": "team:alpha:broadcast" },
+        { "op": "publish", "topic": "team:alpha:broadcast", "message": { "kind": "after", "sender_id": "" } }
+      ]
+    },
+    {
+      "name": "p2p_register_send_unregister",
+      "config": { "node_id": "leader" },
+      "steps": [
+        { "op": "register_direct_message_handler" },
+        { "op": "send", "agent_id": "leader", "message": { "kind": "ping", "sender_id": "" } },
+        { "op": "send", "agent_id": "missing", "message": { "kind": "nobody", "sender_id": "" } },
+        { "op": "unregister_direct_message_handler" },
+        { "op": "send", "agent_id": "leader", "message": { "kind": "after", "sender_id": "" } }
+      ]
+    },
+    {
+      "name": "cross_instance_shared_bus",
+      "known_divergence": true,
+      "note": "Python _Bus is process-global (all InProcessMessager share it), Rust InProcessMessager owns a per-instance bus; teammate->leader fan-out therefore differs. Rust must adopt a shared/global bus to reach parity.",
+      "config": { "node_id": "leader" },
+      "peer_config": { "node_id": "teammate" },
+      "steps": [
+        { "op": "subscribe", "topic": "team:alpha:broadcast", "who": "leader" },
+        { "op": "publish", "topic": "team:alpha:broadcast", "message": { "kind": "hi", "sender_id": "" }, "who": "teammate" }
+      ]
+    }
+  ]
+}

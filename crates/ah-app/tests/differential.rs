@@ -323,3 +323,172 @@ async fn reference_evolving_evaluation() {
     drop(effects);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// ---------- stop_condition (P0-01 Python/Rust differential) ----------
+
+fn stop_ctx(v: &Value) -> ah_contracts::harness_schema::StopEvaluationContext {
+    ah_contracts::harness_schema::StopEvaluationContext {
+        iteration: v.get("iteration").and_then(Value::as_u64).unwrap_or(0),
+        token_usage: v.get("token_usage").and_then(Value::as_u64).unwrap_or(0),
+        elapsed_seconds: v
+            .get("elapsed_seconds")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0),
+        last_result: v.get("last_result").cloned(),
+        extra: v
+            .get("extra")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default(),
+    }
+}
+
+/// 与 Python 侧(differential/run_python.py::run_stop_condition)相同的
+/// 语言中立 fixture 与规范化输出形状。Python 输出见
+/// differential/out/python/stop_condition.json,比较见 differential/compare.py。
+#[test]
+fn reference_stop_condition() {
+    use ah_contracts::harness_schema::{
+        CompletionPromiseEvaluator, MaxRoundsEvaluator, TimeoutEvaluator, TokenBudgetEvaluator,
+    };
+
+    let fixture = load_fixture("stop_condition");
+    let mut cases_out: Vec<Value> = Vec::new();
+    for case in fixture["cases"].as_array().unwrap() {
+        let ev = &case["evaluator"];
+        let name = case["name"].as_str().unwrap().to_string();
+        match ev["type"].as_str().unwrap() {
+            "max_rounds" => {
+                let e = MaxRoundsEvaluator::new(ev["max_rounds"].as_u64().unwrap());
+                let decisions: Vec<bool> = case["contexts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|ctx| e.should_stop(&stop_ctx(ctx)))
+                    .collect();
+                cases_out.push(json!({ "name": name, "decisions": decisions }));
+            }
+            "token_budget" => {
+                let e = TokenBudgetEvaluator::new(ev["max_tokens"].as_u64().unwrap());
+                let decisions: Vec<bool> = case["contexts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|ctx| e.should_stop(&stop_ctx(ctx)))
+                    .collect();
+                cases_out.push(json!({ "name": name, "decisions": decisions }));
+            }
+            "timeout" => {
+                let e = TimeoutEvaluator::new(ev["timeout_seconds"].as_f64().unwrap());
+                let decisions: Vec<bool> = case["contexts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|ctx| e.should_stop(&stop_ctx(ctx)))
+                    .collect();
+                cases_out.push(json!({ "name": name, "decisions": decisions }));
+            }
+            "completion_promise" => {
+                let mut e = CompletionPromiseEvaluator::new(
+                    ev["promise"].as_str().unwrap(),
+                    ev["required_confirmations"].as_u64().unwrap(),
+                );
+                let mut results: Vec<Value> = Vec::new();
+                for step in case["steps"].as_array().unwrap() {
+                    match step["op"].as_str().unwrap() {
+                        "notify_fulfilled" => e.notify_fulfilled(step["text"].as_str().unwrap()),
+                        "notify_absent" => e.notify_absent(),
+                        "should_stop" => results.push(Value::Bool(e.should_stop(
+                            &ah_contracts::harness_schema::StopEvaluationContext::default(),
+                        ))),
+                        "get_state" => results.push(serde_json::to_value(e.get_state()).unwrap()),
+                        "load_state" => e.load_state(&step["state"]),
+                        "reset" => e.reset(),
+                        other => panic!("unknown op {other}"),
+                    }
+                }
+                cases_out.push(json!({ "name": name, "results": results }));
+            }
+            other => panic!("unknown evaluator type {other}"),
+        }
+    }
+    settle(
+        "stop_condition",
+        &json!({ "seam": "stop_condition", "cases": cases_out }),
+    );
+}
+
+// ---------- messager_inprocess (P0-01 Python/Rust differential) ----------
+
+/// 与 Python 侧(differential/run_python.py::run_messager_inprocess)相同的
+/// 语言中立 fixture 与规范化输出形状。Python 输出见
+/// differential/out/python/messager_inprocess.json,比较见 differential/compare.py。
+/// fixture 中 marked known_divergence 的 case 记录 Python/Rust 的真实语义差异
+/// (进程全局总线 vs 每实例总线),由 compare.py 报告但不视为失败。
+#[test]
+fn reference_messager_inprocess() {
+    use ah_contracts::messager::{Messager, MessagerTransportConfig, create_messager};
+    use std::sync::{Arc, Mutex};
+
+    let fixture = load_fixture("messager_inprocess");
+    let mut cases_out: Vec<Value> = Vec::new();
+    for case in fixture["cases"].as_array().unwrap() {
+        let deliveries: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+        let leader_cfg = MessagerTransportConfig {
+            node_id: Some(case["config"]["node_id"].as_str().unwrap().to_string()),
+            ..Default::default()
+        };
+        let leader = create_messager(leader_cfg).expect("leader messager");
+        let peer = case.get("peer_config").map(|pc| {
+            create_messager(MessagerTransportConfig {
+                node_id: Some(pc["node_id"].as_str().unwrap().to_string()),
+                ..Default::default()
+            })
+            .expect("peer messager")
+        });
+
+        for step in case["steps"].as_array().unwrap() {
+            let op = step["op"].as_str().unwrap();
+            let who = step.get("who").and_then(Value::as_str).unwrap_or("leader");
+            let m: &dyn Messager = if who == "leader" {
+                leader.as_ref()
+            } else {
+                peer.as_ref().expect("peer").as_ref()
+            };
+            match op {
+                "subscribe" => {
+                    let d = deliveries.clone();
+                    m.subscribe(step["topic"].as_str().unwrap(), handler(d));
+                }
+                "unsubscribe" => m.unsubscribe(step["topic"].as_str().unwrap()),
+                "publish" => m.publish(step["topic"].as_str().unwrap(), step["message"].clone()),
+                "send" => m.send(step["agent_id"].as_str().unwrap(), step["message"].clone()),
+                "register_direct_message_handler" => {
+                    let d = deliveries.clone();
+                    m.register_direct_message_handler(handler(d));
+                }
+                "unregister_direct_message_handler" => m.unregister_direct_message_handler(),
+                other => panic!("unknown op {other}"),
+            }
+        }
+
+        let got: Vec<Value> = deliveries.lock().unwrap().clone();
+        let mut entry = json!({ "name": case["name"], "deliveries": got });
+        if case.get("known_divergence").is_some() {
+            entry["known_divergence"] = Value::Bool(true);
+        }
+        cases_out.push(entry);
+    }
+    settle(
+        "messager_inprocess",
+        &json!({ "seam": "messager_inprocess", "cases": cases_out }),
+    );
+}
+
+fn handler(
+    deliveries: std::sync::Arc<std::sync::Mutex<Vec<Value>>>,
+) -> ah_contracts::messager::MessagerHandler {
+    Arc::new(move |msg: Value| {
+        deliveries.lock().unwrap().push(msg);
+    })
+}

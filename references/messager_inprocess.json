@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "deliveries": [
+        {
+          "kind": "hello",
+          "sender_id": "leader"
+        },
+        {
+          "kind": "world",
+          "sender_id": "other"
+        }
+      ],
+      "name": "single_agent_pubsub_stamp_and_unsubscribe"
+    },
+    {
+      "deliveries": [
+        {
+          "kind": "ping",
+          "sender_id": ""
+        }
+      ],
+      "name": "p2p_register_send_unregister"
+    },
+    {
+      "deliveries": [],
+      "known_divergence": true,
+      "name": "cross_instance_shared_bus"
+    }
+  ],
+  "seam": "messager_inprocess"
+}

@@ -1,0 +1,56 @@
+{
+  "seam": "stop_condition",
+  "description": "harness/schema stop_condition evaluators — Python openjiuwen/harness/schema/stop_condition.py vs Rust ah-contracts/src/harness_schema.rs",
+  "note": "Language-neutral. Both runners drive their own implementation and emit the SAME normalized outcome shape: per case, 'decisions' for should_stop evaluations and 'results' for step traces (should_stop -> bool, get_state -> dict).",
+  "cases": [
+    {
+      "name": "max_rounds_boundary",
+      "evaluator": { "type": "max_rounds", "max_rounds": 3 },
+      "contexts": [
+        { "iteration": 2 },
+        { "iteration": 3 },
+        { "iteration": 4 }
+      ]
+    },
+    {
+      "name": "token_budget_boundary",
+      "evaluator": { "type": "token_budget", "max_tokens": 100 },
+      "contexts": [
+        { "token_usage": 99 },
+        { "token_usage": 100 },
+        { "token_usage": 150 }
+      ]
+    },
+    {
+      "name": "timeout_boundary",
+      "evaluator": { "type": "timeout", "timeout_seconds": 10.0 },
+      "contexts": [
+        { "elapsed_seconds": 9.5 },
+        { "elapsed_seconds": 10.0 },
+        { "elapsed_seconds": 10.5 }
+      ]
+    },
+    {
+      "name": "completion_promise_state_machine",
+      "evaluator": { "type": "completion_promise", "promise": "DONE", "required_confirmations": 2 },
+      "steps": [
+        { "op": "notify_fulfilled", "text": "DONE" },
+        { "op": "should_stop" },
+        { "op": "notify_absent" },
+        { "op": "should_stop" },
+        { "op": "notify_fulfilled", "text": "DONE" },
+        { "op": "should_stop" },
+        { "op": "notify_fulfilled", "text": "DONE" },
+        { "op": "should_stop" },
+        { "op": "get_state" },
+        {
+          "op": "load_state",
+          "state": { "fulfilled": true, "matched_text": "DONE", "required_confirmations": 1, "confirmation_count": 0 }
+        },
+        { "op": "should_stop" },
+        { "op": "reset" },
+        { "op": "should_stop" }
+      ]
+    }
+  ]
+}

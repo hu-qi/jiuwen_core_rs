@@ -10,7 +10,7 @@
 | 单元测试 | Rust 内核和插件内部逻辑 | 各 crate `#[cfg(test)]`;`cargo test -p <crate>` | 已广泛覆盖 |
 | Golden fixture | Rust seam 对固定语言中立样例的契约稳定性 | `fixtures/` + `ah-app/tests/golden.rs` | 已有 9 个 seam |
 | Rust regression reference | Rust 当前完整可观测输出不发生非预期变化 | `references/` + `ah-app/tests/differential.rs` | 已有 5 个 seam |
-| Python/Rust differential | 同一输入下 Python 与 Rust 的公开行为一致 | 外部 Python runner + 语言中立 fixture + Rust runner | missing |
+| Python/Rust differential | 同一输入下 Python 与 Rust 的公开行为一致 | 外部 Python runner + 语言中立 fixture + Rust runner | partial(基础设施已落地:`differential/` + CI job;stop_condition、messager_inprocess 两 seam 已验证一致,1 个已知差异已记录;首批六 seam 待接入) |
 | Production composition | prod profile 可解析、依赖闭合且无 mock | profile/catalog/依赖图测试 | 仅 mock exclusion 已验证 |
 | Production boot/E2E | 无 mock 的真实组合可启动并执行 | 本地协议 fixture、服务容器或真实凭据 | partial |
 | 覆盖率 | Rust 测试执行到的代码比例 | `cargo llvm-cov --workspace --fail-under-lines 80` | CI 有门禁;当前 HEAD 数字须以 CI 实测为准 |
