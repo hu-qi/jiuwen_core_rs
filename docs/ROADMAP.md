@@ -42,7 +42,7 @@ Python parity 标记为 verified。
 | P1-05 | application 完整绑定 | partial | 结构化 command、LLM intent、memory/invoke rails 和请求级配置与 Python 公开行为对等 |
 | P1-06 | controller 完整行为 | partial | LLM intent、状态机、父子任务、并发调度和 snapshot 迁移通过 differential |
 | P1-07 | workflow 流式执行 | partial | STREAM/TRANSFORM/COLLECT、增量工具结果、中断和 checkpoint 续跑完整接线 |
-| P1-08 | 插件依赖隔离 CI | missing | 除 `ah-app` 外,生产 `[dependencies]` 禁止依赖其他 `ah-plugins-*`;dev-dependencies 允许 |
+| P1-08 | 插件依赖隔离 CI | done(`ah-app/tests/plugin_isolation.rs`) | 除 `ah-app` 外,生产 `[dependencies]` 禁止依赖其他 `ah-plugins-*`;dev-dependencies 允许。另断言插件生产依赖内部 crate 只允许 `ah-hub`/`ah-contracts`;当前全 workspace 零违规 |
 | P1-09 | 卸载与热替换 | partial | 服务、监听器、后台任务、子进程、socket 可逆释放;provider A 可替换为 B |
 | P1-10 | 序列化契约版本化 | partial | session、controller snapshot、workflow checkpoint、外部协议有 envelope/version 和迁移策略 |
 
