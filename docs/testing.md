@@ -54,7 +54,7 @@ Rust reference 生成流程;`AH_REFGEN=1` 不能生成或覆盖 Python reference
 生产验证分三层:
 
 1. **Mock exclusion**:prod profile 不包含 `ah-plugins-mock`;当前已有测试;
-2. **Static composition**:所有插件名可从 catalog 解析,provides/inject 依赖闭合且无重复/环;当前缺完整测试;
+2. **Static composition**:所有插件名可从 catalog 解析,provides/inject 依赖闭合且无重复/环;已由 `ah-app/tests/static_composition.rs` 覆盖(dev/prod 双 profile,镜像 `mount_all` 语义、不触发 apply;曾抓出 prod 缺 `ah-plugins-model-backup` 的组合 bug);
 3. **Boot smoke/E2E**:无 mock 完成 `boot()` 和一次 `ApplicationRuntime::invoke`;当前缺统一门禁。
 
 真实 provider E2E 可使用本地 HTTP fixture、服务容器或真实凭据。因缺凭据跳过时必须输出明确原因,

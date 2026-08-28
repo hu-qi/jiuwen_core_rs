@@ -12,7 +12,7 @@ Seam 契约、普通插件、类型化事件和 Profile 组合。Python 源码�
 - agent-core Python 参考基线:`aeb88cd8`;
 - 当前 workspace 约 111 个 crate,其中约 108 个 `ah-plugins-*` crate;
 - `profiles/dev.toml` 当前声明 113 个插件(展开去重后),包含 `ah-plugins-mock`;
-- `profiles/prod.toml` 当前声明 112 个插件,不包含 `ah-plugins-mock`;
+- `profiles/prod.toml` 当前声明 113 个插件,不包含 `ah-plugins-mock`;
 - `ah-hub` 聚焦测试 18 项通过,`ah-plugins-application` 聚焦测试 14 项通过;
 - 本次审查未在执行时限内完成全 workspace、production boot 和覆盖率实测,不得引用历史回合数字作为当前结果。
 - 已实测(HEAD `b455702`):`cargo clippy --workspace --all-targets -- -D warnings` 零警告、

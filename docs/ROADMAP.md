@@ -23,7 +23,7 @@ Python parity 标记为 verified。
 | ID | 任务 | 当前状态 | 完成标准 |
 | --- | --- | --- | --- |
 | P0-01 | 建立真实 Python/Rust differential runner | partial(`differential/`) | 同一语言中立 fixture 分别驱动 Python 与 Rust;CI 比较输出、错误、状态、日志、恢复、取消和超时。MVP 已落地:隔离加载的 Python runner(`run_python.py`)+ Rust reference(`differential.rs` 复用 `settle()`)+ `compare.py`(known_divergence 报告/未标记差异失败)+ CI job;stop_condition 4/4、messager_inprocess 2/2 一致,已记录 1 个真实差异(messager 进程全局总线 vs Rust 每实例总线)。首批 application/agent-loop/session/controller/workflow/tools 六 seam 仍待接入 |
-| P0-02 | production profile 静态组合验证 | missing | profile 每个插件可由 catalog 解析;provides/inject 无缺失、重复和环 |
+| P0-02 | production profile 静态组合验证 | done(`ah-app/tests/static_composition.rs`) | profile 每个插件可由 catalog 解析;provides/inject 无缺失、重复和环。dev/prod 双 profile 静态校验通过(镜像 mount_all 语义、不触发 apply);发现并修复真实 bug:prod 缺 `ah-plugins-model-backup`(agent-loop inject MODEL_BACKUP)→ 已补入 prod.toml |
 | P0-03 | production boot smoke | missing | 无 mock,使用本地协议 fixture 和临时持久化目录完成 boot 与一次 `ApplicationRuntime::invoke` |
 | P0-04 | `mount_all` 失败原子性验证 | partial | 后续插件 apply 失败后,此前服务和事件监听器全部回滚,Context 回到调用前状态 |
 | P0-05 | 统一审计数据源 | partial | done/partial/missing、域汇总和百分比由结构化数据生成,不再手工累计 |
@@ -75,7 +75,7 @@ Python parity 标记为 verified。
 | M3 日常工作负载可替代 | P2 全部 | coding agent、subagent、团队、检索记忆具备生产实用性 |
 | M4 完整迁移 | P3 全部 | 演进、RSI、外部基础设施和厂商能力进入最终验收 |
 
-当前执行顺序:`P0-01 -> P0-02 -> P0-03 -> P0-04 -> P0-05 -> P1-01`(P1-01 已于 `4c47628` 完成)。
+当前执行顺序:`P0-01(已完成,见下)-> P0-02(已完成)-> P0-03 -> P0-04 -> P0-05 -> P1-01(已完成,`4c47628`)`。
 
 ## 近期工作包(按优先级,2026-08 现状)
 
@@ -84,8 +84,8 @@ Python parity 标记为 verified。
 
 | 优先级 | 工作包 | 说明与证据 |
 | ---: | --- | --- |
-| 1 | P0-01 Python/Rust differential runner(MVP) | 首批 agent-loop + session:语言中立 fixture 分别驱动两端,比较输出/错误/状态/日志/恢复/取消/超时。无此则任何「已对齐」不可验收 |
-| 2 | P0-02 production 静态组合验证 → CI | 已脚本核验 prod 112 / dev 113 插件名全部可被 `plugin_catalog` 解析;固化为 CI 测试(catalog 解析 + provides/inject 闭合 + 无环) |
+| 1 | P0-01 Python/Rust differential runner(MVP) | ✅ 已落地(`8f735a4`):`differential/`(run_python.py/compare.py/run.sh/README)+ CI job;stop_condition 4/4、messager_inprocess 2/2 一致,1 个已知差异已记录;首批六 seam 待接入 |
+| 2 | P0-02 production 静态组合验证 → CI | ✅ 已落地:`ah-app/tests/static_composition.rs`(catalog 解析 + 无重复/缺失 provider + 无环),dev/prod 双 profile 通过;修复 prod 缺 `ah-plugins-model-backup` 的真实 bug |
 | 3 | P1-08 插件依赖隔离 CI | 机械检查:除 `ah-app` 外,生产 `[dependencies]` 禁止引用其他 `ah-plugins-*` |
 | 4 | P1-02/03 agent-loop 结构化错误与执行中取消 | AgentResult 返回真实 iterations/tool calls/终止原因;模型与工具调用可中断;跨 provider timeout 传播 |
 | 5 | P2-01 确定性工具补齐 | edit/glob/grep/todo/cron/memory 等无 LLM 工具(工作量可控、对等易验证、直接提升日常可用性) |
