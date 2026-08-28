@@ -1,6 +1,7 @@
 # 当前路线图
 
-> 基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`。
+> 审计基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前 HEAD:`b455702`(此后仅
+> 构建修复 `4c47628`、clippy 门禁修复 `3b57a03`、文档对齐 `b455702`,无功能面变化,审计百分比仍有效)。
 > 本文是当前执行顺序的唯一来源。能力明细见 `capability-map.md`,严格审计见
 > `parity-audit.md`,历史回合记录见 `REMAINING_PLAN.md`。
 
@@ -26,7 +27,7 @@ Python parity 标记为 verified。
 | P0-03 | production boot smoke | missing | 无 mock,使用本地协议 fixture 和临时持久化目录完成 boot 与一次 `ApplicationRuntime::invoke` |
 | P0-04 | `mount_all` 失败原子性验证 | partial | 后续插件 apply 失败后,此前服务和事件监听器全部回滚,Context 回到调用前状态 |
 | P0-05 | 统一审计数据源 | partial | done/partial/missing、域汇总和百分比由结构化数据生成,不再手工累计 |
-| P0-06 | 文档与 CI 事实对齐 | in progress | README、testing、development、审计和技术目录不再引用过期数字或不存在的门禁 |
+| P0-06 | 文档与 CI 事实对齐 | done(`b455702`) | README、testing、development、审计和技术目录不再引用过期数字或不存在的门禁 |
 
 首批 differential 范围:application、agent-loop、session、controller、workflow、tools。
 
@@ -34,7 +35,7 @@ Python parity 标记为 verified。
 
 | ID | 任务 | 当前状态 | 完成标准 |
 | --- | --- | --- | --- |
-| P1-01 | 宿主只消费 `dyn AgentLoopRuntime` | partial | `ah-app`/CLI 不解析具体 `AgentLoop`;替换 provider 无需修改宿主 |
+| P1-01 | 宿主只消费 `dyn AgentLoopRuntime` | done(`4c47628`) | `ah-app`/CLI 不解析具体 `AgentLoop`;替换 provider 无需修改宿主 |
 | P1-02 | 结构化运行错误和真实统计 | partial | 取消/中断/超时不依赖错误字符串;AgentResult 返回真实 iterations、tool calls 和终止原因 |
 | P1-03 | timeout/cancel/interrupt 全链传播 | partial | 可中断阻塞中的模型、流式和工具调用;事件顺序与恢复行为通过 differential |
 | P1-04 | session/checkpoint 完整恢复 | partial | 崩溃、部分 tool call、fork/restore、幂等、版本兼容和并发访问均有契约测试 |
@@ -74,4 +75,25 @@ Python parity 标记为 verified。
 | M3 日常工作负载可替代 | P2 全部 | coding agent、subagent、团队、检索记忆具备生产实用性 |
 | M4 完整迁移 | P3 全部 | 演进、RSI、外部基础设施和厂商能力进入最终验收 |
 
-当前执行顺序:`P0-01 -> P0-02 -> P0-03 -> P0-04 -> P0-05 -> P1-01`。
+当前执行顺序:`P0-01 -> P0-02 -> P0-03 -> P0-04 -> P0-05 -> P1-01`(P1-01 已于 `4c47628` 完成)。
+
+## 近期工作包(按优先级,2026-08 现状)
+
+> 由 parity-audit(gap 明细)+ ROADMAP 完成标准归纳;每个工作包开工时按「完成口径」记录
+> 实现位置、聚焦测试、production 验证与 differential 状态。
+
+| 优先级 | 工作包 | 说明与证据 |
+| ---: | --- | --- |
+| 1 | P0-01 Python/Rust differential runner(MVP) | 首批 agent-loop + session:语言中立 fixture 分别驱动两端,比较输出/错误/状态/日志/恢复/取消/超时。无此则任何「已对齐」不可验收 |
+| 2 | P0-02 production 静态组合验证 → CI | 已脚本核验 prod 112 / dev 113 插件名全部可被 `plugin_catalog` 解析;固化为 CI 测试(catalog 解析 + provides/inject 闭合 + 无环) |
+| 3 | P1-08 插件依赖隔离 CI | 机械检查:除 `ah-app` 外,生产 `[dependencies]` 禁止引用其他 `ah-plugins-*` |
+| 4 | P1-02/03 agent-loop 结构化错误与执行中取消 | AgentResult 返回真实 iterations/tool calls/终止原因;模型与工具调用可中断;跨 provider timeout 传播 |
+| 5 | P2-01 确定性工具补齐 | edit/glob/grep/todo/cron/memory 等无 LLM 工具(工作量可控、对等易验证、直接提升日常可用性) |
+| 6 | P1-07 workflow 流式执行 | STREAM/TRANSFORM/COLLECT、增量工具结果、中断与 checkpoint 续跑完整接线 |
+| 7 | P1-05/06 application/controller LLM 意图 | 结构化 command 载荷 + LLM intent 识别替换关键字匹配 |
+| 8 | P0-04 / P0-05 | `mount_all` 失败原子性验证;统一审计数据源(百分比改由结构化账本生成) |
+| 9 | P2-02 rails 长尾 | planning/completion/retry/memory/skills/interrupt/context_engineer 等 LLM 型 rail |
+| 10 | P2-03 context round/dialogue 压缩 | round/dialogue 压缩、会话记忆管理器、prompt attachment window mutator |
+| 11 | P2-04/05/06 | subagents browser/mobile、messager pyzmq 跨进程 + handoff、retrieval embedding/vector store 生产后端 |
+| 12 | P3-01/02 | evolving LLM 闭环(judge/experience/optimizer/updater);RSI 主编排(updater missing、orchestrator、dataset generator) |
+| 13 | P3-03/04 | 外部基础设施(Pulsar/ES/GaussDB/Milvus/远程沙箱/OTel SDK);vendor-specific provider(missing) |

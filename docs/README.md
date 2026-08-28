@@ -15,6 +15,9 @@ Seam 契约、普通插件、类型化事件和 Profile 组合。Python 源码�
 - `profiles/prod.toml` 当前声明 112 个插件,不包含 `ah-plugins-mock`;
 - `ah-hub` 聚焦测试 18 项通过,`ah-plugins-application` 聚焦测试 14 项通过;
 - 本次审查未在执行时限内完成全 workspace、production boot 和覆盖率实测,不得引用历史回合数字作为当前结果。
+- 已实测(HEAD `b455702`):`cargo clippy --workspace --all-targets -- -D warnings` 零警告、
+  `cargo fmt --all --check` 通过、`ah-app` 全部 34 项测试通过(含 cli/golden/differential/mock_gate);
+  全 workspace `cargo test` 与覆盖率门禁仍待实测。
 
 以上是代码结构与本次实测快照,不是 Python 行为对等证明。严格状态见
 [parity-audit.md](parity-audit.md),当前任务顺序见 [ROADMAP.md](ROADMAP.md)。

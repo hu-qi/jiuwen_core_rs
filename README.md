@@ -26,7 +26,7 @@ agent-harness/
 - **日志即真相**:会话以 append-only 事件日志(JSONL)为唯一事实来源(已实现)。
 - **Profile 门禁**:生产 profile 不允许出现 mock 插件,CI 校验展开后的插件清单。
 
-## 当前框架能力(已实现,111 crates / 1284 tests / clippy 0 / fmt clean)
+## 当前框架能力(已实现,111 crates / 1283 tests / clippy 0 / fmt clean)
 
 - **内核与契约**:ah-hub(ServiceRegistry + EventBus + Plugin/mount_all 拓扑挂载 + Profile)与
   ah-contracts(全部 seam 契约 + 类型化事件 + 服务键,零实现;数量以代码实测为准,见 docs/event-catalog.md)。

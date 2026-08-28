@@ -1,6 +1,7 @@
 # agent-core 未完成插件化功能审计(gap-audit.md)
 
-> 当前基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`。
+> 当前基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`(HEAD 已推进至 `b455702`,仅构建/clippy/
+> 文档修复,无功能面变化;基线说明见 `ROADMAP.md`)。
 > 本文件只列 **未完全完成(partial/missing)** 项;完整映射见 `capability-map.md`,
 > 严格审计快照见 `parity-audit.md`,执行顺序见 `ROADMAP.md`。
 > `partial` 表示已有 seam、插件或部分真实路径,但 production verification 或 Python parity 不完整;
