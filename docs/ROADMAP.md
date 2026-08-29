@@ -1,7 +1,8 @@
 # 当前路线图
 
-> 审计基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前 HEAD:`b455702`(此后仅
-> 构建修复 `4c47628`、clippy 门禁修复 `3b57a03`、文档对齐 `b455702`,无功能面变化,审计百分比仍有效)。
+> 审计基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前 HEAD:`cbe66ff`。
+> 审计基线用于 parity-audit 百分比;HEAD 已推进(构建修复、clippy 门禁、文档对齐、
+> P0-01/02/06、P1-01/02/03/08、P2-01),审计快照不受影响。
 > 本文是当前执行顺序的唯一来源。能力明细见 `capability-map.md`,严格审计见
 > `parity-audit.md`,历史回合记录见 `REMAINING_PLAN.md`。
 
@@ -86,7 +87,7 @@ Python parity 标记为 verified。
 | ---: | --- | --- |
 | 1 | P0-01 Python/Rust differential runner(MVP) | ✅ 已落地(`8f735a4`):`differential/`(run_python.py/compare.py/run.sh/README)+ CI job;stop_condition 4/4、messager_inprocess 2/2 一致,1 个已知差异已记录;首批六 seam 待接入 |
 | 2 | P0-02 production 静态组合验证 → CI | ✅ 已落地:`ah-app/tests/static_composition.rs`(catalog 解析 + 无重复/缺失 provider + 无环),dev/prod 双 profile 通过;修复 prod 缺 `ah-plugins-model-backup` 的真实 bug |
-| 3 | P1-08 插件依赖隔离 CI | 机械检查:除 `ah-app` 外,生产 `[dependencies]` 禁止引用其他 `ah-plugins-*` |
+| 3 | P1-08 插件依赖隔离 CI | ✅ 已落地(`6960700`):`ah-app/tests/plugin_isolation.rs`(生产依赖禁引插件 + 插件只依赖 hub/contracts),全 workspace 零违规 |
 | 4 | P1-02/03 agent-loop 结构化错误与执行中取消 | ✅ 已落地:`AgentLoopRuntime` 返回结构化 `AgentResult`(state/failure/iterations/tool_calls,application 不再解析错误字符串);`race_control` 中止在途模型/工具调用 + run 级截止时间约束 backup 链;4 个新聚焦测试(timeout/interrupt 中止在途调用、精确统计) |
 | 5 | P2-01 确定性工具补齐 | ✅ 主体已落地:edit/glob/grep(ah-plugins-sysop)+ todo/cron(新 crate ah-plugins-common-tools,含 cron 五字段解析与 next_run);memory 既有;差分验证待 P0-01 六 seam 接入 |
 | 6 | P1-07 workflow 流式执行 | STREAM/TRANSFORM/COLLECT、增量工具结果、中断与 checkpoint 续跑完整接线 |
