@@ -1,17 +1,17 @@
 [package]
-name = "ah-plugins-sysop"
+name = "ah-plugins-common-tools"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Real local system operations: confined filesystem and shell execution"
+description = "Common coding-agent tools: todo (session todo list) and cron (scheduled jobs), file-backed with structured output"
 
 [dependencies]
 ah-contracts = { workspace = true }
 ah-hub = { workspace = true }
 async-trait = "0.1"
-regex = "1"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt", "macros", "process", "time", "io-util"] }
+tokio = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
 ah-plugins-tools = { workspace = true }

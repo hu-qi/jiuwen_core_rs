@@ -50,7 +50,7 @@ Python parity 标记为 verified。
 
 | ID | 任务 | 当前状态 | 完成标准 |
 | --- | --- | --- | --- |
-| P2-01 | 常用工具对等 | partial | edit、glob、grep、todo、memory、cron 的权限、错误和结构化输出通过 differential |
+| P2-01 | 常用工具对等 | partial(5 工具已实现,差分待 P0-01 六 seam 接入) | edit、glob、grep、todo、memory、cron 的权限、错误和结构化输出通过 differential。edit/glob/grep 已入 ah-plugins-sysop(替换/递归匹配/正则搜索,错误显式、输出结构化,写轴走 pre-execute rails);todo(会话隔离 JSON 持久化 add/update/remove/list)与 cron(cron 五字段子集解析 + next_run + add/list/remove/toggle,文件持久化)已入新 crate ah-plugins-common-tools;memory 工具(remember/recall/forget)既有。differential 覆盖待 P0-01 首批六 seam 接入后补 |
 | P2-02 | rails 与安全策略 | partial | planning/completion/retry/approval、tiered policy 和 overrides 完整接线 |
 | P2-03 | context engine | partial | round/dialogue compression、session memory、prompt attachment window mutator 对等 |
 | P2-04 | subagents | partial | Python 具体构建器、白名单、上下文继承、取消和结果聚合通过 E2E |
@@ -88,7 +88,7 @@ Python parity 标记为 verified。
 | 2 | P0-02 production 静态组合验证 → CI | ✅ 已落地:`ah-app/tests/static_composition.rs`(catalog 解析 + 无重复/缺失 provider + 无环),dev/prod 双 profile 通过;修复 prod 缺 `ah-plugins-model-backup` 的真实 bug |
 | 3 | P1-08 插件依赖隔离 CI | 机械检查:除 `ah-app` 外,生产 `[dependencies]` 禁止引用其他 `ah-plugins-*` |
 | 4 | P1-02/03 agent-loop 结构化错误与执行中取消 | ✅ 已落地:`AgentLoopRuntime` 返回结构化 `AgentResult`(state/failure/iterations/tool_calls,application 不再解析错误字符串);`race_control` 中止在途模型/工具调用 + run 级截止时间约束 backup 链;4 个新聚焦测试(timeout/interrupt 中止在途调用、精确统计) |
-| 5 | P2-01 确定性工具补齐 | edit/glob/grep/todo/cron/memory 等无 LLM 工具(工作量可控、对等易验证、直接提升日常可用性) |
+| 5 | P2-01 确定性工具补齐 | ✅ 主体已落地:edit/glob/grep(ah-plugins-sysop)+ todo/cron(新 crate ah-plugins-common-tools,含 cron 五字段解析与 next_run);memory 既有;差分验证待 P0-01 六 seam 接入 |
 | 6 | P1-07 workflow 流式执行 | STREAM/TRANSFORM/COLLECT、增量工具结果、中断与 checkpoint 续跑完整接线 |
 | 7 | P1-05/06 application/controller LLM 意图 | 结构化 command 载荷 + LLM intent 识别替换关键字匹配 |
 | 8 | P0-04 / P0-05 | `mount_all` 失败原子性验证;统一审计数据源(百分比改由结构化账本生成) |

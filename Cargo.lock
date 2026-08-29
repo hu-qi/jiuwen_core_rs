@@ -21,6 +21,7 @@ dependencies = [
  "ah-plugins-ci",
  "ah-plugins-cli",
  "ah-plugins-code",
+ "ah-plugins-common-tools",
  "ah-plugins-context",
  "ah-plugins-context-evolver",
  "ah-plugins-controller",
@@ -311,6 +312,19 @@ dependencies = [
  "ah-hub",
  "ah-plugins-tools",
  "async-trait",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ah-plugins-common-tools"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-tools",
+ "async-trait",
+ "serde",
  "serde_json",
  "tokio",
 ]
@@ -1035,6 +1049,7 @@ dependencies = [
  "ah-hub",
  "ah-plugins-tools",
  "async-trait",
+ "regex",
  "serde_json",
  "tokio",
 ]

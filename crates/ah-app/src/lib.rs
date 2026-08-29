@@ -24,6 +24,7 @@ use ah_plugins_checkpointer::CheckpointerPlugin;
 use ah_plugins_ci::CiPlugin;
 use ah_plugins_cli::CliPlugin;
 use ah_plugins_code::CodePlugin;
+use ah_plugins_common_tools::CommonToolsPlugin;
 use ah_plugins_context::ContextPlugin;
 use ah_plugins_context_evolver::ContextEvolverPlugin;
 use ah_plugins_controller::ControllerPlugin;
@@ -151,6 +152,10 @@ pub fn plugin_catalog(
             Arc::new(CredentialsPlugin::default()) as DynPlugin,
         ),
         ("ah-plugins-tools", Arc::new(ToolsPlugin) as DynPlugin),
+        (
+            "ah-plugins-common-tools",
+            Arc::new(CommonToolsPlugin::new(workspace_root.to_path_buf())) as DynPlugin,
+        ),
         ("ah-plugins-manifest", Arc::new(ManifestPlugin) as DynPlugin),
         (
             "ah-plugins-tokenizer",

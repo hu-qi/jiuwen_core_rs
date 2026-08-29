@@ -24,7 +24,9 @@ use ah_hub::plugin::{Plugin, PluginError};
 
 use crate::fs::LocalFsProvider;
 use crate::shell::LocalShellProvider;
-use crate::tools::{ListDirTool, ReadFileTool, ShellTool, WriteFileTool};
+use crate::tools::{
+    EditFileTool, GlobTool, GrepTool, ListDirTool, ReadFileTool, ShellTool, WriteFileTool,
+};
 
 /// 真实系统操作插件:提供 fs / shell seam,并把真实工具注入 tools seam。
 pub struct SysopPlugin {
@@ -84,6 +86,9 @@ impl Plugin for SysopPlugin {
         effects.push(registry.register(Arc::new(ReadFileTool::new(fs.clone()))));
         effects.push(registry.register(Arc::new(WriteFileTool::new(fs.clone()))));
         effects.push(registry.register(Arc::new(ListDirTool::new(fs.clone()))));
+        effects.push(registry.register(Arc::new(EditFileTool::new(fs.clone()))));
+        effects.push(registry.register(Arc::new(GlobTool::new(fs.clone()))));
+        effects.push(registry.register(Arc::new(GrepTool::new(fs.clone()))));
         effects.push(registry.register(Arc::new(ShellTool::new(shell.clone()))));
 
         Ok(effects)
@@ -130,7 +135,15 @@ mod tests {
         names.sort();
         assert_eq!(
             names,
-            vec!["list_dir", "read_file", "run_shell", "write_file"]
+            vec![
+                "edit",
+                "glob",
+                "grep",
+                "list_dir",
+                "read_file",
+                "run_shell",
+                "write_file"
+            ]
         );
         let _ = registry
             .invoke(
@@ -148,6 +161,96 @@ mod tests {
         drop(effects);
         assert!(!ctx.has_service(&FS));
         assert!(!ctx.has_service(&SHELL));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// P2-01:edit/glob/grep 工具的成功、错误与结构化输出。
+    #[tokio::test]
+    async fn edit_glob_grep_tools_work_end_to_end() {
+        use serde_json::json;
+
+        let root = std::env::temp_dir().join(format!("ah-sysop-p201-{}", std::process::id()));
+        let ctx = Context::new();
+        let effects = ctx
+            .mount_all(vec![
+                Arc::new(ah_plugins_tools::ToolsPlugin) as DynPlugin,
+                Arc::new(SysopPlugin::new(&root)) as DynPlugin,
+            ])
+            .expect("mount");
+        let registry: Arc<dyn ToolRegistry> = ctx.service(&TOOLS).expect("tools seam");
+        let fs: Arc<dyn FsProvider> = ctx.service(&FS).expect("fs seam");
+
+        // 造一个小文件树。
+        fs.write("src/main.rs", b"fn main() { println!(\"hello\"); }")
+            .expect("write main");
+        fs.write("src/util.rs", b"// hello from util")
+            .expect("write util");
+        fs.write("README.md", b"# hello project")
+            .expect("write readme");
+
+        // edit:替换成功(结构化输出 replaced)。
+        let edited = registry
+            .invoke(
+                "edit",
+                json!({ "path": "src/main.rs", "old_string": "hello", "new_string": "world" }),
+            )
+            .await
+            .expect("edit");
+        assert_eq!(edited["replaced"], 1);
+        let content = String::from_utf8_lossy(&fs.read("src/main.rs").unwrap()).into_owned();
+        assert!(content.contains("world") && !content.contains("hello"));
+        // edit 错误:old_string 未命中 → 显式报错且不落盘。
+        let before = fs.read("src/util.rs").unwrap();
+        let error = registry
+            .invoke(
+                "edit",
+                json!({ "path": "src/util.rs", "old_string": "absent", "new_string": "x" }),
+            )
+            .await
+            .expect_err("edit must fail when old_string missing");
+        assert!(error.0.contains("old_string not found"));
+        assert_eq!(fs.read("src/util.rs").unwrap(), before, "未命中不落盘");
+
+        // glob:递归匹配 *。
+        let globbed = registry
+            .invoke("glob", json!({ "pattern": "*.rs" }))
+            .await
+            .expect("glob");
+        let matches: Vec<&str> = globbed["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|m| m.as_str())
+            .collect();
+        assert!(matches.contains(&"src/main.rs"), "{matches:?}");
+        assert!(matches.contains(&"src/util.rs"), "{matches:?}");
+        assert!(!matches.iter().any(|m| m.contains("README")));
+
+        // grep:正则命中 + 行号;非法正则显式报错。
+        let grepped = registry
+            .invoke("grep", json!({ "pattern": "hello" }))
+            .await
+            .expect("grep");
+        assert!(grepped["match_count"].as_u64().unwrap() >= 2);
+        let line_numbers: Vec<_> = grepped["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| {
+                (
+                    m["path"].as_str().unwrap(),
+                    m["line_number"].as_u64().unwrap(),
+                )
+            })
+            .collect();
+        assert!(line_numbers.contains(&("README.md", 1)), "{line_numbers:?}");
+        let bad = registry
+            .invoke("grep", json!({ "pattern": "(" }))
+            .await
+            .expect_err("invalid regex");
+        assert!(bad.0.contains("invalid regex"));
+
+        drop(effects);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -81,6 +81,7 @@ members = [
     "crates/ah-plugins-cli",
     "crates/ah-plugins-mock",
     "crates/ah-plugins-tools",
+    "crates/ah-plugins-common-tools",
     "crates/ah-plugins-tokenizer",
     "crates/ah-plugins-sysop",
     "crates/ah-plugins-openai",
@@ -200,6 +201,7 @@ ah-plugins-team-schema = { path = "crates/ah-plugins-team-schema" }
 ah-plugins-cli = { path = "crates/ah-plugins-cli" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }
 ah-plugins-tools = { path = "crates/ah-plugins-tools" }
+ah-plugins-common-tools = { path = "crates/ah-plugins-common-tools" }
 ah-plugins-tokenizer = { path = "crates/ah-plugins-tokenizer" }
 ah-plugins-sysop = { path = "crates/ah-plugins-sysop" }
 ah-plugins-openai = { path = "crates/ah-plugins-openai" }
