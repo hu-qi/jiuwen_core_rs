@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-interaction-router"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real interact-str parser: # / $name / @member prefixes -> typed payloads + unknown-mention fold"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"
