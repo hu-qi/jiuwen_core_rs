@@ -42,25 +42,6 @@ cargo run -p ah-app -- profiles/prod.toml
 
 文档中的 `implementation`、`production verification` 和 `Python parity` 是三个独立状态。历史测试数字不作为当前结论；当前结论以当前 HEAD 的实测证据为准。
 
-## 本地预留插件
-
-为后续拆分 PR，本地工作区暂时预留以下 10 个插件包：
-
-```text
-ah-plugins-a2a
-ah-plugins-agentbuilder
-ah-plugins-bridge-compose
-ah-plugins-dataset-curator
-ah-plugins-data-loader
-ah-plugins-external-format
-ah-plugins-inbound-render
-ah-plugins-interaction-router
-ah-plugins-model-allocator
-ah-plugins-prompt-attachment
-```
-
-这些目录保留在本地但不属于本次主分支提交，并已从当前 workspace 成员中移除。后续恢复某个插件时，将其目录重新加入 `Cargo.toml` 的 workspace members 和 workspace dependencies（若需要），完成测试后作为独立 PR 提交。预留规则写入本地 `.git/info/exclude`，不会上传到远端。
-
 ## 贡献
 
 请先阅读 [AGENTS.md](AGENTS.md) 和 `docs/` 中的必读文档。新增能力应先定义契约，再实现 provider 和 consumer，并补齐挂载、解析、调用、卸载及适用的失败、取消、超时、恢复和持久化测试。提交信息遵循 Conventional Commits，例如：
