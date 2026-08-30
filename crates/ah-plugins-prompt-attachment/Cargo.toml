@@ -1,0 +1,11 @@
+[package]
+name = "ah-plugins-prompt-attachment"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real prompt attachment core: model + semantic/sha256 hashing + xml escaping + safe id sanitization"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+serde_json = "1"
