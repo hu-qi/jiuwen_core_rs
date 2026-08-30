@@ -37,25 +37,19 @@
 # - ah-plugins-json-parser: 真实 LLM 输出 JSON 解析(围栏提取 + 流式累加)
 # - ah-plugins-model-catalog: 真实 OpenAI 账号模型目录(/models 获取 + 可见性过滤 + 前向兼容 + 缓存兜底)
 # - ah-plugins-signals: 真实演化信号映射(问题→trajectory_issue 信号,类型归因/归一化/摘录)
-# - ah-plugins-dataset-curator: 真实回放数据集策展(失败可判题用例 → replay 数据集 + 定向种子 + 报告)
 # - ah-plugins-team-dispatch: 真实团队运行派发决策(7 路 truth table,纯函数)
 # - ah-plugins-team-pool: 真实团队对象池(team_name 键) + InteractGate 并发门禁
 # - ah-plugins-team-status: 真实成员/执行状态机(迁移表 + departed/unreachable/settled 集合)
 # - ah-plugins-team-verdict: 真实审查投票判定(pass 配额 ceil(threshold×n)/fail 不可达即败)
 # - ah-plugins-team-message: 真实两阶段消息渲染(meta 意图 → 单遍 {{ns.field}} 替换 + 字段白名单)
-# - ah-plugins-inbound-render: 真实入站 XML 渲染(team-inbound/event/context + 嵌套 note + 快照剔除)
 # - ah-plugins-timefmt: 真实时间渲染(epoch→本地时间 + 相对差桶)
 # - ah-plugins-team-scheduler: 真实调度扫描决策核心(每成员最早 PENDING 任务 + 审阅决策)
 # - ah-plugins-roster-diff: 真实名册 diff(joined/left/changed)与快照/增量正文
 # - ah-plugins-team-i18n: 真实团队运行时双语短串(t 查表 + reply_hint_for)
 # - ah-plugins-team-context-text: 真实上下文消息正文(成员身份/团队信息,双语)
-# - ah-plugins-external-format: 真实外部 CLI 入站渲染(组合 inbound-render + timefmt)
-# - ah-plugins-interaction-router: 真实交互语法解析(#/$/@member 前缀 → typed payloads + 未知 mention 折回)
 # - ah-plugins-scheduler-render: 真实调度消息组装(meta_* 投递载荷 + fail 反馈聚合)
-# - ah-plugins-model-allocator: 真实模型分配器(轮转/按名/router/intelli-router + resolve_member_model)
 # - ah-plugins-team-join-descriptor: 真实团队加入描述符(JSON/env 序列化 + 校验)
 # - ah-plugins-team-task-status: 真实任务状态机(TaskStatus 迁移表 + is_terminal)
-# - ah-plugins-prompt-attachment: 真实 prompt 附件核心(sha256 哈希 + canonical JSON + id 净化)
 # - ah-plugins-reliability-burst: 真实错误突发检测(滑动窗口 + 边沿触发 + 严重度分级)
 # - ah-plugins-reliability-tools: 真实工具调用可靠性(输出长度 + 重复/乒乓/循环调用检测 + 稳定哈希)
 # - ah-plugins-reliability-monitor: 真实可靠性监控(检测聚合 + 修复策略 + 局部自动修复 + 异常上报)
@@ -64,7 +58,6 @@
 # - ah-plugins-tag-manager: 真实资源标签管理(双向索引 + GLOBAL 语义 + 更新/匹配策略)
 # - ah-plugins-memory-lite: 真实轻量记忆原语(frontmatter 解析/校验/丰富/重建 + chunk/write 模型)
 # - ah-plugins-tools-metadata: 真实工具元数据(双语描述 + 参数 schema,validate_provider 校验)
-# - ah-plugins-data-loader: 真实课程平衡分批规划(难度渐进 + 维度轮转 + 批次计划条目)
 # - ah-plugins-rsi-config: 真实 rsi 配置模型(dataclass 配置 + from_dict 解析辅助)
 # - ah-plugins-subagents: 真实类型化子代理(code/research/plan/verify + 工具白名单)
 # - ah-plugins-skill: 真实技能注册 + 评估(subagent 委派 + evolving 轨迹)
@@ -74,7 +67,6 @@
 # - ah-plugins-pregel: 真实超级步图引擎(状态通道/条件触发/中断)
 # - ah-plugins-tune: 真实训练流水线(subagent 执行 + evolving 评估/优化)
 # - ah-plugins-oauth: 真实设备码 OAuth 客户端(Device Authorization Grant)
-# - ah-plugins-agentbuilder: 真实 agent 构建(NL→设计→DSL→工作流执行)
 # - ah-plugins-cli: 真实终端渲染(Claude Code 风格:工具调用/结果/todo checkbox)
 # - ah-plugins-external: 真实外部 CLI agent 运行时(流式 stdin + 单发 argv,子进程真实拉起)
 # - ah-plugins-controller: 真实控制器(任务生命周期/优先级/层级/调度冲突/意图识别)
@@ -95,4 +87,4 @@ name = "prod"
 
 [[bundles]]
 id = "real"
-plugins = ["ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-common-tools", "ah-plugins-agent-control", "ah-plugins-application", "ah-plugins-ability", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-teams-workflow", "ah-plugins-team-monitor", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-rsi-analyzer", "ah-plugins-rsi-single-harness", "ah-plugins-context-evolver", "ah-plugins-tokenizer", "ah-plugins-context", "ah-plugins-store-redis", "ah-plugins-queue-redis", "ah-plugins-prompt", "ah-plugins-workspace", "ah-plugins-sandbox", "ah-plugins-sandbox-rail", "ah-plugins-code", "ah-plugins-web", "ah-plugins-transport", "ah-plugins-git", "ah-plugins-ci", "ah-plugins-autoharness", "ah-plugins-rl", "ah-plugins-rl-step", "ah-plugins-rerank", "ah-plugins-sharing", "ah-plugins-experience-scorer", "ah-plugins-json-parser", "ah-plugins-model-catalog", "ah-plugins-signals", "ah-plugins-dataset-curator", "ah-plugins-team-dispatch", "ah-plugins-team-pool", "ah-plugins-team-status", "ah-plugins-team-verdict", "ah-plugins-team-message", "ah-plugins-inbound-render", "ah-plugins-timefmt", "ah-plugins-team-scheduler", "ah-plugins-roster-diff", "ah-plugins-team-i18n", "ah-plugins-team-context-text", "ah-plugins-external-format", "ah-plugins-interaction-router", "ah-plugins-scheduler-render", "ah-plugins-model-allocator", "ah-plugins-team-join-descriptor", "ah-plugins-team-task-status", "ah-plugins-prompt-attachment", "ah-plugins-subagents", "ah-plugins-skill", "ah-plugins-team-skill", "ah-plugins-pregel", "ah-plugins-tune", "ah-plugins-tune-kit", "ah-plugins-tracer-otel", "ah-plugins-oauth", "ah-plugins-agentbuilder", "ah-plugins-a2a", "ah-plugins-symphony", "ah-plugins-cli", "ah-plugins-external", "ah-plugins-controller", "ah-plugins-operator", "ah-plugins-optimizer", "ah-plugins-runner", "ah-plugins-graph-memory", "ah-plugins-trainer", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-model-backup", "ah-plugins-agent-loop", "ah-plugins-reliability-burst", "ah-plugins-reliability-tools", "ah-plugins-reliability-monitor", "ah-plugins-prompt-builder", "ah-plugins-stream", "ah-plugins-tag-manager", "ah-plugins-memory-lite", "ah-plugins-tools-metadata", "ah-plugins-data-loader", "ah-plugins-rsi-config", "ah-plugins-manifest", "ah-plugins-worktree", "ah-plugins-checkpointer", "ah-plugins-resources", "ah-plugins-kv-cache", "ah-plugins-lsp", "ah-plugins-prompt-builder-devtools", "ah-plugins-skill-creator", "ah-plugins-team-context", "ah-plugins-bridge-compose", "ah-plugins-rsi-evaluator", "ah-plugins-team-skill-generator", "ah-plugins-team-prompts", "ah-plugins-team-schema", "ah-plugins-external-client"]
+plugins = ["ah-plugins-credentials", "ah-plugins-tools", "ah-plugins-common-tools", "ah-plugins-agent-control", "ah-plugins-application", "ah-plugins-ability", "ah-plugins-sysop", "ah-plugins-rails", "ah-plugins-rails-path", "ah-plugins-rails-budget", "ah-plugins-security", "ah-plugins-session-log", "ah-plugins-workflow", "ah-plugins-memory", "ah-plugins-retrieval", "ah-plugins-subagent", "ah-plugins-teams-sqlite", "ah-plugins-teams-workflow", "ah-plugins-team-monitor", "ah-plugins-evolving", "ah-plugins-rsi", "ah-plugins-rsi-analyzer", "ah-plugins-rsi-single-harness", "ah-plugins-context-evolver", "ah-plugins-tokenizer", "ah-plugins-context", "ah-plugins-store-redis", "ah-plugins-queue-redis", "ah-plugins-prompt", "ah-plugins-workspace", "ah-plugins-sandbox", "ah-plugins-sandbox-rail", "ah-plugins-code", "ah-plugins-web", "ah-plugins-transport", "ah-plugins-git", "ah-plugins-ci", "ah-plugins-autoharness", "ah-plugins-rl", "ah-plugins-rl-step", "ah-plugins-rerank", "ah-plugins-sharing", "ah-plugins-experience-scorer", "ah-plugins-json-parser", "ah-plugins-model-catalog", "ah-plugins-signals", "ah-plugins-team-dispatch", "ah-plugins-team-pool", "ah-plugins-team-status", "ah-plugins-team-verdict", "ah-plugins-team-message", "ah-plugins-timefmt", "ah-plugins-team-scheduler", "ah-plugins-roster-diff", "ah-plugins-team-i18n", "ah-plugins-team-context-text", "ah-plugins-scheduler-render", "ah-plugins-team-join-descriptor", "ah-plugins-team-task-status", "ah-plugins-subagents", "ah-plugins-skill", "ah-plugins-team-skill", "ah-plugins-pregel", "ah-plugins-tune", "ah-plugins-tune-kit", "ah-plugins-tracer-otel", "ah-plugins-oauth", "ah-plugins-symphony", "ah-plugins-cli", "ah-plugins-external", "ah-plugins-controller", "ah-plugins-operator", "ah-plugins-optimizer", "ah-plugins-runner", "ah-plugins-graph-memory", "ah-plugins-trainer", "ah-plugins-mcp", "ah-plugins-telemetry", "ah-plugins-openai", "ah-plugins-model-backup", "ah-plugins-agent-loop", "ah-plugins-reliability-burst", "ah-plugins-reliability-tools", "ah-plugins-reliability-monitor", "ah-plugins-prompt-builder", "ah-plugins-stream", "ah-plugins-tag-manager", "ah-plugins-memory-lite", "ah-plugins-tools-metadata", "ah-plugins-rsi-config", "ah-plugins-manifest", "ah-plugins-worktree", "ah-plugins-checkpointer", "ah-plugins-resources", "ah-plugins-kv-cache", "ah-plugins-lsp", "ah-plugins-prompt-builder-devtools", "ah-plugins-skill-creator", "ah-plugins-team-context", "ah-plugins-rsi-evaluator", "ah-plugins-team-skill-generator", "ah-plugins-team-prompts", "ah-plugins-team-schema", "ah-plugins-external-client"]

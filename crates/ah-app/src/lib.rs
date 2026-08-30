@@ -11,15 +11,12 @@ use ah_contracts::session::SessionManager;
 use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
-use ah_plugins_a2a::A2APlugin;
 use ah_plugins_ability::AbilityPlugin;
 use ah_plugins_agent_control::AgentControlPlugin;
 use ah_plugins_agent_loop::AgentLoopPlugin;
-use ah_plugins_agentbuilder::AgentBuilderPlugin;
 use ah_plugins_anthropic::AnthropicPlugin;
 use ah_plugins_application::ApplicationPlugin;
 use ah_plugins_autoharness::AutoHarnessPlugin;
-use ah_plugins_bridge_compose::BridgeComposePlugin;
 use ah_plugins_checkpointer::CheckpointerPlugin;
 use ah_plugins_ci::CiPlugin;
 use ah_plugins_cli::CliPlugin;
@@ -29,17 +26,12 @@ use ah_plugins_context::ContextPlugin;
 use ah_plugins_context_evolver::ContextEvolverPlugin;
 use ah_plugins_controller::ControllerPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
-use ah_plugins_data_loader::DataLoaderPlugin;
-use ah_plugins_dataset_curator::DatasetCuratorPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
 use ah_plugins_experience_scorer::ExperienceScorerPlugin;
 use ah_plugins_external::ExternalCliPlugin;
 use ah_plugins_external::ExternalClientPlugin;
-use ah_plugins_external_format::ExternalFormatPlugin;
 use ah_plugins_git::GitPlugin;
 use ah_plugins_graph_memory::GraphMemoryPlugin;
-use ah_plugins_inbound_render::InboundRenderPlugin;
-use ah_plugins_interaction_router::InteractionRouterPlugin;
 use ah_plugins_json_parser::JsonParserPlugin;
 use ah_plugins_kv_cache::KvcCachePlugin;
 use ah_plugins_lsp::LspPlugin;
@@ -49,7 +41,6 @@ use ah_plugins_member_optimizer::MemberOptimizerPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_memory_lite::MemoryLitePlugin;
 use ah_plugins_mock::MockPlugin;
-use ah_plugins_model_allocator::ModelAllocatorPlugin;
 use ah_plugins_model_backup::{ModelBackupPlugin, ModelBackupPolicyPlugin};
 use ah_plugins_model_catalog::ModelCatalogPlugin;
 use ah_plugins_oauth::OAuthPlugin;
@@ -58,7 +49,6 @@ use ah_plugins_operator::OperatorPlugin;
 use ah_plugins_optimizer::OptimizerPlugin;
 use ah_plugins_pregel::PregelPlugin;
 use ah_plugins_prompt::PromptPlugin;
-use ah_plugins_prompt_attachment::PromptAttachmentPlugin;
 use ah_plugins_prompt_builder::PromptBuilderPlugin;
 use ah_plugins_prompt_builder_devtools::PromptBuilderDevtoolsPlugin;
 use ah_plugins_queue::QueuePlugin;
@@ -355,10 +345,6 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-signals", Arc::new(SignalsPlugin) as DynPlugin),
         (
-            "ah-plugins-dataset-curator",
-            Arc::new(DatasetCuratorPlugin) as DynPlugin,
-        ),
-        (
             "ah-plugins-team-dispatch",
             Arc::new(TeamDispatchPlugin) as DynPlugin,
         ),
@@ -377,10 +363,6 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-message",
             Arc::new(TeamMessagePlugin) as DynPlugin,
-        ),
-        (
-            "ah-plugins-inbound-render",
-            Arc::new(InboundRenderPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-timefmt",
@@ -407,20 +389,8 @@ pub fn plugin_catalog(
             Arc::new(TeamContextPlugin) as DynPlugin,
         ),
         (
-            "ah-plugins-external-format",
-            Arc::new(ExternalFormatPlugin) as DynPlugin,
-        ),
-        (
-            "ah-plugins-interaction-router",
-            Arc::new(InteractionRouterPlugin) as DynPlugin,
-        ),
-        (
             "ah-plugins-scheduler-render",
             Arc::new(SchedulerRenderPlugin) as DynPlugin,
-        ),
-        (
-            "ah-plugins-model-allocator",
-            Arc::new(ModelAllocatorPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-team-join-descriptor",
@@ -429,10 +399,6 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-task-status",
             Arc::new(TeamTaskStatusPlugin) as DynPlugin,
-        ),
-        (
-            "ah-plugins-prompt-attachment",
-            Arc::new(PromptAttachmentPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-prompt-builder",
@@ -458,10 +424,6 @@ pub fn plugin_catalog(
         (
             "ah-plugins-tools-metadata",
             Arc::new(ToolsMetadataPlugin) as DynPlugin,
-        ),
-        (
-            "ah-plugins-data-loader",
-            Arc::new(DataLoaderPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-rsi-config",
@@ -519,15 +481,6 @@ pub fn plugin_catalog(
         (
             "ah-plugins-optimizer",
             Arc::new(OptimizerPlugin) as DynPlugin,
-        ),
-        (
-            "ah-plugins-agentbuilder",
-            Arc::new(AgentBuilderPlugin) as DynPlugin,
-        ),
-        ("ah-plugins-a2a", Arc::new(A2APlugin) as DynPlugin),
-        (
-            "ah-plugins-bridge-compose",
-            Arc::new(BridgeComposePlugin) as DynPlugin,
         ),
         (
             "ah-plugins-symphony",

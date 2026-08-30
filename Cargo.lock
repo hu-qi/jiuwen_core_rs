@@ -27,7 +27,6 @@ dependencies = [
  "ah-plugins-controller",
  "ah-plugins-credentials",
  "ah-plugins-data-loader",
- "ah-plugins-dataset-curator",
  "ah-plugins-evolving",
  "ah-plugins-experience-scorer",
  "ah-plugins-external",
@@ -390,16 +389,6 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "serde",
- "serde_json",
- "serde_yaml",
-]
-
-[[package]]
-name = "ah-plugins-dataset-curator"
-version = "0.1.0"
-dependencies = [
- "ah-contracts",
- "ah-hub",
  "serde_json",
  "serde_yaml",
 ]
