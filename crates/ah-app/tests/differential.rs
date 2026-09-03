@@ -492,3 +492,150 @@ fn handler(
         deliveries.lock().unwrap().push(msg);
     })
 }
+
+// ---------- application/controller P1 differential references ----------
+
+#[tokio::test]
+async fn reference_application_controller_contracts() {
+    use ah_contracts::agent::{AgentRequest, ApplicationRuntime};
+    use ah_contracts::controller::{Controller, Task, TaskFilter, TaskStatus};
+    use ah_contracts::keys::APPLICATION;
+    use ah_plugins_agent_control::AgentControlPlugin;
+    use ah_plugins_agent_loop::AgentLoopPlugin;
+    use ah_plugins_application::ApplicationPlugin;
+    use ah_plugins_model_backup::ModelBackupPlugin;
+    use ah_plugins_workflow::WorkflowPlugin;
+
+    let application_fixture = load_fixture("application");
+    let root = root_for("application");
+    let ctx = Context::new();
+    let mut plugins = base_plugins(&root);
+    plugins.extend([
+        Arc::new(AgentControlPlugin) as DynPlugin,
+        Arc::new(ModelBackupPlugin::new(Vec::new())) as DynPlugin,
+        Arc::new(WorkflowPlugin) as DynPlugin,
+        Arc::new(AgentLoopPlugin::default()) as DynPlugin,
+        Arc::new(ApplicationPlugin) as DynPlugin,
+    ]);
+    let effects = mount(&ctx, plugins);
+    let application = ctx.service::<dyn ApplicationRuntime>(&APPLICATION).unwrap();
+    let mut application_cases = Vec::new();
+    for case in application_fixture["cases"].as_array().unwrap() {
+        let input = &case["input"];
+        let request = AgentRequest {
+            session_id: input["session_id"].as_str().unwrap_or_default().to_string(),
+            input: input["input"].as_str().unwrap_or_default().to_string(),
+            workflow: input.get("workflow").cloned(),
+            timeout_ms: input.get("timeout_ms").and_then(Value::as_u64),
+            restore_checkpoint: None,
+            command: None,
+            user_id: None,
+            model: None,
+            temperature: None,
+        };
+        let outcome = match application.invoke(request).await {
+            Ok(result) => json!({
+                "state": format!("{:?}", result.state).to_lowercase(),
+                "failure": result.failure.map(|failure| format!("{:?}", failure).to_lowercase()),
+                "session_id": result.session_id,
+                "answer": result.answer,
+                "answer_contains": result.answer.as_deref().is_some_and(|answer| {
+                    input.get("answer_contains").and_then(Value::as_str).is_some_and(|needle| answer.contains(needle))
+                }),
+            }),
+            Err(error) => json!({
+                "ok": false,
+                "error_class": if error.0.contains("session_id and input") { "invalid_request" } else { "runtime_error" },
+            }),
+        };
+        application_cases.push(json!({ "name": case["name"], "outcome": outcome }));
+    }
+    settle(
+        "application",
+        &json!({ "seam": "application", "cases": application_cases }),
+    );
+    drop(effects);
+    let _ = std::fs::remove_dir_all(&root);
+
+    let controller_fixture = load_fixture("controller");
+    let controller = ah_plugins_controller::LocalController::new();
+    let mut controller_cases = Vec::new();
+    for case in controller_fixture["cases"].as_array().unwrap() {
+        let input = &case["input"];
+        let outcome = match case["category"].as_str().unwrap() {
+            "lifecycle" => {
+                for task in input["tasks"].as_array().unwrap() {
+                    controller
+                        .create_task(Task::submitted(
+                            task["session_id"].as_str().unwrap(),
+                            task["id"].as_str().unwrap(),
+                            task["task_type"].as_str().unwrap(),
+                            task["description"].as_str().unwrap(),
+                            task["priority"].as_i64().unwrap() as i32,
+                        ))
+                        .unwrap();
+                }
+                for link in input["parent_links"].as_array().unwrap() {
+                    controller
+                        .link_parent(
+                            link["child"].as_str().unwrap(),
+                            link["parent"].as_str().unwrap(),
+                        )
+                        .unwrap();
+                }
+                for transition in input["transitions"].as_array().unwrap() {
+                    let status: TaskStatus =
+                        serde_json::from_value(transition["to"].clone()).unwrap();
+                    controller
+                        .update_status(transition["id"].as_str().unwrap(), status)
+                        .unwrap();
+                }
+                let tasks = controller
+                    .filter_tasks(&TaskFilter {
+                        session_id: Some("s1".into()),
+                        ..Default::default()
+                    })
+                    .unwrap();
+                json!({
+                    "tasks": tasks.into_iter().map(|task| json!({
+                        "id": task.task_id,
+                        "status": serde_json::to_value(task.status).unwrap(),
+                        "parent_task_id": task.parent_task_id,
+                    })).collect::<Vec<_>>(),
+                    "pending_ids": controller.pending_tasks("s1").into_iter().map(|task| task.task_id).collect::<Vec<_>>(),
+                    "root_ids": controller.filter_tasks(&TaskFilter { is_root: true, ..Default::default() }).unwrap().into_iter().map(|task| task.task_id).collect::<Vec<_>>(),
+                })
+            }
+            "illegal" => {
+                let id = input["task_id"].as_str().unwrap();
+                controller
+                    .create_task(Task::submitted(
+                        "illegal-session",
+                        id,
+                        "agent",
+                        "illegal",
+                        1,
+                    ))
+                    .unwrap();
+                let status: TaskStatus = serde_json::from_value(input["to"].clone()).unwrap();
+                json!({ "ok": controller.update_status(id, status).is_ok(), "error_class": "illegal_transition" })
+            }
+            "intent" => json!({
+                "intents": input["queries"].as_array().unwrap().iter().map(|query| {
+                    let intent = controller.recognize_intent(query["text"].as_str().unwrap());
+                    json!({
+                        "type": serde_json::to_value(intent.intent_type).unwrap(),
+                        "has_task_text": intent.task_text.is_some(),
+                        "confidence": intent.confidence,
+                    })
+                }).collect::<Vec<_>>()
+            }),
+            category => panic!("unknown controller category {category}"),
+        };
+        controller_cases.push(json!({ "name": case["name"], "outcome": outcome }));
+    }
+    settle(
+        "controller",
+        &json!({ "seam": "controller", "cases": controller_cases }),
+    );
+}

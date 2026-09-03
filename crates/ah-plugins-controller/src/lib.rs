@@ -10,6 +10,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tokio::task::JoinSet;
 
 use ah_contracts::controller::{
     Controller, ControllerError, Intent, IntentType, Task, TaskExecutor, TaskFilter,
@@ -23,6 +24,7 @@ use ah_contracts::service::ServiceKey;
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
+use serde_json::Value;
 
 /// 可逆状态迁移表:from → 允许的 to。
 fn allowed_transitions(from: TaskStatus) -> &'static [TaskStatus] {
@@ -95,6 +97,7 @@ struct SnapshotEnvelope {
 }
 
 const SNAPSHOT_VERSION: u32 = 1;
+const SUPPORTED_SNAPSHOT_VERSIONS: &[u32] = &[1, 2];
 
 pub struct JsonTaskSnapshotStore {
     path: PathBuf,
@@ -144,7 +147,7 @@ impl TaskSnapshotStore for JsonTaskSnapshotStore {
                 if value.is_object() {
                     let snapshot: SnapshotEnvelope = serde_json::from_value(value)
                         .map_err(|e| ControllerError(format!("snapshot envelope: {e}")))?;
-                    if snapshot.version != SNAPSHOT_VERSION {
+                    if !SUPPORTED_SNAPSHOT_VERSIONS.contains(&snapshot.version) {
                         return Err(ControllerError(format!(
                             "snapshot version unsupported: {}",
                             snapshot.version
@@ -305,6 +308,56 @@ impl LocalController {
         drop(tasks);
         self.persist()
     }
+
+    /// 并发调度待执行任务:不同 session 并行,同一 session 按优先级和创建序列串行。
+    pub async fn run_pending_concurrent(
+        self: Arc<Self>,
+        session_id: Option<&str>,
+    ) -> Vec<(String, Result<String, ControllerError>)> {
+        let grouped = {
+            let tasks = self.tasks.lock().unwrap();
+            let order = self.order.lock().unwrap();
+            let mut grouped: HashMap<String, Vec<(i32, u64, String)>> = HashMap::new();
+            for task in tasks.values().filter(|task| {
+                task.status == TaskStatus::Submitted
+                    && session_id.is_none_or(|session| task.session_id == session)
+            }) {
+                grouped.entry(task.session_id.clone()).or_default().push((
+                    task.priority,
+                    order.get(&task.task_id).copied().unwrap_or(u64::MAX),
+                    task.task_id.clone(),
+                ));
+            }
+            for tasks in grouped.values_mut() {
+                tasks.sort_by_key(|(priority, sequence, task_id)| {
+                    (*priority, *sequence, task_id.clone())
+                });
+            }
+            grouped
+        };
+
+        let mut workers = JoinSet::new();
+        for task_ids in grouped.into_values() {
+            let controller = self.clone();
+            workers.spawn(async move {
+                let mut outcomes = Vec::with_capacity(task_ids.len());
+                for (_, _, task_id) in task_ids {
+                    let outcome = controller.run_task(&task_id).await;
+                    outcomes.push((task_id, outcome));
+                }
+                outcomes
+            });
+        }
+
+        let mut outcomes = Vec::new();
+        while let Some(joined) = workers.join_next().await {
+            if let Ok(mut session_outcomes) = joined {
+                outcomes.append(&mut session_outcomes);
+            }
+        }
+        outcomes.sort_by(|(left, _), (right, _)| left.cmp(right));
+        outcomes
+    }
 }
 
 impl Default for LocalController {
@@ -352,7 +405,11 @@ impl Controller for LocalController {
 
     fn filter_tasks(&self, filter: &TaskFilter) -> Result<Vec<Task>, ControllerError> {
         if filter.task_id.is_none()
+            && filter.task_ids.is_none()
             && filter.session_id.is_none()
+            && filter.user_id.is_none()
+            && filter.priority.is_none()
+            && !filter.priority_highest
             && filter.status.is_none()
             && !filter.is_root
         {
@@ -362,16 +419,60 @@ impl Controller for LocalController {
         }
         let tasks = self.tasks.lock().unwrap();
         let children = self.parent_to_children.lock().unwrap();
-        let mut found: Vec<Task> = tasks
+        let primary_ids: Option<HashSet<String>> = if filter.task_id.is_some()
+            || filter.task_ids.is_some()
+            || filter.session_id.is_some()
+            || filter.priority.is_some()
+            || filter.priority_highest
+            || filter.is_root
+        {
+            Some(
+                tasks
+                    .values()
+                    .filter(|task| {
+                        let id_match = filter.task_id.as_ref().is_none_or(|id| task.task_id == *id)
+                            && filter
+                                .task_ids
+                                .as_ref()
+                                .is_none_or(|ids| ids.iter().any(|id| id == &task.task_id));
+                        let session_match = filter
+                            .session_id
+                            .as_ref()
+                            .is_none_or(|session| task.session_id == *session);
+                        let priority_match = filter
+                            .priority
+                            .is_none_or(|priority| task.priority == priority);
+                        let highest_match = !filter.priority_highest
+                            || tasks
+                                .values()
+                                .map(|candidate| candidate.priority)
+                                .min()
+                                .is_some_and(|highest| task.priority == highest);
+                        let root_match = !filter.is_root
+                            || !children.values().any(|set| set.contains(&task.task_id));
+                        id_match && session_match && priority_match && highest_match && root_match
+                    })
+                    .map(|task| task.task_id.clone())
+                    .collect(),
+            )
+        } else {
+            None
+        };
+        let mut matched_ids: HashSet<String> = tasks
             .values()
             .filter(|task| {
-                if let Some(id) = &filter.task_id
-                    && task.task_id != *id
+                if let Some(ids) = &primary_ids
+                    && !ids.contains(&task.task_id)
                 {
                     return false;
                 }
-                if let Some(session) = &filter.session_id
-                    && task.session_id != *session
+                if let Some(user_id) = &filter.user_id
+                    && task
+                        .metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("user_id"))
+                        .and_then(Value::as_str)
+                        != Some(user_id.as_str())
                 {
                     return false;
                 }
@@ -380,12 +481,25 @@ impl Controller for LocalController {
                 {
                     return false;
                 }
-                if filter.is_root && children.values().any(|set| set.contains(&task.task_id)) {
-                    return false;
-                }
                 true
             })
-            .cloned()
+            .map(|task| task.task_id.clone())
+            .collect();
+        if filter.with_children {
+            let mut frontier: Vec<String> = matched_ids.iter().cloned().collect();
+            while let Some(parent) = frontier.pop() {
+                if let Some(descendants) = children.get(&parent) {
+                    for child in descendants {
+                        if matched_ids.insert(child.clone()) {
+                            frontier.push(child.clone());
+                        }
+                    }
+                }
+            }
+        }
+        let mut found: Vec<Task> = matched_ids
+            .into_iter()
+            .filter_map(|id| tasks.get(&id).cloned())
             .collect();
         found.sort_by(|a, b| a.task_id.cmp(&b.task_id));
         Ok(found)
@@ -835,6 +949,24 @@ mod tests {
         std::fs::write(&path, br#"{"version":99,"tasks":[]}"#).unwrap();
         let error = JsonTaskSnapshotStore::new(&path).load().unwrap_err();
         assert!(error.0.contains("snapshot version unsupported"));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn loads_version_two_snapshot_with_v1_task_shape() {
+        let path = std::env::temp_dir().join(format!(
+            "ah-task-snapshot-v2-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let _ = std::fs::remove_file(&path);
+        let task = Task::submitted("session", "v2", "agent", "run", 1);
+        let value = serde_json::json!({
+            "version": 2,
+            "tasks": [task]
+        });
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(JsonTaskSnapshotStore::new(&path).load().unwrap().len(), 1);
         let _ = std::fs::remove_file(path);
     }
 
@@ -1452,5 +1584,117 @@ mod tests {
         );
 
         drop(effects);
+    }
+}
+
+#[cfg(test)]
+mod scheduler_parity_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::sync::Barrier;
+
+    struct BarrierExecutor {
+        barrier: Arc<Barrier>,
+        entered: Arc<AtomicUsize>,
+    }
+
+    impl Seam for BarrierExecutor {}
+
+    #[async_trait]
+    impl TaskExecutor for BarrierExecutor {
+        fn task_type(&self) -> &'static str {
+            "barrier"
+        }
+
+        async fn execute(&self, task: &Task) -> Result<String, ControllerError> {
+            self.entered.fetch_add(1, Ordering::SeqCst);
+            self.barrier.wait().await;
+            Ok(task.task_id.clone())
+        }
+    }
+
+    #[tokio::test]
+    async fn pending_scheduler_runs_sessions_concurrently() {
+        let controller = Arc::new(LocalController::new());
+        for (session, task_id) in [("s1", "a"), ("s2", "b")] {
+            controller
+                .create_task(Task::submitted(session, task_id, "barrier", task_id, 1))
+                .unwrap();
+        }
+        let entered = Arc::new(AtomicUsize::new(0));
+        let _effect = controller.register_executor(Arc::new(BarrierExecutor {
+            barrier: Arc::new(Barrier::new(2)),
+            entered: entered.clone(),
+        }));
+
+        let results = controller.clone().run_pending_concurrent(None).await;
+        assert_eq!(entered.load(Ordering::SeqCst), 2);
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|(_, result)| result.is_ok()));
+    }
+}
+
+#[cfg(test)]
+mod filter_parity_tests {
+    use super::*;
+
+    #[test]
+    fn filter_supports_user_priority_ids_and_descendants() {
+        let controller = LocalController::new();
+        let mut root = Task::submitted("session", "root", "agent", "root", 1);
+        root.metadata = Some(serde_json::Map::from_iter([(
+            "user_id".to_string(),
+            serde_json::json!("alice"),
+        )]));
+        controller.create_task(root).unwrap();
+        controller
+            .create_task(Task::submitted("session", "child", "agent", "child", 2))
+            .unwrap();
+        controller
+            .create_task(Task::submitted("other", "other", "agent", "other", 1))
+            .unwrap();
+        controller.link_parent("child", "root").unwrap();
+
+        let filtered = controller
+            .filter_tasks(&TaskFilter {
+                user_id: Some("alice".into()),
+                with_children: true,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            filtered
+                .iter()
+                .map(|task| task.task_id.as_str())
+                .collect::<Vec<_>>(),
+            ["child", "root"]
+        );
+
+        let highest = controller
+            .filter_tasks(&TaskFilter {
+                priority_highest: true,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            highest
+                .iter()
+                .map(|task| task.task_id.as_str())
+                .collect::<Vec<_>>(),
+            ["other", "root"]
+        );
+
+        let ids = controller
+            .filter_tasks(&TaskFilter {
+                task_ids: Some(vec!["child".into(), "other".into()]),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            ids.iter()
+                .map(|task| task.task_id.as_str())
+                .collect::<Vec<_>>(),
+            ["child", "other"]
+        );
     }
 }

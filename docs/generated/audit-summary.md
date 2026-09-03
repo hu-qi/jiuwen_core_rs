@@ -1,6 +1,6 @@
 # Generated capability audit summary
 
-> Generated from `audit/ledger.json`; recorded at 2026-09-03; code revision `7404142`; reference revision `aeb88cd8`.
+> Generated from `audit/ledger.json`; recorded at 2026-09-03; code revision `14b0c16`; reference revision `aeb88cd8`.
 
 Percentages below are status shares, not weighted capability completion.
 
@@ -141,18 +141,18 @@ Percentages below are status shares, not weighted capability completion.
 ### P1-05 — Complete application binding
 
 - Status: `partial`
-- Implementation: `crates/ah-contracts/src/agent.rs`, `crates/ah-plugins-agent-loop/src/lib.rs`, `crates/ah-plugins-application/src/lib.rs`
-- Verification: `application tests: 16 passed`, `ah-app rust_contract application case passed`, `structured command, LLM intent, request-scoped model/temperature/timeout, memory context/write rails implemented`
-- Production: production ApplicationRuntime::invoke passed in P0-03; memory rail requires user_id and mounted memory seam
-- Differential: not verified
+- Implementation: `crates/ah-contracts/src/agent.rs`, `crates/ah-plugins-agent-loop/src/lib.rs`, `crates/ah-plugins-application/src/lib.rs`, `crates/ah-app/tests/differential.rs`, `references/application.json`
+- Verification: `CARGO_TARGET_DIR=/tmp/ah-controller-target cargo test --offline -p ah-plugins-application (17 passed)`, `CARGO_TARGET_DIR=/tmp/ah-controller-target cargo test --offline -p ah-app --test differential reference_application_controller_contracts (passed)`, `CARGO_TARGET_DIR=/tmp/ah-controller-target AGENT_CORE_ROOT=../agent-core PYTHON=python3 bash differential/run.sh (6 matched, 1 known divergence)`, `memory_context_does_not_cross_user_boundaries passed`
+- Production: CARGO_TARGET_DIR=/tmp/ah-controller-target cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml passed; production ApplicationRuntime::invoke passed in P0-03; memory rail requires user_id and mounted memory seam
+- Differential: Rust application reference now covers agent/workflow/invalid request traces; Python ApplicationRuntime equivalent is not available in agent-core, so Python parity remains unverified
 
 ### P1-06 — Complete controller behavior
 
 - Status: `partial`
-- Implementation: `crates/ah-contracts/src/controller.rs`, `crates/ah-plugins-controller/src/lib.rs`
-- Verification: `controller tests: 25 passed`, `ah-app rust_contract controller case passed`, `session-level working reservation, stable priority order, parent hierarchy, snapshot validation, structured LLM intent parser implemented`
-- Production: not verified
-- Differential: LLM intent and full snapshot differential pending
+- Implementation: `crates/ah-contracts/src/controller.rs`, `crates/ah-plugins-controller/src/lib.rs`, `crates/ah-app/tests/differential.rs`, `references/controller.json`
+- Verification: `CARGO_TARGET_DIR=/tmp/ah-controller-target cargo test --offline -p ah-plugins-controller (28 passed)`, `CARGO_TARGET_DIR=/tmp/ah-controller-target cargo test --offline -p ah-app --test differential reference_application_controller_contracts (passed)`, `CARGO_TARGET_DIR=/tmp/ah-controller-target AGENT_CORE_ROOT=../agent-core PYTHON=python3 bash differential/run.sh (6 matched, 1 known divergence)`, `pending_scheduler_runs_sessions_concurrently passed`, `loads_version_two_snapshot_with_v1_task_shape passed`
+- Production: CARGO_TARGET_DIR=/tmp/ah-controller-target cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml passed; production controller verification not separately exercised
+- Differential: Rust controller reference now covers lifecycle/illegal transition/keyword intent traces; Python TaskManager/LLM controller is not a drop-in ApplicationRuntime equivalent, so cross-runtime parity remains unverified
 
 ### P1-07 — Workflow streaming execution
 
@@ -181,8 +181,8 @@ Percentages below are status shares, not weighted capability completion.
 ### P1-10 — Versioned serialization contracts
 
 - Status: `partial`
-- Implementation: `crates/ah-contracts/src/session.rs`, `crates/ah-plugins-session-log/src/lib.rs`
-- Verification: `session version and corruption tests`
+- Implementation: `crates/ah-contracts/src/session.rs`, `crates/ah-plugins-session-log/src/lib.rs`, `crates/ah-plugins-controller/src/lib.rs`
+- Verification: `session version and corruption tests`, `loads_version_two_snapshot_with_v1_task_shape passed`, `unknown snapshot versions remain explicitly rejected`
 - Production: workflow/controller/external migration policy incomplete
 - Differential: not verified
 

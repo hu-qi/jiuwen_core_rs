@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "name": "dev_boot_agent_invoke",
+      "outcome": {
+        "answer": "mock final answer; last tool result: {\"entries\":[\"sessions\"],\"path\":\".\"}",
+        "answer_contains": true,
+        "failure": null,
+        "session_id": "application-agent",
+        "state": "completed"
+      }
+    },
+    {
+      "name": "dev_boot_workflow_invoke",
+      "outcome": {
+        "answer": "{\"input\":\"run workflow\"}",
+        "answer_contains": false,
+        "failure": null,
+        "session_id": "application-workflow",
+        "state": "completed"
+      }
+    },
+    {
+      "name": "empty_request_rejected",
+      "outcome": {
+        "error_class": "invalid_request",
+        "ok": false
+      }
+    }
+  ],
+  "seam": "application"
+}

@@ -37,6 +37,9 @@ pub struct Task {
     pub error_message: Option<String>,
     /// 可选执行参数(交给 executor)。
     pub payload: Value,
+    /// 用户标识；与 Python Task.metadata.user_id 对齐。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Map<String, Value>>,
 }
 
 impl Task {
@@ -58,17 +61,30 @@ impl Task {
             parent_task_id: None,
             error_message: None,
             payload: Value::Null,
+            metadata: None,
         }
     }
 }
 
-/// 任务过滤器(对齐 TaskFilter;至少一个条件)。
+/// 任务过滤器(对齐 Python TaskFilter;至少一个条件)。
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TaskFilter {
     pub task_id: Option<String>,
+    /// 批量任务 ID 查询；task_id 保留单 ID API 兼容性。
+    #[serde(default)]
+    pub task_ids: Option<Vec<String>>,
     pub session_id: Option<String>,
+    #[serde(default)]
+    pub user_id: Option<String>,
+    pub priority: Option<i32>,
+    /// Python 的 priority="highest" 查询语义。
+    #[serde(default)]
+    pub priority_highest: bool,
     pub status: Option<TaskStatus>,
     pub is_root: bool,
+    /// 匹配结果递归包含全部子任务。
+    #[serde(default)]
+    pub with_children: bool,
 }
 
 /// 控制器错误。

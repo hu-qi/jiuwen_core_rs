@@ -73,8 +73,13 @@ fn intent_from_command(command: &serde_json::Value) -> Result<Intent, AgentContr
     })
 }
 
-fn memory_context(memory: &dyn MemoryProvider, query: &str) -> Option<String> {
-    let records = memory.search(query);
+fn memory_context(memory: &dyn MemoryProvider, user_id: &str, query: &str) -> Option<String> {
+    let user_prefix = format!("{user_id}:");
+    let records = memory
+        .search(query)
+        .into_iter()
+        .filter(|record| record.key.starts_with(&user_prefix))
+        .collect::<Vec<_>>();
     if records.is_empty() {
         return None;
     }
@@ -299,8 +304,12 @@ impl ApplicationRuntime for LocalApplicationRuntime {
         let system_context = request
             .user_id
             .as_deref()
-            .and_then(|_| self.ctx.service::<dyn MemoryProvider>(&MEMORY))
-            .and_then(|memory| memory_context(memory.as_ref(), &request.input));
+            .and_then(|user_id| {
+                self.ctx
+                    .service::<dyn MemoryProvider>(&MEMORY)
+                    .map(|memory| (user_id, memory))
+            })
+            .and_then(|(user_id, memory)| memory_context(memory.as_ref(), user_id, &request.input));
         if let Some(workflow) = request.workflow {
             let spec: WorkflowSpec = serde_json::from_value(workflow)
                 .map_err(|e| AgentControlError(format!("invalid workflow: {e}")))?;
@@ -1489,5 +1498,62 @@ mod tests {
         {
             Err(ah_contracts::workflow::WorkflowError("unused".into()))
         }
+    }
+    struct TestMemory {
+        records: Vec<ah_contracts::memory::MemoryRecord>,
+    }
+
+    impl Seam for TestMemory {}
+    impl ah_contracts::memory::MemoryProvider for TestMemory {
+        fn store(
+            &self,
+            _: &str,
+            _: &str,
+            _: Vec<String>,
+        ) -> Result<ah_contracts::memory::MemoryRecord, ah_contracts::memory::MemoryError> {
+            unreachable!("memory context test does not store")
+        }
+        fn retrieve(&self, key: &str) -> Option<ah_contracts::memory::MemoryRecord> {
+            self.records
+                .iter()
+                .find(|record| record.key == key)
+                .cloned()
+        }
+        fn search(&self, query: &str) -> Vec<ah_contracts::memory::MemoryRecord> {
+            self.records
+                .iter()
+                .filter(|record| record.content.contains(query))
+                .cloned()
+                .collect()
+        }
+        fn list(&self) -> Vec<ah_contracts::memory::MemoryRecord> {
+            self.records.clone()
+        }
+        fn remove(&self, _: &str) -> Result<(), ah_contracts::memory::MemoryError> {
+            unreachable!("memory context test does not remove")
+        }
+    }
+
+    #[test]
+    fn memory_context_does_not_cross_user_boundaries() {
+        let memory = TestMemory {
+            records: vec![
+                ah_contracts::memory::MemoryRecord {
+                    key: "alice:session:a".into(),
+                    content: "shared query from alice".into(),
+                    tags: vec![],
+                    created_ms: 1,
+                },
+                ah_contracts::memory::MemoryRecord {
+                    key: "bob:session:b".into(),
+                    content: "shared query from bob".into(),
+                    tags: vec![],
+                    created_ms: 2,
+                },
+            ],
+        };
+        let context = memory_context(&memory, "alice", "shared query").unwrap();
+        assert!(context.contains("from alice"));
+        assert!(!context.contains("from bob"));
     }
 }

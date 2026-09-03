@@ -1,9 +1,9 @@
 # 当前路线图
 
-> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前代码 HEAD:`7404142`。
+> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前代码 HEAD:`14b0c16`。
 > `audit/ledger.json` 是工作包状态、域汇总和状态百分比的唯一结构化来源;`docs/generated/audit-summary.md` 由 `audit-ledger` 生成。本文保留验收标准和执行顺序,不再手工累计状态数字。
 > HEAD 在旧快照之后新增了多个插件 crate;阶段一已将 10 个新增插件加入 Cargo workspace members,阶段二已将它们接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并完成 targeted mount/resolve/invoke/unmount 验证;源码和 targeted 集成测试通过不等于 production 能力完成。
-> 当前 differential 仅覆盖 `stop_condition`、`messager_inprocess` 两个 seam,共 6 个 case,另有 1 个已知差异。Rust-only contract runner 已接入 `session`、`tools`、`controller`、`agent-loop`、`workflow`、`application`;新增插件单元测试和 targeted 集成测试以当前命令实测为准;production profile 已完成 opt-in Redis/OpenAI boot smoke,完整主链 parity 和覆盖率仍未完成当前 HEAD 验证。
+> 当前 Python differential 仅覆盖 `stop_condition`、`messager_inprocess` 两个 seam,共 6 个匹配 case,另有 1 个已知差异。Rust-only contract runner 已接入 `session`、`tools`、`controller`、`agent-loop`、`workflow`、`application`;本轮新增 application/controller Rust reference traces,但 agent-core 没有与 Rust `ApplicationRuntime` 等价的 Python runtime,因此不能伪造 Python parity 结论。
 > 当前执行顺序以本文件为准;能力明细必须同时区分 implementation、workspace/runtime integration、production verification 和 Python parity。
 
 ## 完成口径
@@ -40,12 +40,12 @@ Python parity 标记为 verified。
 | P1-02 | 结构化运行错误和真实统计 | done(`AgentResult` 结构化) | 取消/中断/超时不依赖错误字符串;AgentResult 返回真实 iterations、tool calls 和终止原因。`AgentLoopRuntime` 三个方法均返回 `AgentResult`(state + `failure: AgentFailure` + iterations + tool_calls + answer/error);application 已删除错误字符串 contains 判定,直接消费结构化状态 |
 | P1-03 | timeout/cancel/interrupt 全链传播 | done(执行中中止,差分待首批六 seam 接入) | 可中断阻塞中的模型、流式和工具调用;事件顺序与恢复行为通过 differential。`race_control` 在模型调用/工具执行期间轮询控制状态与截止时间(25ms),命中即中止在途 future;run 级截止时间约束 backup 链全 provider(跨 provider timeout)。differential 覆盖待 P0-01 六 seam 接入后验证 |
 | P1-04 | session/checkpoint 完整恢复 | done(`ah-plugins-session-log` + `ah-plugins-agent-loop`) | JSONL 崩溃末行修复、完整行损坏拒绝、checkpoint/fork/restore 原子替换、Unix 跨进程追加锁与 seq 连续性;工具调用 claim 在锁内重读并保证跨进程单 owner;流式模型/工具 delta 在下游发送前落盘;恢复只自动执行声明 `idempotent() = true` 且消费稳定 call ID 的工具,非幂等工具写入 `status=unknown` 并返回 `ToolRecoveryRequired`;测试覆盖成功恢复、拒绝重试和后续不重复执行 |
-| P1-05 | application 完整绑定 | partial(核心绑定已实现) | 结构化 command、LLM intent、memory/invoke rails 和请求级配置与 Python 公开行为对等;当前 Rust 已接入 command/task create、模型 intent、memory 上下文读写及 model/temperature/timeout 覆盖,Python differential 仍待验证 |
-| P1-06 | controller 完整行为 | partial(核心行为已实现) | LLM intent、状态机、父子任务、并发调度和 snapshot 迁移通过 differential;当前 Rust 已接入严格 JSON intent、session 工作任务原子预约、稳定优先级排序和 snapshot 恢复校验,differential 仍待验证 |
+| P1-05 | application 完整绑定 | partial(核心绑定与 Rust reference 已实现) | 结构化 command、LLM intent、memory/invoke rails 和请求级配置与 Python 公开行为对等;当前 Rust 已接入 command/task create、模型 intent、按 user_id 隔离的 memory 上下文读写及 model/temperature/timeout 覆盖;`references/application.json` 覆盖 agent/workflow/invalid request traces,Python parity 因缺少等价 runtime 仍未验证 |
+| P1-06 | controller 完整行为 | partial(核心行为与 Rust reference 已实现) | LLM intent、状态机、父子任务、并发调度和 snapshot 迁移通过 differential;当前 Rust 已接入严格 JSON intent、session 工作任务原子预约、稳定优先级排序、多条件/递归子任务过滤、跨 session 并发调度和 v2 snapshot 读取;`references/controller.json` 覆盖 lifecycle/illegal/keyword traces,Python parity 仍未验证 |
 | P1-07 | workflow 流式执行 | partial(Rust stream/取消/checkpoint stream/组件能力已接通,严格 Python parity 仍待) | `WorkflowStreamSink` 提供背压接收端;workflow 按序发出 `workflow_delta`、`workflow_node`、`workflow_resume`、`workflow_final`;LLM 流并发消费避免队列背压死锁;stream manager 支持 END_FRAME 和协作式 cancel;`stream_checkpointed` 支持节点输出续跑;`WorkflowComponentRegistry` + `NodeKind::Component` 已实现 invoke/stream/collect/transform。Python ActorManager 的多 producer stream-edge/source-group、节点级中断恢复和 differential 仍待后续验收 |
 | P1-08 | 插件依赖隔离 CI | done(`ah-app/tests/plugin_isolation.rs`) | 除 `ah-app` 外,生产 `[dependencies]` 禁止依赖其他 `ah-plugins-*`;dev-dependencies 允许。另断言插件生产依赖内部 crate 只允许 `ah-hub`/`ah-contracts`;当前全 workspace 零违规 |
 | P1-09 | 正常关闭资源释放 | done(`ah-plugins-external` Drop/kill_on_drop + MCP 有界 shutdown) | 应用关闭与 mount 失败时撤销服务/监听器,终止后台 task、子进程、socket 和 watcher;运行中 provider 热替换不属于当前产品范围 |
-| P1-10 | 序列化契约版本化 | partial | session、controller snapshot、workflow checkpoint、外部协议有 envelope/version 和迁移策略 |
+| P1-10 | 序列化契约版本化 | partial(session + controller snapshot 已有版本读取) | session、controller snapshot、workflow checkpoint、外部协议有 envelope/version 和迁移策略 |
 > 产品范围明确不支持运行中热插拔;provider replacement、动态 ABI 和运行中重新装载不作为当前完成门禁。
 > 任务重叠: P1-03 负责跨模型/工具/工作流的统一取消传播;P1-10 负责 checkpoint envelope/version 迁移;P1-05 负责 ApplicationRuntime 对 workflow stream 的宿主级暴露;P2-02 负责 rails 层 interrupt/approval/retry。P1-07 只拥有 workflow stream 执行、chunk 顺序、背压和节点 checkpoint 行为,不重复实现这些公共能力。
 
@@ -93,7 +93,7 @@ Python parity 标记为 verified。
 | 4 | P1-02/03 agent-loop 结构化错误与执行中取消 | ✅ 已落地:`AgentLoopRuntime` 返回结构化 `AgentResult`(state/failure/iterations/tool_calls,application 不再解析错误字符串);`race_control` 中止在途模型/工具调用 + run 级截止时间约束 backup 链;4 个新聚焦测试(timeout/interrupt 中止在途调用、精确统计) |
 | 5 | P2-01 确定性工具补齐 | ✅ 主体已落地:edit/glob/grep(ah-plugins-sysop)+ todo/cron(新 crate ah-plugins-common-tools,含 cron 五字段解析与 next_run);memory 既有;差分验证待 P0-01 六 seam 接入 |
 | 6 | P1-07 workflow 流式执行 | ✅ Rust stream 主链与组件能力已落地:`WorkflowStreamSink`、`WorkflowEngine::stream`、`stream_checkpointed`、`WorkflowComponentRegistry`、`NodeKind::Component`;LLM 增量、节点/恢复/最终 chunk 按序发送,producer/consumer 可并发且不持有 receiver 锁,取消时关闭 sink,组件 invoke/stream/collect/transform 端到端测试通过;`ah-plugins-workflow` 17/17、`ah-plugins-stream` 9/9、`ah-app` workflow contract fixture 通过;Python ActorManager 多 producer/source-group 语义、节点级中断恢复、workflow differential 仍为 partial |
-| 7 | P1-05/06 application/controller LLM 意图 | 结构化 command 载荷 + LLM intent 识别替换关键字匹配 |
+| 7 | P1-05/06 application/controller LLM 意图与行为 references | ✅ Rust reference traces 已落地(`ah-app/tests/differential.rs`,`references/{application,controller}.json`);Python differential 仍仅对现有两个可同层 seam 执行,ApplicationRuntime 缺少 Python 等价实现 |
 | 8 | P0-05 | ✅ 已落地:`audit/ledger.json` + `ah-app audit-ledger`;生成整体/域状态汇总、状态百分比、未完成工作包和逐包证据;CI freshness gate 已接入 |
 | 9 | P0-01 Rust-only contract fixture 扩展 | ✅ 已落地:`ah-app/tests/rust_contract.rs` + `fixtures/session.json`/`tools.json`/`controller.json`/`agent_loop.json`/`workflow.json`/`application.json`;Python differential 保留为可选辅助审计 |
 | 10 | P2-02 rails 长尾 | planning/completion/retry/memory/skills/interrupt/context_engineer 等 LLM 型 rail |

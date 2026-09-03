@@ -24,6 +24,7 @@ if [ ! -d "$AGENT_CORE_ROOT/openjiuwen" ]; then
   echo "AGENT_CORE_ROOT does not look like an agent-core checkout: $AGENT_CORE_ROOT" >&2
   exit 2
 fi
+AGENT_CORE_ROOT=$(cd "$AGENT_CORE_ROOT" && pwd)
 
 PYTHON="${PYTHON:-python3}"
 

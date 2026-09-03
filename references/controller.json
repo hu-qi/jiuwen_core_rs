@@ -1,0 +1,83 @@
+{
+  "cases": [
+    {
+      "name": "task_lifecycle_trace",
+      "outcome": {
+        "pending_ids": [
+          "child",
+          "root"
+        ],
+        "root_ids": [
+          "root"
+        ],
+        "tasks": [
+          {
+            "id": "child",
+            "parent_task_id": "root",
+            "status": "submitted"
+          },
+          {
+            "id": "root",
+            "parent_task_id": null,
+            "status": "submitted"
+          }
+        ]
+      }
+    },
+    {
+      "name": "invalid_transition_rejected",
+      "outcome": {
+        "error_class": "illegal_transition",
+        "ok": false
+      }
+    },
+    {
+      "name": "intent_keywords",
+      "outcome": {
+        "intents": [
+          {
+            "confidence": 0.8,
+            "has_task_text": true,
+            "type": "create_task"
+          },
+          {
+            "confidence": 0.9,
+            "has_task_text": false,
+            "type": "pause_task"
+          },
+          {
+            "confidence": 0.9,
+            "has_task_text": false,
+            "type": "retry_task"
+          },
+          {
+            "confidence": 0.85,
+            "has_task_text": true,
+            "type": "continue_task"
+          },
+          {
+            "confidence": 0.8,
+            "has_task_text": true,
+            "type": "supplement_task"
+          },
+          {
+            "confidence": 0.8,
+            "has_task_text": true,
+            "type": "modify_task"
+          },
+          {
+            "confidence": 0.85,
+            "has_task_text": true,
+            "type": "switch_task"
+          },
+          {
+            "confidence": 0.5,
+            "has_task_text": false,
+            "type": "unknown_task"
+          }
+        ]
+      }
+    }
+  ],
+  "seam": "controller"
+}
