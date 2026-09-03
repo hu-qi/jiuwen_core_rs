@@ -1,6 +1,6 @@
 # Generated capability audit summary
 
-> Generated from `audit/ledger.json`; recorded at 2026-09-03; code revision `b44e236`; reference revision `aeb88cd8`.
+> Generated from `audit/ledger.json`; recorded at 2026-09-03; code revision `38ed1a5`; reference revision `aeb88cd8`.
 
 Percentages below are status shares, not weighted capability completion.
 
@@ -8,8 +8,8 @@ Percentages below are status shares, not weighted capability completion.
 
 | Status | Count | Share |
 | --- | ---: | ---: |
-| done | 12 | 46.2% |
-| partial | 13 | 50.0% |
+| done | 16 | 61.5% |
+| partial | 9 | 34.6% |
 | missing | 1 | 3.8% |
 | excluded | 0 | 0.0% |
 | **total** | **26** | **100.0%** |
@@ -19,12 +19,12 @@ Percentages below are status shares, not weighted capability completion.
 | Domain | Total | Done | Partial | Missing | Excluded | Done share |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | agent | 3 | 3 | 0 | 0 | 0 | 100.0% |
-| application | 1 | 0 | 1 | 0 | 0 | 0.0% |
+| application | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | context | 1 | 0 | 1 | 0 | 0 | 0.0% |
-| controller | 1 | 0 | 1 | 0 | 0 | 0.0% |
+| controller | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | evolving | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | external | 1 | 0 | 1 | 0 | 0 | 0.0% |
-| governance | 7 | 6 | 1 | 0 | 0 | 85.7% |
+| governance | 7 | 7 | 0 | 0 | 0 | 100.0% |
 | lifecycle | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | production | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | providers | 1 | 0 | 0 | 1 | 0 | 0.0% |
@@ -35,16 +35,12 @@ Percentages below are status shares, not weighted capability completion.
 | subagents | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | teams | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | tools | 1 | 0 | 1 | 0 | 0 | 0.0% |
-| workflow | 1 | 0 | 1 | 0 | 0 | 0.0% |
+| workflow | 1 | 1 | 0 | 0 | 0 | 100.0% |
 
 ## Incomplete work packages
 
 | ID | Phase | Domain | Title | Status |
 | --- | --- | --- | --- | --- |
-| P1-05 | P1 | application | Complete application binding | partial |
-| P1-06 | P1 | controller | Complete controller behavior | partial |
-| P1-07 | P1 | workflow | Workflow streaming execution | partial |
-| P1-10 | P1 | governance | Versioned serialization contracts | partial |
 | P2-01 | P2 | tools | Common tool parity | partial |
 | P2-02 | P2 | rails | Rails and security policy | partial |
 | P2-03 | P2 | context | Context engine | partial |
@@ -140,26 +136,26 @@ Percentages below are status shares, not weighted capability completion.
 
 ### P1-05 — Complete application binding
 
-- Status: `partial`
-- Implementation: `crates/ah-contracts/src/agent.rs`, `crates/ah-plugins-agent-loop/src/lib.rs`, `crates/ah-plugins-application/src/lib.rs`, `crates/ah-app/tests/differential.rs`, `references/application.json`
-- Verification: `CARGO_TARGET_DIR=/tmp/ah-controller-target cargo test --offline -p ah-plugins-application (18 passed)`, `streams_workflow_through_application_runtime passed`, `CARGO_TARGET_DIR=/tmp/ah-controller-target cargo test --offline -p ah-app --test differential reference_application_controller_contracts (passed)`, `CARGO_TARGET_DIR=/tmp/ah-controller-target cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml passed`, `memory_context_does_not_cross_user_boundaries passed`
-- Production: dev ApplicationRuntime::invoke and workflow stream host path passed; production external provider verification remains separate
-- Differential: Rust-only reference and contract evidence; Python runtime is not a product dependency
+- Status: `done`
+- Implementation: `crates/ah-contracts/src/agent.rs`, `crates/ah-plugins-agent-loop/src/lib.rs`, `crates/ah-plugins-application/src/lib.rs`, `crates/ah-app/tests/production_boot.rs`, `crates/ah-app/tests/differential.rs`, `references/application.json`
+- Verification: `ah-plugins-application tests (18 passed)`, `streams_workflow_through_application_runtime passed`, `reference_application_controller_contracts passed`, `production_profile_exercises_p1_application_controller_workflow passed with local OpenAI-compatible fixture and Redis`, `memory context isolation passed`
+- Production: prod.toml composition, ApplicationRuntime invoke and stream exercised by production-p1 smoke
+- Differential: Rust-only contract/reference evidence; Python runtime is not a product dependency
 
 ### P1-06 — Complete controller behavior
 
-- Status: `partial`
-- Implementation: `crates/ah-contracts/src/controller.rs`, `crates/ah-plugins-controller/src/lib.rs`, `crates/ah-plugins-controller/Cargo.toml`, `crates/ah-app/tests/differential.rs`, `references/controller.json`
-- Verification: `CARGO_TARGET_DIR=/tmp/ah-controller-target cargo test --offline -p ah-plugins-controller (28 passed)`, `pending_scheduler_runs_sessions_concurrently passed through dyn Controller::run_pending`, `CARGO_TARGET_DIR=/tmp/ah-controller-target cargo test --offline -p ah-app --test differential reference_application_controller_contracts (passed)`, `loads_version_two_snapshot_with_v1_task_shape passed`
-- Production: dev controller path mounted and exercised through ah-app smoke; external production verification remains separate
+- Status: `done`
+- Implementation: `crates/ah-contracts/src/controller.rs`, `crates/ah-plugins-controller/src/lib.rs`, `crates/ah-plugins-controller/Cargo.toml`, `crates/ah-plugins-application/src/lib.rs`, `crates/ah-app/tests/production_boot.rs`, `crates/ah-app/tests/differential.rs`, `references/controller.json`
+- Verification: `ah-plugins-controller tests (28 passed)`, `pending scheduler runs sessions concurrently through dyn Controller::run_pending`, `loads_version_two_snapshot_with_v1_task_shape passed`, `production controller create/register/run_pending/restart restore passed`
+- Production: prod.toml controller seam mounted and exercised with task executor, durable snapshot and restart in production-p1 smoke
 - Differential: Rust-only reference and contract evidence; Python controller is historical specification only
 
 ### P1-07 — Workflow streaming execution
 
-- Status: `partial`
-- Implementation: `crates/ah-contracts/src/workflow.rs`, `crates/ah-plugins-workflow/src/lib.rs`, `crates/ah-plugins-stream/src/lib.rs`
-- Verification: `CARGO_TARGET_DIR=/tmp/ah-controller-target cargo test --offline -p ah-plugins-workflow (19 passed)`, `checkpointed_stream_rejects_corrupt_checkpoint_records passed`, `checkpointed_stream_reuses_nodes_and_emits_resume_chunks passed`, `streams_workflow_through_application_runtime passed`
-- Production: dev workflow streaming and checkpoint smoke passed; full external production stream pending
+- Status: `done`
+- Implementation: `crates/ah-contracts/src/workflow.rs`, `crates/ah-plugins-workflow/src/lib.rs`, `crates/ah-plugins-stream/src/lib.rs`, `crates/ah-app/tests/production_boot.rs`
+- Verification: `ah-plugins-workflow tests (19 passed)`, `checkpointed_stream_rejects_corrupt_checkpoint_records passed`, `checkpointed_stream_reuses_nodes_and_emits_resume_chunks passed`, `streams_workflow_through_application_runtime passed`, `production workflow stream emits deltas/node/final in order through local OpenAI-compatible fixture`
+- Production: prod.toml workflow stream path exercised by production-p1 smoke; checkpoint and resume behavior covered by focused Rust tests
 - Differential: Rust-only contract/reference evidence
 
 ### P1-08 — Plugin dependency isolation CI
@@ -180,11 +176,11 @@ Percentages below are status shares, not weighted capability completion.
 
 ### P1-10 — Versioned serialization contracts
 
-- Status: `partial`
-- Implementation: `crates/ah-contracts/src/session.rs`, `crates/ah-plugins-session-log/src/lib.rs`, `crates/ah-plugins-controller/src/lib.rs`, `crates/ah-plugins-workflow/src/lib.rs`
-- Verification: `session version and corruption tests`, `loads_version_two_snapshot_with_v1_task_shape passed`, `workflow checkpoint version header and legacy record loading passed`, `checkpointed_stream_rejects_corrupt_checkpoint_records passed`, `unknown snapshot/checkpoint versions remain explicitly rejected`
-- Production: workflow/controller/external migration policy incomplete
-- Differential: Rust-only migration tests; no Python dependency
+- Status: `done`
+- Implementation: `crates/ah-contracts/src/session.rs`, `crates/ah-contracts/src/transport.rs`, `crates/ah-plugins-session-log/src/lib.rs`, `crates/ah-plugins-controller/src/lib.rs`, `crates/ah-plugins-workflow/src/lib.rs`, `crates/ah-plugins-transport/src/lib.rs`
+- Verification: `session version and corruption tests`, `loads_version_two_snapshot_with_v1_task_shape passed`, `workflow checkpoint version header and legacy record loading passed`, `checkpointed_stream_rejects_corrupt_checkpoint_records passed`, `unknown snapshot/checkpoint versions remain explicitly rejected`, `JSON-RPC request and response version rejection/id validation tests passed`
+- Production: session/controller/workflow version contracts exercised in production-p1 smoke; external JSON-RPC is explicitly JSON-RPC 2.0-only and rejects unknown versions
+- Differential: Rust-only migration and protocol tests; no Python dependency
 
 ### P2-01 — Common tool parity
 
