@@ -1,7 +1,7 @@
 # 模块依赖图
 
-> 基线:`agent-harness@cc561c0`。当前 workspace 约 111 个 crate,其中约 108 个
-> `ah-plugins-*` crate。crate 数量应由 `Cargo.toml` 生成,本文只维护稳定分层与依赖规则。
+> 当前代码 HEAD:`7404142`;`cargo metadata --no-deps` 实际包含 112 个 workspace package。仓库中有 112 个 Cargo manifest;阶段一已将 10 个新增插件加入 workspace members,阶段二已完成 catalog/Profile 接线与 targeted mount/resolve/invoke/unmount 验证。
+> crate 数量不在此处手工维护;以 Cargo workspace 为准,并区分“有 manifest”“属于 workspace”“已接入 catalog/Profile”。
 
 ## 稳定分层
 
@@ -56,8 +56,8 @@ Profile
 | 工作流 | `ah-plugins-workflow` | WorkflowEngine |
 | 控制器 | `ah-plugins-controller` | Controller、TaskSnapshotStore |
 
-当前 `ah-app::agent_and_manager` 仍返回具体 `ah_plugins_agent_loop::AgentLoop`,是宿主 seam 化的
-已知缺口,见 `ROADMAP.md` P1-01。
+当前 `ah-app::agent_and_manager` 返回 `dyn AgentLoopRuntime`;宿主不再依赖具体 AgentLoop。
+但 Agent Loop 的 Python 行为对等、生产验证和完整生命周期仍未完成,见 `ROADMAP.md` P1-02/P1-03 及能力映射。
 
 ## 能力域
 
@@ -94,7 +94,7 @@ ah-plugins-session-log = { workspace = true }
 ah-plugins-other = { workspace = true }
 ```
 
-当前该规则尚无自动 CI 扫描,见 `ROADMAP.md` P1-08。
+当前已有 `ah-app/tests/plugin_isolation.rs` 自动检查生产依赖隔离;新增插件已完成 workspace/catalog/Profile 接线和阶段二 mount/resolve/invoke/unmount 测试,后续仍需 production boot 与完整行为对等。
 
 ## 生命周期边界
 
@@ -107,8 +107,7 @@ ah-plugins-other = { workspace = true }
 - socket/transport;
 - 临时资源和 watcher。
 
-Registry/EventBus 已有基础可逆测试。批量挂载中途失败原子性、后台资源释放和 provider 热替换仍需
-补充系统测试,见 P0-04/P1-09。
+Registry/EventBus 已有基础可逆测试;批量挂载中途失败原子性已由 `ah-hub` 回归测试覆盖,后台资源释放和 provider 热替换仍需系统测试,见 P1-09。
 
 ## 新增 crate 检查表
 

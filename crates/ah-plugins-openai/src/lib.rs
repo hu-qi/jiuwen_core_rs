@@ -1,9 +1,10 @@
 //! # ah-plugins-openai
 //!
-//! 真实 OpenAI 兼容 HTTP 模型 provider(chat/completions)。
+//! 真实 OpenAI 兼容 HTTP 模型 provider(chat/completions 和 Responses API)。
 //! 协议层移植自 agent-core_rs 的 OpenAiCompatibleClient;本 crate 是真实实现,
 //! 无 mock 业务逻辑。集成测试用本地真实 HTTP 服务器验证真实协议路径。
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -20,11 +21,12 @@ use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 /// provider 配置(配置字段,来自环境或调用方,不硬编码)。
 #[derive(Clone, Debug)]
 pub struct OpenAiConfig {
-    /// 基础 URL,如 https://api.openai.com/v1
+    /// 基础 URL,或完整 Responses endpoint,如 https://api.openai.com/v1 或 /responses。
     pub base_url: String,
     /// 可选 API key;缺失时按无认证请求。
     pub api_key: Option<String>,
@@ -35,7 +37,8 @@ pub struct OpenAiConfig {
 }
 
 impl OpenAiConfig {
-    /// 从环境变量构建:OPENAI_API_KEY(必须)、OPENAI_BASE_URL、OPENAI_MODEL。
+    /// 从环境变量构建:OPENAI_API_KEY(必须)、OPENAI_BASE_URL、OPENAI_MODEL;
+    /// OPENAI_BASE_URL 以 `/responses` 结尾时使用 Responses API。
     /// key 缺失返回 None(调用方据此选择不挂载本插件)。
     pub fn from_env() -> Option<Self> {
         let api_key = std::env::var("OPENAI_API_KEY").ok()?;
@@ -53,6 +56,7 @@ impl OpenAiConfig {
     /// - openai.api_key:credentials 优先,fallback 环境变量 OPENAI_API_KEY
     ///   (两者都缺失时返回 None);
     /// - openai.base_url:credentials 优先,fallback OPENAI_BASE_URL,再 fallback 默认地址;
+    ///   完整 `/responses` 地址会按 Responses API 处理;
     /// - openai.model:credentials 优先,fallback OPENAI_MODEL,再 fallback 默认模型。
     ///
     /// 环境变量读取逻辑与 [Self::from_env] 完全一致(向后兼容);
@@ -104,6 +108,8 @@ struct WireMessage {
     tool_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<WireToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -144,12 +150,183 @@ struct WireChoice {
     message: Option<WireMessage>,
 }
 
+#[derive(Serialize)]
+struct ResponsesRequest {
+    model: String,
+    instructions: String,
+    input: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<String>,
+    include: Vec<String>,
+    store: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
+}
+
+fn is_responses_endpoint(base_url: &str) -> bool {
+    base_url.trim_end_matches('/').ends_with("/responses")
+}
+
+fn endpoint_url(base_url: &str) -> String {
+    let base_url = base_url.trim_end_matches('/');
+    if is_responses_endpoint(base_url) || base_url.ends_with("/chat/completions") {
+        base_url.to_string()
+    } else {
+        format!("{base_url}/chat/completions")
+    }
+}
+
+fn responses_instructions(request: &ModelRequest) -> String {
+    request
+        .messages
+        .iter()
+        .filter(|message| message.role == ChatRole::System && !message.content.is_empty())
+        .map(|message| message.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn responses_input(request: &ModelRequest) -> Vec<serde_json::Value> {
+    request
+        .messages
+        .iter()
+        .flat_map(|message| match message.role {
+            ChatRole::System => Vec::new(),
+            ChatRole::User => vec![json!({
+                "role": "user",
+                "content": [{"type": "input_text", "text": message.content}]
+            })],
+            ChatRole::Assistant => {
+                let mut items = Vec::new();
+                if !message.content.is_empty() {
+                    items.push(json!({
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": message.content}]
+                    }));
+                }
+                if let Some(calls) = &message.tool_calls {
+                    items.extend(calls.iter().map(|call| {
+                        json!({
+                            "type": "function_call",
+                            "id": call.id,
+                            "call_id": call.id,
+                            "name": call.name,
+                            "arguments": call.arguments.to_string(),
+                        })
+                    }));
+                }
+                items
+            }
+            ChatRole::Tool => vec![json!({
+                "type": "function_call_output",
+                "call_id": message.tool_call_id,
+                "output": message.content,
+            })],
+        })
+        .collect()
+}
+
+fn responses_tools(request: &ModelRequest) -> Option<Vec<serde_json::Value>> {
+    if request.tools.is_empty() {
+        None
+    } else {
+        Some(
+            request
+                .tools
+                .iter()
+                .map(|schema| {
+                    json!({
+                        "type": "function",
+                        "name": schema.name,
+                        "description": schema.description,
+                        "parameters": schema.parameters,
+                    })
+                })
+                .collect(),
+        )
+    }
+}
+
+fn parse_responses_response(value: serde_json::Value) -> Result<ModelResponse, ModelError> {
+    let mut content = value
+        .get("output_text")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let mut tool_calls = Vec::new();
+    for item in value
+        .get("output")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        match item.get("type").and_then(serde_json::Value::as_str) {
+            Some("message") => {
+                if let Some(blocks) = item.get("content").and_then(serde_json::Value::as_array) {
+                    for block in blocks {
+                        if let Some(text) = block.get("text").and_then(serde_json::Value::as_str) {
+                            content.push_str(text);
+                        }
+                    }
+                }
+            }
+            Some("function_call") => {
+                let id = item
+                    .get("call_id")
+                    .or_else(|| item.get("id"))
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| ModelError("responses function call has no call_id".into()))?;
+                let name = item
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| ModelError("responses function call has no name".into()))?;
+                let raw_arguments = item
+                    .get("arguments")
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::Value::String("{}".into()));
+                let arguments = match raw_arguments {
+                    serde_json::Value::String(raw) => {
+                        serde_json::from_str(&raw).map_err(|error| {
+                            ModelError(format!("invalid function arguments: {error}"))
+                        })?
+                    }
+                    value => value,
+                };
+                tool_calls.push(ToolCall {
+                    id: id.to_string(),
+                    name: name.to_string(),
+                    arguments,
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(ModelResponse {
+        content,
+        tool_calls,
+        reasoning_content: None,
+    })
+}
+
 fn wire_role(role: ChatRole) -> &'static str {
     match role {
         ChatRole::System => "system",
         ChatRole::User => "user",
         ChatRole::Assistant => "assistant",
         ChatRole::Tool => "tool",
+    }
+}
+fn wire_content(message: &ChatMessage) -> Option<String> {
+    if message.role == ChatRole::Assistant && message.tool_calls.is_some() {
+        None
+    } else {
+        Some(message.content.clone())
     }
 }
 
@@ -166,6 +343,7 @@ impl OpenAiModelProvider {
     /// 构建真实 provider。
     pub fn new(config: OpenAiConfig) -> Result<Self, ModelError> {
         let http = reqwest::Client::builder()
+            .http1_only()
             .timeout(config.timeout)
             .build()
             .map_err(|e| ModelError(format!("http client build failed: {e}")))?;
@@ -181,8 +359,252 @@ impl OpenAiModelProvider {
     fn request_model(&self, request: &ModelRequest) -> String {
         request.model.clone().unwrap_or_else(|| self.model.clone())
     }
-}
 
+    fn responses_request(&self, request: &ModelRequest, stream: bool) -> ResponsesRequest {
+        let tools = responses_tools(request);
+        ResponsesRequest {
+            model: self.request_model(request),
+            instructions: responses_instructions(request),
+            input: responses_input(request),
+            parallel_tool_calls: tools.as_ref().map(|_| true),
+            tool_choice: tools.as_ref().map(|_| "auto".to_string()),
+            tools,
+            temperature: request.temperature,
+            include: vec!["reasoning.encrypted_content".to_string()],
+            store: false,
+            stream: Some(stream),
+        }
+    }
+
+    async fn chat_responses(&self, request: ModelRequest) -> Result<ModelResponse, ModelError> {
+        let mut builder = self
+            .http
+            .post(endpoint_url(&self.base_url))
+            .json(&self.responses_request(&request, false))
+            .timeout(self.timeout);
+        if let Some(key) = &self.api_key {
+            builder = builder.bearer_auth(key);
+        }
+        let response = builder
+            .send()
+            .await
+            .map_err(|e| ModelError(format!("http request failed: {e}")))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|e| ModelError(format!("read response body failed: {e}")))?;
+        if !status.is_success() {
+            return Err(ModelError(format!("provider returned {status}: {body}")));
+        }
+        let value: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| ModelError(format!("invalid responses provider response: {e}")))?;
+        parse_responses_response(value)
+    }
+
+    async fn stream_responses(
+        &self,
+        request: ModelRequest,
+        sink: tokio::sync::mpsc::Sender<ModelChunk>,
+    ) -> Result<(), ModelError> {
+        let mut builder = self
+            .http
+            .post(endpoint_url(&self.base_url))
+            .json(&self.responses_request(&request, true))
+            .timeout(self.timeout)
+            .header("accept", "text/event-stream");
+        if let Some(key) = &self.api_key {
+            builder = builder.bearer_auth(key);
+        }
+        let response = builder
+            .send()
+            .await
+            .map_err(|e| ModelError(format!("http request failed: {e}")))?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response
+                .text()
+                .await
+                .map_err(|e| ModelError(format!("read error body failed: {e}")))?;
+            return Err(ModelError(format!("provider returned {status}: {body}")));
+        }
+
+        let mut response = response;
+        let mut buffer = String::new();
+        let mut event_name = None;
+        let mut item_indexes = HashMap::<String, usize>::new();
+        let mut call_metadata = HashMap::<usize, (Option<String>, Option<String>)>::new();
+        let mut call_arguments_started = HashMap::<usize, bool>::new();
+        let mut next_index = 0usize;
+        while let Some(bytes) = response
+            .chunk()
+            .await
+            .map_err(|e| ModelError(format!("stream read failed: {e}")))?
+        {
+            buffer.push_str(&String::from_utf8_lossy(&bytes));
+            let mut lines = buffer.split('\n').map(str::to_string).collect::<Vec<_>>();
+            buffer = lines.pop().unwrap_or_default();
+            for line in lines {
+                let line = line.trim();
+                if let Some(name) = line.strip_prefix("event:") {
+                    event_name = Some(name.trim().to_string());
+                    continue;
+                }
+                let Some(payload) = line.strip_prefix("data:").map(str::trim) else {
+                    continue;
+                };
+                if payload.is_empty() {
+                    continue;
+                }
+                if payload == "[DONE]" {
+                    sink.send(ModelChunk {
+                        done: true,
+                        ..Default::default()
+                    })
+                    .await
+                    .map_err(|_| ModelError("stream sink closed".into()))?;
+                    return Ok(());
+                }
+                let value: serde_json::Value = serde_json::from_str(payload)
+                    .map_err(|e| ModelError(format!("invalid SSE chunk: {e}")))?;
+                let kind = value
+                    .get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| event_name.take())
+                    .unwrap_or_default();
+                if kind == "response.completed" {
+                    sink.send(ModelChunk {
+                        done: true,
+                        ..Default::default()
+                    })
+                    .await
+                    .map_err(|_| ModelError("stream sink closed".into()))?;
+                    return Ok(());
+                }
+                let mut chunk = ModelChunk::default();
+                match kind.as_str() {
+                    "response.output_text.delta" => {
+                        chunk.content_delta = value
+                            .get("delta")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or_default()
+                            .to_string();
+                    }
+                    "response.output_item.added" => {
+                        let Some(item) = value.get("item") else {
+                            continue;
+                        };
+                        if item.get("type").and_then(serde_json::Value::as_str)
+                            != Some("function_call")
+                        {
+                            continue;
+                        }
+                        let index = value
+                            .get("output_index")
+                            .and_then(serde_json::Value::as_u64)
+                            .map(|index| index as usize)
+                            .unwrap_or_else(|| {
+                                let index = next_index;
+                                next_index += 1;
+                                index
+                            });
+                        if let Some(item_id) = item.get("id").and_then(serde_json::Value::as_str) {
+                            item_indexes.insert(item_id.to_string(), index);
+                        }
+                        let id = item
+                            .get("call_id")
+                            .or_else(|| item.get("id"))
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string);
+                        let name = item
+                            .get("name")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string);
+                        call_metadata.insert(index, (id.clone(), name.clone()));
+                        chunk.tool_call_deltas.push(ToolCallDelta {
+                            index,
+                            id,
+                            name,
+                            arguments: item
+                                .get("arguments")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or_default()
+                                .to_string(),
+                        });
+                    }
+                    "response.function_call_arguments.delta" => {
+                        let index = value
+                            .get("output_index")
+                            .and_then(serde_json::Value::as_u64)
+                            .map(|index| index as usize)
+                            .or_else(|| {
+                                value
+                                    .get("item_id")
+                                    .and_then(serde_json::Value::as_str)
+                                    .and_then(|item_id| item_indexes.get(item_id).copied())
+                            })
+                            .unwrap_or(0);
+                        let (id, name) = call_metadata.get(&index).cloned().unwrap_or_default();
+                        call_arguments_started.insert(index, true);
+                        chunk.tool_call_deltas.push(ToolCallDelta {
+                            index,
+                            id,
+                            name,
+                            arguments: value
+                                .get("delta")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or_default()
+                                .to_string(),
+                        });
+                    }
+                    "response.function_call_arguments.done" => {
+                        let index = value
+                            .get("output_index")
+                            .and_then(serde_json::Value::as_u64)
+                            .map(|index| index as usize)
+                            .or_else(|| {
+                                value
+                                    .get("item_id")
+                                    .and_then(serde_json::Value::as_str)
+                                    .and_then(|item_id| item_indexes.get(item_id).copied())
+                            })
+                            .unwrap_or(0);
+                        if !call_arguments_started.contains_key(&index) {
+                            let (id, name) = call_metadata.get(&index).cloned().unwrap_or_default();
+                            chunk.tool_call_deltas.push(ToolCallDelta {
+                                index,
+                                id,
+                                name,
+                                arguments: value
+                                    .get("arguments")
+                                    .and_then(serde_json::Value::as_str)
+                                    .unwrap_or_default()
+                                    .to_string(),
+                            });
+                        }
+                    }
+                    _ => continue,
+                }
+                if !chunk.content_delta.is_empty()
+                    || !chunk.reasoning_delta.is_empty()
+                    || !chunk.tool_call_deltas.is_empty()
+                {
+                    sink.send(chunk)
+                        .await
+                        .map_err(|_| ModelError("stream sink closed".into()))?;
+                }
+            }
+        }
+        sink.send(ModelChunk {
+            done: true,
+            ..Default::default()
+        })
+        .await
+        .map_err(|_| ModelError("stream sink closed".into()))?;
+        Ok(())
+    }
+}
 impl Seam for OpenAiModelProvider {}
 
 #[async_trait]
@@ -192,6 +614,9 @@ impl ModelProvider for OpenAiModelProvider {
     }
 
     async fn chat(&self, request: ModelRequest) -> Result<ModelResponse, ModelError> {
+        if is_responses_endpoint(&self.base_url) {
+            return self.chat_responses(request).await;
+        }
         let wire = WireRequest {
             model: self.request_model(&request),
             messages: request
@@ -199,8 +624,9 @@ impl ModelProvider for OpenAiModelProvider {
                 .iter()
                 .map(|message: &ChatMessage| WireMessage {
                     role: wire_role(message.role).to_string(),
-                    content: Some(message.content.clone()),
+                    content: wire_content(message),
                     tool_call_id: message.tool_call_id.clone(),
+                    reasoning_content: message.reasoning_content.clone(),
                     tool_calls: message.tool_calls.as_ref().map(|calls| {
                         calls
                             .iter()
@@ -238,7 +664,7 @@ impl ModelProvider for OpenAiModelProvider {
             stream: None,
         };
 
-        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
+        let url = endpoint_url(&self.base_url);
         let mut builder = self.http.post(&url).json(&wire).timeout(self.timeout);
         if let Some(key) = &self.api_key {
             builder = builder.bearer_auth(key);
@@ -281,9 +707,13 @@ impl ModelProvider for OpenAiModelProvider {
             })
             .unwrap_or_default();
 
+        let reasoning_content = message
+            .as_ref()
+            .and_then(|message| message.reasoning_content.clone());
         Ok(ModelResponse {
             content,
             tool_calls,
+            reasoning_content,
         })
     }
 
@@ -293,6 +723,9 @@ impl ModelProvider for OpenAiModelProvider {
         request: ModelRequest,
         sink: tokio::sync::mpsc::Sender<ModelChunk>,
     ) -> Result<(), ModelError> {
+        if is_responses_endpoint(&self.base_url) {
+            return self.stream_responses(request, sink).await;
+        }
         let wire = WireRequest {
             model: self.request_model(&request),
             messages: request
@@ -300,8 +733,9 @@ impl ModelProvider for OpenAiModelProvider {
                 .iter()
                 .map(|message: &ChatMessage| WireMessage {
                     role: wire_role(message.role).to_string(),
-                    content: Some(message.content.clone()),
+                    content: wire_content(message),
                     tool_call_id: message.tool_call_id.clone(),
+                    reasoning_content: message.reasoning_content.clone(),
                     tool_calls: message.tool_calls.as_ref().map(|calls| {
                         calls
                             .iter()
@@ -339,7 +773,7 @@ impl ModelProvider for OpenAiModelProvider {
             stream: Some(true),
         };
 
-        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
+        let url = endpoint_url(&self.base_url);
         let mut builder = self.http.post(&url).json(&wire).timeout(self.timeout);
         builder = builder.header("accept", "text/event-stream");
         if let Some(key) = &self.api_key {
@@ -402,6 +836,12 @@ impl ModelProvider for OpenAiModelProvider {
                 {
                     if let Some(text) = delta.get("content").and_then(serde_json::Value::as_str) {
                         chunk.content_delta = text.to_string();
+                    }
+                    if let Some(reasoning) = delta
+                        .get("reasoning_content")
+                        .and_then(serde_json::Value::as_str)
+                    {
+                        chunk.reasoning_delta = reasoning.to_string();
                     }
                     if let Some(calls) = delta
                         .get("tool_calls")
@@ -632,7 +1072,11 @@ mod tests {
                         "object": "chat.completion.chunk",
                         "choices": [{
                             "index": 0,
-                            "delta": { "role": "assistant", "content": "hello" },
+                            "delta": {
+                                "role": "assistant",
+                                "content": "hello",
+                                "reasoning_content": "think "
+                            },
                             "finish_reason": null
                         }]
                     });
@@ -691,9 +1135,11 @@ mod tests {
             .expect("stream chat");
 
         let mut text = String::new();
+        let mut reasoning = String::new();
         let mut seen_done = false;
         while let Some(chunk) = rx.recv().await {
             text.push_str(&chunk.content_delta);
+            reasoning.push_str(&chunk.reasoning_delta);
             if chunk.done {
                 seen_done = true;
             }
@@ -702,6 +1148,7 @@ mod tests {
             text, "hello world",
             "SSE content deltas accumulated: {text:?}"
         );
+        assert_eq!(reasoning, "think ");
         assert!(seen_done, "done chunk sent");
         let _ = ModelChunk::default();
     }
@@ -795,6 +1242,109 @@ mod tests {
 
         drop(effects);
         assert!(!ctx.has_service(&LLM));
+    }
+
+    #[test]
+    fn tool_call_messages_omit_empty_content() {
+        let message = ChatMessage::assistant_with_tool_calls(vec![ToolCall {
+            id: "call-1".into(),
+            name: "list_dir".into(),
+            arguments: json!({"path": "."}),
+        }]);
+        assert_eq!(wire_content(&message), None);
+        assert_eq!(
+            wire_content(&ChatMessage::new(ChatRole::User, "hi")),
+            Some("hi".into())
+        );
+    }
+
+    #[test]
+    fn responses_endpoint_keeps_explicit_path() {
+        assert_eq!(
+            endpoint_url("http://159.138.247.92/responses"),
+            "http://159.138.247.92/responses"
+        );
+        assert_eq!(
+            endpoint_url("https://api.openai.com/v1"),
+            "https://api.openai.com/v1/chat/completions"
+        );
+        assert_eq!(
+            endpoint_url("https://api.deepseek.com/chat/completions"),
+            "https://api.deepseek.com/chat/completions"
+        );
+    }
+
+    #[test]
+    fn parses_responses_api_message_and_function_call() {
+        let response = parse_responses_response(serde_json::json!({
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": "hello"}]
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "read_file",
+                    "arguments": "{\"path\":\"a.txt\"}"
+                }
+            ]
+        }))
+        .expect("responses payload");
+        assert_eq!(response.content, "hello");
+        assert_eq!(response.tool_calls.len(), 1);
+        assert_eq!(response.tool_calls[0].id, "call_1");
+        assert_eq!(response.tool_calls[0].name, "read_file");
+        assert_eq!(response.tool_calls[0].arguments["path"], "a.txt");
+    }
+    #[test]
+    fn responses_request_matches_openai_input_contract() {
+        let mut assistant = ChatMessage::new(ChatRole::Assistant, "previous answer");
+        assistant.tool_calls = Some(vec![ToolCall {
+            id: "call_1".into(),
+            name: "read_file".into(),
+            arguments: json!({"path": "a.txt"}),
+        }]);
+        let request = ModelRequest {
+            messages: vec![
+                ChatMessage::new(ChatRole::System, "You are concise."),
+                ChatMessage::new(ChatRole::User, "Use the tool."),
+                assistant,
+                ChatMessage::tool("call_1", "result text"),
+            ],
+            tools: vec![ah_contracts::llm::ToolSchema {
+                name: "read_file".into(),
+                description: "Read a file.".into(),
+                parameters: json!({"type": "object"}),
+            }],
+            ..Default::default()
+        };
+        let provider =
+            OpenAiModelProvider::new(config("https://api.openai.com/v1/responses".into()))
+                .expect("provider");
+        let body = serde_json::to_value(provider.responses_request(&request, false))
+            .expect("request body");
+
+        assert_eq!(body["instructions"], "You are concise.");
+        assert_eq!(body["input"][0]["role"], "user");
+        assert_eq!(body["input"][1]["role"], "assistant");
+        assert_eq!(body["input"][2]["type"], "function_call");
+        assert_eq!(body["input"][2]["id"], "call_1");
+        assert_eq!(body["input"][2]["call_id"], "call_1");
+        assert_eq!(
+            body["input"][3],
+            json!({
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": "result text"
+            })
+        );
+        assert_eq!(body["tools"][0]["name"], "read_file");
+        assert_eq!(body["parallel_tool_calls"], true);
+        assert_eq!(body["tool_choice"], "auto");
+        assert_eq!(body["store"], false);
+        assert_eq!(body["include"], json!(["reasoning.encrypted_content"]));
+        assert_eq!(body["stream"], false);
     }
 
     // ------------------------------------------------------------------

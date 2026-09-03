@@ -102,6 +102,16 @@ members = [
     "crates/ah-plugins-symphony",
     "crates/ah-plugins-team-skill",
     "crates/ah-plugins-team-skill-generator",
+    "crates/ah-plugins-agentbuilder",
+    "crates/ah-plugins-a2a",
+    "crates/ah-plugins-bridge-compose",
+    "crates/ah-plugins-data-loader",
+    "crates/ah-plugins-dataset-curator",
+    "crates/ah-plugins-external-format",
+    "crates/ah-plugins-inbound-render",
+    "crates/ah-plugins-interaction-router",
+    "crates/ah-plugins-model-allocator",
+    "crates/ah-plugins-prompt-attachment",
     "crates/ah-app",
 ]
 

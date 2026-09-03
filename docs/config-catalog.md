@@ -1,7 +1,7 @@
 # 配置目录
 
-> 基线:`agent-harness@cc561c0`。本文登记 Profile schema 和宿主实际解析的配置。
-> 完整插件选择以 `profiles/*.toml` 为准,不在文档中长期复制百余项清单。
+> 当前代码 HEAD:`7404142`;完整插件选择以 `profiles/*.toml` 为准,数量由解析结果生成,不在文档中手工复制百余项清单。
+> `cargo metadata --no-deps` 当前可见 112 个 workspace package;10 个新增插件已加入 workspace members,并已接入 `ah-app::plugin_catalog` 与 dev/prod Profile;完整运行验证见 `ah-app/tests/stage2_plugins.rs`。
 
 ## Profile schema
 
@@ -13,12 +13,14 @@
 | `bundles[].plugins` | string[] | 否 | 插件名称清单;Profile 展开时去重 |
 | `bundles[].config` | table | 否 | 当前由宿主按插件读取的 Bundle 配置 |
 
-当前代码实测:
+当前代码实测与审计状态:
 
-| 文件 | bundle | 声明插件数 | 关键差异 | 验证状态 |
-| --- | --- | ---: | --- | --- |
-| `profiles/dev.toml` | `boot` | 114 | 含 `ah-plugins-mock`,本地文件型 store/queue | 本地开发组合;不证明生产能力 |
-| `profiles/prod.toml` | `real` | 112 | 无 mock,含 OpenAI、Redis store/queue | 仅 mock exclusion 已验证;完整 boot 尚未门禁 |
+| 项目 | 当前事实 | 验证状态 |
+| --- | --- | --- |
+| `profiles/dev.toml` | dev 组合包含 mock,用于本地启动和协议冒烟 | mock gate/static composition 已有;完整 boot 当前未重新验证 |
+| `profiles/prod.toml` | prod 组合不应包含 mock,依赖真实凭据和外部服务 | mock exclusion/static composition 已有;无 mock boot + invoke 尚未形成当前 HEAD 证据 |
+| Profile 数量 | 不在本文手工声明;应由 Profile 解析和 Cargo catalog 生成 | 旧文档中的 114/112 数字废弃 |
+| 新增插件接线 | 10 个新增插件已进入 workspace members,但尚未完整进入 `ah-app::plugin_catalog`/Profile | 不可计为 runtime 可用 |
 
 插件数量应通过解析 Profile 计算。新增或删除插件时禁止只修改本文数字而不验证 Profile。
 

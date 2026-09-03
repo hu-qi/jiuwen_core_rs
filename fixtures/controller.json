@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "seam": "controller",
+  "description": "controller seam Rust-only contract traces",
+  "categories": ["lifecycle", "illegal", "intent"],
+  "cases": [
+    {
+      "name": "task_lifecycle_trace",
+      "category": "lifecycle",
+      "input": {
+        "tasks": [
+          {"id": "root", "session_id": "s1", "task_type": "agent", "description": "root task", "priority": 2},
+          {"id": "child", "session_id": "s1", "task_type": "agent", "description": "child task", "priority": 1}
+        ],
+        "parent_links": [{"child": "child", "parent": "root"}],
+        "transitions": [
+          {"id": "root", "to": "working"},
+          {"id": "root", "to": "paused"},
+          {"id": "root", "to": "submitted"}
+        ]
+      },
+      "expect": {
+        "tasks": [
+          {"id": "child", "status": "submitted", "parent_task_id": "root"},
+          {"id": "root", "status": "submitted", "parent_task_id": null}
+        ],
+        "pending_ids": ["child", "root"],
+        "root_ids": ["root"]
+      }
+    },
+    {
+      "name": "invalid_transition_rejected",
+      "category": "illegal",
+      "input": {"task_id": "illegal", "from": "submitted", "to": "completed"},
+      "expect": {"ok": false, "error_class": "illegal_transition"}
+    },
+    {
+      "name": "intent_keywords",
+      "category": "intent",
+      "input": {
+        "queries": [
+          {"text": "create a report"},
+          {"text": "pause that"},
+          {"text": "retry it"},
+          {"text": "continue the work"},
+          {"text": "supplement the task"},
+          {"text": "modify the task"},
+          {"text": "switch to another task"},
+          {"text": "hello there"}
+        ]
+      },
+      "expect": {
+        "intents": [
+          {"type": "create_task", "has_task_text": true, "confidence": 0.8},
+          {"type": "pause_task", "has_task_text": false, "confidence": 0.9},
+          {"type": "retry_task", "has_task_text": false, "confidence": 0.9},
+          {"type": "continue_task", "has_task_text": true, "confidence": 0.85},
+          {"type": "supplement_task", "has_task_text": true, "confidence": 0.8},
+          {"type": "modify_task", "has_task_text": true, "confidence": 0.8},
+          {"type": "switch_task", "has_task_text": true, "confidence": 0.85},
+          {"type": "unknown_task", "has_task_text": false, "confidence": 0.5}
+        ]
+      }
+    }
+  ]
+}

@@ -7,17 +7,22 @@
 
 | 项 | 值 |
 | --- | --- |
-| 格式 | JSONL,每行一个 SessionEvent(seq/timestamp_ms/kind/payload) |
+| 格式 | JSONL,新写入每行 `{"version":1,"event":SessionEvent}`;读取兼容旧版裸 `SessionEvent` |
 | 文件 | 默认会话 = SessionLogPlugin::new(session_path) 指定的单个 .jsonl;多会话 = session_dir/{id}.jsonl;保存的快照 = session_dir/checkpoints/{name}.jsonl(ah-app 传入) |
-| 写入 | append-only + flush;启动时逐行恢复 |
-| 版本 | 事件 payload 约定见 contracts/session.rs;新增字段必须向后兼容(serde default) |
-| 投影 | derive_messages:日志 → 模型可见 ChatMessage 序列(日志即真相) |
+| 写入 | append-only;Unix 进程间通过 OS advisory `flock` 串行化;每次追加在锁内从磁盘重新计算 seq,写入后 flush + `sync_data`;启动/读取时校验 seq 连续,只丢弃崩溃造成的未完整末行 |
+| 版本 | version=1;未知版本显式拒绝;legacy 裸事件仅兼容读取;事件 payload 约定见 contracts/session.rs |
+| 投影 | derive_messages:日志 → 模型可见 ChatMessage 序列(日志即真相);未知工具结果投影带有显式 status=unknown 人工核对标记 |
+
+写入协议额外保证:工具调用 claim 在 Unix 上通过独占锁内的磁盘重读、过期检查和 claim 事件追加完成;
+跨进程竞争同一 `call_id` 时最多一个 owner,已完成调用和未过期 claim 均拒绝重复取得。
+流式响应的每个模型 delta、工具调用 delta 和工具结果均在发送给下游前记录;
+模型/工具超时或取消会中止在途 future 并保留已收到的部分事件,重启后可据日志继续判断恢复路径。
 
 payload 约定(投影依赖,修改须更新本文档与 contracts/session.rs;kind 枚举 = SessionEventKind):
 
 | kind | payload |
 | --- | --- |
-| user | {"content": string} |
+| tool_result | {"tool_call_id": string, "output": string, "status": completed/error/unknown}(status 默认 completed) |
 | assistant(普通) | {"content": string} |
 | assistant(工具调用) | {"tool_calls": [{id, name, arguments}]} |
 | tool_result | {"tool_call_id": string, "output": string} |
@@ -59,7 +64,7 @@ profiles/*.toml:TOML,name + bundles[].plugins;无版本化需求(配置非持久
 | 跨进程 checkpoint | 可基于 Redis/store seam 扩展,尚无统一实现和租约语义 |
 | workflow streaming restore | 基础 checkpoint 已有,STREAM/TRANSFORM/COLLECT 中间状态恢复仍不完整 |
 | OTLP | HTTP OTLP/JSON 编码与发送已存在;完整 OTel SDK exporter、重试/批处理/collector E2E 仍为 partial |
-| 并发与原子写 | 多数文件后端仍需统一临时文件+fsync+rename 和跨进程锁策略 |
+| 并发与原子写 | 除 session log 外,多数文件后端仍需统一临时文件+fsync+rename 和跨进程锁策略 |
 
 ## 5. 版本纪律
 

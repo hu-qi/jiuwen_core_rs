@@ -32,20 +32,35 @@ pub struct AsyncStreamQueue {
     sender: mpsc::Sender<Value>,
     receiver: Option<mpsc::Receiver<Value>>,
     closed: std::sync::atomic::AtomicBool,
-    sent_count: std::sync::atomic::AtomicUsize,
+    sent_count: Arc<std::sync::atomic::AtomicUsize>,
     received_count: std::sync::atomic::AtomicUsize,
 }
 
 impl AsyncStreamQueue {
-    pub fn new(maxsize: usize) -> Self {
+    fn with_sender(
+        maxsize: usize,
+    ) -> (
+        Self,
+        mpsc::Sender<Value>,
+        Arc<std::sync::atomic::AtomicUsize>,
+    ) {
         let (tx, rx) = mpsc::channel(maxsize.max(1));
-        Self {
-            sender: tx,
-            receiver: Some(rx),
-            closed: std::sync::atomic::AtomicBool::new(false),
-            sent_count: std::sync::atomic::AtomicUsize::new(0),
-            received_count: std::sync::atomic::AtomicUsize::new(0),
-        }
+        let sent_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        (
+            Self {
+                sender: tx.clone(),
+                receiver: Some(rx),
+                closed: std::sync::atomic::AtomicBool::new(false),
+                sent_count: sent_count.clone(),
+                received_count: std::sync::atomic::AtomicUsize::new(0),
+            },
+            tx,
+            sent_count,
+        )
+    }
+
+    pub fn new(maxsize: usize) -> Self {
+        Self::with_sender(maxsize).0
     }
 
     pub fn is_closed(&self) -> bool {
@@ -85,6 +100,33 @@ impl AsyncStreamQueue {
         }
     }
 
+    async fn send_with_sender(
+        sender: mpsc::Sender<Value>,
+        sent_count: Arc<std::sync::atomic::AtomicUsize>,
+        data: Value,
+    ) -> Result<(), StreamError> {
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            match tokio::time::timeout(SEND_ATTEMPT_TIMEOUT, sender.send(data.clone())).await {
+                Ok(Ok(())) => {
+                    sent_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    return Ok(());
+                }
+                Ok(Err(_)) => {
+                    return Err(StreamError::new("stream_queue_send", "receiver dropped"));
+                }
+                Err(_) if attempt >= MAX_SEND_RETRIES => {
+                    return Err(StreamError::new(
+                        "stream_queue_send_timeout",
+                        format!("Failed to send stream data after {MAX_SEND_RETRIES} retries"),
+                    ));
+                }
+                Err(_) => {}
+            }
+        }
+    }
+
     /// 接收数据(-1 表示无限等待;closed 后报错)。
     pub async fn receive(&mut self, timeout: Option<Duration>) -> Result<Value, StreamError> {
         if self.is_closed() {
@@ -118,9 +160,7 @@ impl AsyncStreamQueue {
             return Ok(());
         }
         self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
-        // drain remaining items on timeout
         let _ = tokio::time::timeout(timeout, async {
-            // wait until sender count matches received (simple drain: sleep-free check)
             tokio::time::sleep(Duration::from_millis(10)).await;
         })
         .await;
@@ -145,6 +185,8 @@ impl Seam for AsyncStreamQueue {}
 /// 流发射器(对齐 StreamEmitter;END_FRAME 哨兵)。
 pub struct StreamEmitter {
     queue: Arc<tokio::sync::Mutex<AsyncStreamQueue>>,
+    sender: mpsc::Sender<Value>,
+    sent_count: Arc<std::sync::atomic::AtomicUsize>,
     closed: std::sync::atomic::AtomicBool,
 }
 
@@ -152,8 +194,11 @@ impl StreamEmitter {
     pub const END_FRAME: &'static str = "all streaming outputs finish";
 
     pub fn new() -> Self {
+        let (queue, sender, sent_count) = AsyncStreamQueue::with_sender(1024);
         Self {
-            queue: Arc::new(tokio::sync::Mutex::new(AsyncStreamQueue::new(1024))),
+            queue: Arc::new(tokio::sync::Mutex::new(queue)),
+            sender,
+            sent_count,
             closed: std::sync::atomic::AtomicBool::new(false),
         }
     }
@@ -170,8 +215,7 @@ impl StreamEmitter {
                 "Can not emit data after the stream emitter is closed.",
             ));
         }
-        let guard = self.queue.lock().await;
-        guard.send(data).await
+        AsyncStreamQueue::send_with_sender(self.sender.clone(), self.sent_count.clone(), data).await
     }
 
     pub fn is_closed(&self) -> bool {
@@ -184,13 +228,12 @@ impl StreamEmitter {
             return Ok(());
         }
         self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
-        let guard = self.queue.lock().await;
-        if !guard.is_closed() {
-            guard
-                .send(Value::String(Self::END_FRAME.to_string()))
-                .await?;
-        }
-        Ok(())
+        AsyncStreamQueue::send_with_sender(
+            self.sender.clone(),
+            self.sent_count.clone(),
+            Value::String(Self::END_FRAME.to_string()),
+        )
+        .await
     }
 }
 
@@ -237,11 +280,20 @@ impl Seam for StreamWriter {}
 /// 流写入管理器(对齐 StreamWriterManager:默认 writer + stream_output 迭代)。
 pub struct StreamWriterManager {
     emitter: Arc<StreamEmitter>,
+    cancelled: std::sync::atomic::AtomicBool,
 }
-
 impl StreamWriterManager {
     pub fn new(emitter: Arc<StreamEmitter>) -> Self {
-        Self { emitter }
+        Self {
+            emitter,
+            cancelled: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// 请求当前 workflow stream 在下一个安全边界停止。
+    pub fn cancel(&self) {
+        self.cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn get_output_writer(&self) -> StreamWriter {
@@ -294,6 +346,26 @@ impl StreamWriterManager {
 }
 
 impl Seam for StreamWriterManager {}
+
+#[async_trait::async_trait]
+impl ah_contracts::workflow::WorkflowStreamSink for StreamWriterManager {
+    async fn emit(&self, chunk: Value) -> Result<(), ah_contracts::workflow::WorkflowError> {
+        self.emitter
+            .emit(chunk)
+            .await
+            .map_err(|error| ah_contracts::workflow::WorkflowError(error.to_string()))
+    }
+
+    async fn close(&self) -> Result<(), ah_contracts::workflow::WorkflowError> {
+        self.emitter
+            .close()
+            .await
+            .map_err(|error| ah_contracts::workflow::WorkflowError(error.to_string()))
+    }
+    fn is_cancelled(&self) -> bool {
+        self.cancelled.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
 
 /// stream 插件:注册流管道服务。
 pub struct StreamPlugin;
@@ -391,6 +463,45 @@ mod tests {
             .stream_output_with_timeouts(None, Some(Duration::from_millis(30)))
             .await;
         assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn workflow_sink_emits_chunks_to_stream_output() {
+        use ah_contracts::workflow::WorkflowStreamSink;
+
+        let emitter = Arc::new(StreamEmitter::new());
+        let manager = StreamWriterManager::new(emitter);
+        manager
+            .emit(serde_json::json!({"type": "workflow_node"}))
+            .await
+            .unwrap();
+        manager.close().await.unwrap();
+
+        let output = manager.stream_output().await.unwrap();
+        assert_eq!(output, vec![serde_json::json!({"type": "workflow_node"})]);
+    }
+
+    #[tokio::test]
+    async fn producer_and_consumer_can_run_concurrently() {
+        use ah_contracts::workflow::WorkflowStreamSink;
+
+        let manager = Arc::new(StreamWriterManager::new(Arc::new(StreamEmitter::new())));
+        let producer = manager.clone();
+        let consumer = manager.clone();
+        let result = tokio::time::timeout(Duration::from_secs(1), async move {
+            let consume = tokio::spawn(async move { consumer.stream_output().await });
+            tokio::task::yield_now().await;
+            producer.emit(serde_json::json!({"chunk": 1})).await?;
+            producer.close().await?;
+            consume
+                .await
+                .map_err(|error| ah_contracts::workflow::WorkflowError(error.to_string()))?
+                .map_err(|error| ah_contracts::workflow::WorkflowError(error.to_string()))
+        })
+        .await
+        .expect("producer and consumer must not deadlock");
+
+        assert_eq!(result.unwrap(), vec![serde_json::json!({"chunk": 1})]);
     }
 
     #[tokio::test]

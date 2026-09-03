@@ -206,6 +206,7 @@ mod tests {
     use super::*;
     use crate::plugin::Plugin;
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// 一个可记录 apply 顺序的桩服务。
     struct Marker;
@@ -253,6 +254,80 @@ mod tests {
             inject_keys,
             log: log.clone(),
         })
+    }
+
+    #[derive(Clone)]
+    struct TestEvent;
+    impl Event for TestEvent {
+        const ID: &'static str = "test/mount-atomicity";
+    }
+
+    struct EventPlugin {
+        count: Arc<AtomicUsize>,
+    }
+
+    impl Plugin for EventPlugin {
+        fn name(&self) -> &'static str {
+            "event-plugin"
+        }
+
+        fn provides(&self) -> Vec<ServiceKey> {
+            vec![ServiceKey::new("event-service")]
+        }
+
+        fn inject(&self) -> Vec<ServiceKey> {
+            Vec::new()
+        }
+
+        fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
+            let count = Arc::clone(&self.count);
+            let service_effect = ctx.register(ServiceKey::new("event-service"), Arc::new(Marker));
+            let listener_effect = ctx.on::<TestEvent>(move |_| {
+                count.fetch_add(1, Ordering::SeqCst);
+            });
+            Ok(vec![service_effect, listener_effect])
+        }
+    }
+
+    struct FailingPlugin;
+
+    impl Plugin for FailingPlugin {
+        fn name(&self) -> &'static str {
+            "failing-plugin"
+        }
+
+        fn provides(&self) -> Vec<ServiceKey> {
+            Vec::new()
+        }
+
+        fn inject(&self) -> Vec<ServiceKey> {
+            Vec::new()
+        }
+
+        fn apply(&self, _ctx: &Context) -> Result<Vec<Effect>, PluginError> {
+            Err(PluginError::Apply {
+                plugin: self.name(),
+                message: "intentional test failure".to_string(),
+            })
+        }
+    }
+
+    #[test]
+    fn mount_all_rolls_back_services_and_listeners_when_later_plugin_fails() {
+        let ctx = Context::new();
+        let count = Arc::new(AtomicUsize::new(0));
+        let error = ctx
+            .mount_all(vec![
+                Arc::new(EventPlugin {
+                    count: Arc::clone(&count),
+                }),
+                Arc::new(FailingPlugin),
+            ])
+            .expect_err("later apply failure");
+        assert!(matches!(error, PluginError::Apply { .. }));
+        assert!(!ctx.has_service(&ServiceKey::new("event-service")));
+        ctx.emit(TestEvent);
+        assert_eq!(count.load(Ordering::SeqCst), 0);
     }
 
     #[test]

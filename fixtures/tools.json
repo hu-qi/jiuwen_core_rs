@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "seam": "tools",
   "description": "tools seam golden fixtures (real registry + sysop tools)",
   "categories": ["success", "illegal"],
@@ -7,13 +8,17 @@
       "name": "invoke_real_read_file",
       "category": "success",
       "input": { "tool": "read_file", "file": "probe.txt", "content": "probe content" },
-      "expect": { "output_contains": "probe content" }
+      "expect": {
+        "ok": true,
+        "tool": "read_file",
+        "contains_expected": true
+      }
     },
     {
       "name": "unknown_tool_rejected",
       "category": "illegal",
       "input": { "tool": "no_such_tool", "arguments": {} },
-      "expect": { "error": true }
+      "expect": { "ok": false, "error_class": "tool_not_found" }
     }
   ]
 }

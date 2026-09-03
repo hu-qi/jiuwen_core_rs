@@ -8,15 +8,52 @@
 - Rust stable toolchain;
 - git 2.26+;
 - 可选的外部服务或凭据,仅对应 production E2E 需要;
-- production profile 当前还依赖本地 Redis、OpenAI 凭据及部分外部命令,不能假定任意环境可直接启动。
+- production profile 当前还依赖本地 Redis、OpenAI 凭据及部分外部命令,无这些依赖时 `boot()` 必须显式失败;当前实测缺少 OpenAI key 时由 `ah-plugins-openai` 返回明确错误。
+
+### 本地凭据文件
+
+`ah-app::boot` 会在启动前读取凭据文件:优先使用 `AH_ENV_FILE` 指定的路径;
+未设置时依次尝试当前工作目录 `.env` 和 profile 所在项目根目录的 `.env`。
+自动发现的 `.env` 只补充尚未存在于进程环境的变量,因此 shell/CI 环境变量优先;
+显式设置 `AH_ENV_FILE` 时,该文件是权威配置,会覆盖同名进程变量,避免旧的 `OPENAI_*`
+变量静默选择错误的 provider 或凭据。支持 `KEY=VALUE`、`export KEY=VALUE` 以及单/双引号值;
+解析失败会显式阻止启动。
+`.env` 与 `.env.*` 已加入 `.gitignore`,禁止提交真实密钥。
+
+OpenAI 最小配置:
+
+```sh
+OPENAI_API_KEY=...
+```
+
+可选配置:
+
+```sh
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+```
+
+生产 Profile 同时挂载 Redis store、Redis queue 和 checkpointer;三者使用同一个 Redis URL。
+默认地址为本机 `redis://127.0.0.1:6379/`;远程、认证或 TLS Redis 请在 env 文件中配置:
+
+```sh
+REDIS_URL=redis://:password@redis.example.com:6379/0
+# TLS 使用 rediss://...
+```
+
+也可使用外部文件:
+
+```sh
+AH_ENV_FILE=/secure/path/agent-harness.env cargo run --offline -p ah-app --bin ah-app -- profiles/prod.toml
+```
 
 ```sh
 cargo build --workspace
 cargo test --workspace
-cargo run -p ah-app -- profiles/dev.toml
+cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml
 ```
 
-`dev.toml` 使用 mock LLM 进行本地结构冒烟。它不证明 production profile 或 Python parity。
+`dev.toml` 使用 mock LLM 进行本地结构冒烟。当前完整 `ah-app` demo 在清空云凭据后已成功 boot 并执行 application、agent-loop、workflow、tools、memory、retrieval、telemetry 和 symphony 路径;它不证明 production profile 或 Python parity。
 
 ## 工作包生命周期
 
@@ -77,7 +114,7 @@ cargo llvm-cov --workspace --fail-under-lines 80
 - `cargo test --workspace --all-features`;
 - Python/Rust differential;
 - production profile static composition;
-- production `boot()` smoke;
+- production `boot()` smoke:已验证 dev Profile;prod Profile 的无凭据失败门槛已验证,完整 prod boot 仍待 Redis/OpenAI 等真实依赖。
 - 插件生产依赖隔离扫描;
 - 文档路径、数字和状态自动一致性检查;
 - Linux/Windows/macOS 跨平台矩阵。

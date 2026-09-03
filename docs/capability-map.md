@@ -1,9 +1,11 @@
 # 能力地图(capability-map.md)
 
-> 目标:完整实现 agent-core(Python)全部公开行为。本文是能力↔seam↔插件映射账本;
-> 当前执行顺序以 `ROADMAP.md` 为准,严格对等结论以 `parity-audit.md` 为准。
-> 历史表格中的 `done` 主要表示 Rust implementation 已落地,不自动表示 production verified 或
-> Python parity verified。后续状态应拆分为 implementation / production / parity 三个维度。
+> 目标:完整实现 agent-core(Python)全部公开行为。本文是能力↔seam↔插件映射账本,不是完成声明。
+> 当前代码 HEAD:`7404142`;旧审计基线和历史百分比必须标明为 snapshot,不能直接代表当前状态。
+> 每项能力必须分开记录 implementation、workspace/runtime integration、production verification 和 Python parity;只有源码或单元测试不能标记严格完成。
+> 当前 differential 仅验证 `stop_condition`、`messager_inprocess` 两个 seam;阶段一已将 10 个新增插件加入 workspace members,阶段二已全部进入 `ah-app::plugin_catalog` 与 dev/prod Profile,并通过 targeted mount/resolve/invoke/unmount;这仍不等于 production verification 或 Python parity。
+> 当前执行顺序以 `ROADMAP.md` 为准,严格对等结论以当前 HEAD 重新审计结果为准。
+> 历史表格中的 `done` 仅表示旧审计口径下的实现状态,在当前审计账本重算前不得解释为 production 或 Python parity done。
 
 ## 0. 源:agent-core(Python)域规模
 
@@ -35,9 +37,9 @@
 | code | `code` | `CodeProvider`(已实现:隔离 scratch + python3 子进程 + 超时强杀 + 输出/退出码) | done(契约)/ partial(仅 python3,无沙箱容器) |
 | sandbox | `sandbox` | `SandboxProvider`(已实现:策略化,sandbox.json 允许前缀/拒绝命令模式/绝对路径开关 + pre-execute rail 消费) | done(契约+消费,本地)/ partial(远程沙箱容器/VM) |
 | security | `security` | `SecurityProvider`(已实现:规则 guardrails + pre-execute rail) | done(契约)/ partial(无 LLM 后端/API) |
-| agent-loop | `agent-loop` | `AgentLoop`(已实现,真实 ReAct,日志驱动,工具错误回喂模型) | done
-| workflow | `workflow` | `WorkflowEngine`(已实现:Start/End/LLM/Tool/Loop/SubWorkflow/Parallel + 条件边 + 轨迹入日志;LLM 节点流式消费) | done(契约+流式消费) |
-| subagent | `subagent` | `SubagentRuntime`(已实现:隔离会话委派 + 预算 + 上下文注入 + delegate_task 工具) | done(契约)/ partial(无进程外/跨产品子代理) |
+| agent-loop | `agent-loop` | `AgentLoop` | **partial**:基础日志驱动 ReAct、工具结果回灌、部分 context/prompt/control 已有;相对 Python `ReActAgent.invoke` 仍缺 rails/lifecycle、HITL/workflow interrupt 恢复、steering、并行 tool call、multimodal、stream 和取消清理语义 |
+| workflow | `workflow` | `WorkflowEngine` | **partial**:基础引擎、节点、条件边、子工作流/并行、`WorkflowStreamSink`、LLM 增量 `workflow_delta`、节点/恢复/最终 chunk、stream manager 背压/END_FRAME/cancel、`stream_checkpointed`、`WorkflowComponentRegistry` 和 `NodeKind::Component` 四种 invoke/stream/collect/transform 能力已有;Python ActorManager 多 producer stream-edge/source-group、节点级中断恢复和 differential 仍缺 |
+| subagent | `subagent` | `SubagentRuntime` | **partial**:隔离会话委派、预算、上下文注入和 delegate_task 已有;仍缺进程外/跨产品子代理及完整 Python 工具面 |
 | teams | `teams` | `TeamRuntime`(已实现:内存 + SQLite 持久化两套运行时:任务板/依赖门控/成员校验/review/settle/run_task 真实委派/teams/task 事件/消息经 queue seam 传输) | done(契约+持久化+消息)/ partial(外部 CLI 进程/ZMQ) |
 | evolving | `evolving` | `EvolvingRuntime`(已实现:轨迹从会话日志真实抽取;本地判据评估 + LLM judge 附加;优化建议规则推导 + LLM 附加) | done(契约)/ partial(无持久化/RL) |
 | rsi | `rsi` | `RsiRuntime`(已实现:数据集生成 + 用例真实执行 + evolving 评估 + 报告 + 提示精化 + checkpoint 落盘) | done(契约)/ partial(无 LLM 数据生成/RL) |
@@ -61,7 +63,7 @@
 | foundation/prompt | `prompt` seam + ah-plugins-prompt-builder | 模板渲染、结构化 prompt、section 构建器 | 确定性渲染({{var}} + 版本化文件后端已落地);section 构建器已落地(builder + sanitize + report 见上);18 个系统提示 section 素材已落地(本回合:identity/safety/skills/todo/task_tool/session_tools/heartbeat/memory/coding_memory/prompt_attachments/offload/reload/compression_recall/agent_mode/goal/external_memory(参数化)/task_completion/progressive_tool_rules — 双语常量逐字对齐 Python,priority 一致);workspace 动态 section 已落地(本回合:头部/重要文件表/目录描述双语常量 + DirNode 树格式化 + 内容组装 + priority 70);context 动态 section 已落地(本回合:模板检测/名字清洗/身份已填判断 + 内容组装(单文件+每日记忆引导)+ 单文件 context.* section + task_tool 代理行提取);tools 列表 section 已落地(本回合:首选顺序/分组/覆盖摘要 + 去重规则 + bash/task_tool 原则 + priority 30);目录扫描(sys_operation.fs)与 context 文件读取缓存留待集成 |
 | foundation/store(kv/db/vector/message/graph/object) | `store` seam + ah-plugins-store(本地文件后端);redis/gaussdb/elasticsearch/milvus/chroma 待后续 | 持久化(kv/message 已真实落盘) | 本地后端已测;外部后端集成测试留待后续 |
 | application(llm_agent/workflow_agent) | `application` seam + ah-plugins-application | 按请求路由 LLM agent 或 workflow agent,统一 AgentResult | partial: 已绑定 SessionManager,调用 agent-loop/workflow seam,支持 checkpoint restore 与 cancel/pause/resume/retry 并持久化 System event。仍缺 LLM 意图、结构化 command、执行中取消/超时、真实 iterations/termination 统计、memory/invoke rails、production boot 和 Python differential。
-| workflow(78 类) | ah-plugins-workflow-engine | 组件、分支、循环、子工作流、检查点、流式 | Http/Intent/Questioner + 检查点续跑已落地;llm 流式 seam + 工作流 LLM 节点流式消费已落地(本回合:run_llm 经 stream_chat 消费,SSE 增量累加 + 工具调用组装);ComponentAbility 已落地(第 143 回合:invoke/stream/collect/transform 四能力名+描述,对齐 base.py);Pregel 见下 |
+| workflow(78 类) | ah-plugins-workflow-engine | 组件、分支、循环、子工作流、检查点、流式 | Http/Intent/Questioner + 检查点续跑已落地;`WorkflowStreamSink`、`WorkflowEngine::stream`、`stream_checkpointed`、`WorkflowComponentRegistry`/`NodeKind::Component` 已接通,LLM provider 流并发消费并按序发出 delta/node/resume/final chunks,stream manager 支持背压、END_FRAME 和 cancel,组件 invoke/stream/collect/transform 已端到端验证;Python ActorManager 多 producer/source-group、节点级中断恢复和 workflow differential 留待后续;Pregel 见下 |
 | graph/Pregel(53 类) | ah-plugins-pregel | 状态通道、中断、动态路由 | 已落地(本回合:超级步引擎 + missing/present/equals 条件 + halt 中断 + 上限) |
 | controller(57 类) | `controller` seam + ah-plugins-controller | 任务调度/执行器/意图识别 | 已落地(本回合:任务 CRUD/状态机/优先级/父子层级防环;执行器注册表 + 同会话冲突拒绝;终态迁移拒绝;确定性意图识别;LLM 意图留待后续) |
 | operator(8 类) | `operator` seam + ah-plugins-operator | LLM/Tool/Memory/Skill 算子 | 已落地(本回合:自进化参数句柄,LLM/tool/memory/skill 四算子 + freeze 检查 + 回调同步 + 检查点);预览语义已收尾(第 141 回合:ah-contracts operator seam 补 Operator.apply_update 兼容行为(replace/state→set_parameter+前后状态比较,其余 mode/effect 显式错误,对齐 base.py apply_update)+ PreviewableOperator(preview_update + apply_update 路由预览)+ TunableKind::SkillExperience;ah-plugins-operator 新增 SkillExperienceOperator(operator_id=skill_experience_{skill}/tunables experiences/preview_update 目标+mode/effect 校验→records+lifecycle_stage=local_apply_completed+metadata.skill_name/set_parameter 通知消费方,对齐 skill_call/base.py);ApplyResult 补 records/lifecycle_stage/pending_change_id 字段,对齐 types.py) |

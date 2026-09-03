@@ -1,30 +1,24 @@
 # 对等审计基线(parity-audit.md)
 
-> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`。HEAD 已推进至 `b455702`
-> (此后仅构建修复 `4c47628`、clippy 门禁修复 `3b57a03`、文档对齐 `b455702`,无功能面变化),
-> 本文百分比按 `cc561c0` 审计,不受影响。原始逐域估算形成于第 149 回合,
-> 本次仅校正基线、口径和显式矛盾,尚未用结构化账本重新计算全部百分比。
-> 方法:7 域 97 个子模块,逐模块读 Python 源码公开行为面对照 Rust seam/plugin 与测试证据。
-> 判定标准(严格):`done` 要求核心功能点、LLM 驱动能力、错误、状态、持久化和外部协议行为
-> 对等;只有确定性规则、字符串匹配或简化循环时为 `partial`;无可调用实现为 `missing`。
-> 当前尚无独立 Python/Rust differential runner。因此本文百分比是**未校准人工估算**,
-> 不能作为已验证的 Python parity 或生产替代率。Golden 与 Rust regression reference 只证明 Rust 内部稳定。
-> 当前任务和验收顺序以 `ROADMAP.md` 为准。
+> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前代码 HEAD:`7404142`。
+> 旧快照之后已有功能提交,包括 AgentBuilder、A2A、数据加载/策展、模型分配、交互路由、入站渲染、桥接和提示附件;原文“无功能面变化”已失效。
+> 本文的百分比与 `done/partial/missing` 账目仍是旧快照结果,未由当前 HEAD 的结构化账本重新计算,不得作为当前完成度。
+> 当前代码复核确认:新增插件多数只有确定性子集;阶段一已将 **10 个新增插件加入 Cargo workspace members**,阶段二已全部接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并通过 targeted mount/resolve/invoke/unmount 集成测试,不能升级为严格 done。
+> 方法仍为按 Python 公开行为面核对 Rust seam/plugin;严格 `done` 还要求生产路径、错误/状态/持久化、差分和适用 E2E 证据。
+> 当前 Python/Rust differential 只验证 `stop_condition`、`messager_inprocess` 两个 seam,共 6 个 case,另有 1 个已知差异;首批 application/agent-loop/session/controller/workflow/tools 仍未接入。
+> 当前任务顺序以 `ROADMAP.md` 为准;下一次审计必须先同步当前 HEAD、workspace package 清单和插件接线状态。
 
 ## 0. 总览
 
 | 指标 | 值 |
 | --- | --- |
-| **总体对等度** | **历史人工估算约 65.5%,未由 Python differential 验证** |
-| done / partial / missing / excluded | **历史账目 6 / 87 / 2 / 2,待结构化账本重算** |
-> 第 146 回合:agent_teams/messager base 配置模型 + in-process 传输收尾(55→65);第 145 回合:
-> agent_teams/security permission narrowing 收尾(60→72);第 144 回合:agent_teams/runtime
-> BackgroundTaskController(75→80);第 143 回合:harness/schema 停止条件、agent_teams/schema
-> 事件主题、rsi learner 检索、workflow ComponentAbility;第 142 回合:harness/security Shell AST + file_guard。
-> 以上百分比是子模块行为对等估算,不是插件数量或代码行覆盖率。
-> 第 141 回合:core/operator 收尾 done;harness/prompts 附件 CRUD/XML 渲染/注入(55→68);harness/workspace 目录构建器(40→55);agent_teams/monitor TeamStreamLogger(80→95)。
-> 第 129 回合:context 90 / config 95 / data_loader 92(仍计 partial,未达 done 判定线 100 或 LLM 无缺) |
-| 上一基线(第 75 回合) | ≈ 31% |
+| **当前总体对等度** | **未重算;旧快照人工估算约 65.5%,未由完整 Python differential 验证** |
+| 当前可引用的历史账目 | **done / partial / missing / excluded = 6 / 87 / 2 / 2;仅代表旧快照** |
+| 当前 differential | **2 个 seam、6 个 case 一致,1 个 known divergence;首批六 Seam 未接入** |
+| 当前 production boot | **dev Profile 无云凭据 boot + demo E2E 已通过;prod Profile 缺少 OpenAI key 时显式失败,完整无 mock prod boot 未完成** |
+> 阶段一验证:10 个新增插件已加入 workspace,`cargo check --workspace --offline` 通过,新增插件单元测试 117 个 case 全部通过;阶段二已接入 catalog/dev/prod Profile,`stage2_plugins` 与 `static_composition`/`mock_gate` 共 8 个测试通过;阶段二第二批已通过 dev Profile 无云凭据 boot 与 application invoke 回归,并确认 prod 无 key 的显式门槛;这些结果不替代 Python differential 或完整 production boot 证据。
+
+旧快照中的逐域百分比和回合记录保留作历史证据,不得作为当前 HEAD 完成度。
 
 ## 1. 逐域对等度
 

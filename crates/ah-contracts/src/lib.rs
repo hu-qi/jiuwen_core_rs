@@ -385,6 +385,7 @@ pub mod prelude {
     pub use crate::web::{WebError, WebFetchRequest, WebFetchResult, WebProvider};
     pub use crate::workflow::{
         EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError, WorkflowOutput, WorkflowSpec,
+        WorkflowStreamSink,
     };
     pub use crate::workspace::{
         Goal, GoalStatus, WorkspaceError, WorkspaceManifest, WorkspaceService,

@@ -95,6 +95,7 @@ mod tests {
             Ok(ModelResponse {
                 content: "fake reply".to_string(),
                 tool_calls: Vec::new(),
+                reasoning_content: None,
             })
         }
     }

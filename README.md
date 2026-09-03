@@ -22,13 +22,13 @@ agent-harness 是一个使用 Rust 构建的插件化 agent harness，目标是�
 cargo fmt --all --check
 cargo build --workspace
 cargo test --workspace
-cargo run -p ah-app -- profiles/dev.toml
+cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml
 ```
 
 开发 Profile 使用确定性的 mock provider，适合本地启动和协议冒烟，不代表生产可用性或 Python 行为对等。生产 Profile 需要按 [docs/development.md](docs/development.md) 准备 OpenAI 凭据、Redis 和其他外部依赖：
 
 ```sh
-cargo run -p ah-app -- profiles/prod.toml
+cargo run --offline -p ah-app --bin ah-app -- profiles/prod.toml
 ```
 
 ## 文档

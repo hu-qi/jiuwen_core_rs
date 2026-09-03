@@ -1,25 +1,22 @@
 # agent-core 未完成插件化功能审计(gap-audit.md)
 
-> 当前基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`(HEAD 已推进至 `b455702`,仅构建/clippy/
-> 文档修复,无功能面变化;基线说明见 `ROADMAP.md`)。
-> 本文件只列 **未完全完成(partial/missing)** 项;完整映射见 `capability-map.md`,
-> 严格审计快照见 `parity-audit.md`,执行顺序见 `ROADMAP.md`。
-> `partial` 表示已有 seam、插件或部分真实路径,但 production verification 或 Python parity 不完整;
-> `missing` 表示当前没有可调用实现。Rust 自生成 reference 和 mock 测试不是 Python 对等证据。
+> 历史审计基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前代码 HEAD:`7404142`。
+> 本文件原先以 `b455702` 为最新状态;该基线之后已新增多个插件和功能,原文状态不可直接用于当前 HEAD。
+> `partial` 表示已有部分 Rust 实现,但仍缺 runtime integration、production verification 或 Python parity;`missing` 表示当前没有可调用的对应实现。源码存在、单元测试通过或 Rust 自生成 reference 都不能单独升级状态。
 
-## 0. 总体结论
+## 0. 当前复核结论
 
-- teams/evolving/rsi 的主要确定性管线、内核/契约和多数 harness 插件已有真实实现;
-- **最大缺口仍集中在 `core` 域(796 文件 / 2226 符号)**:application 与 multi_agent
-  已有 agentbuilder/controller/teams/workflow 等部分承载,但 Python 的完整 agent 绑定、
-  handoff/hierarchical 拓扑仍未对等;single_agent 的 interrupt/skills/rail、session 的
-  vcs/tracer/checkpointer、memory 的 manage/migration/process、retrieval 的
-  indexing/embedding/vector_store 仍为主要 partial;
-- **其次为 harness 工具与 rails 长尾**:browser/mobile/multimodal、LSP 进程客户端、
-  worktree/cron/powershell 等完整语义、约 15+ 条 rails 与 task_loop 仍未完成;
-- 当前生产路径未发现 `todo!()`/`unimplemented!()` 残桩;partial 项通常是显式错误、
-  未注入依赖或简化实现,不能据此判定能力完成。审计表仍保留两个明确的 `missing` 子模块
-  (`rsi/updater`、`extensions/vendor_specific`);它们与 Python 源规格存在真实能力缺口。
+- 当前 Cargo workspace 由 `cargo metadata --no-deps` 实际发现 112 个 package;仓库中有 112 个 Cargo manifest。
+- 以下 **10 个**新增插件已进入 workspace members,并已接入 `ah-app::plugin_catalog` 与 dev/prod Profile;阶段二 targeted mount/resolve/invoke/unmount 测试通过,但完整 Python 行为和 production boot 仍未完成:`ah-plugins-agentbuilder`、`ah-plugins-a2a`、`ah-plugins-data-loader`、`ah-plugins-dataset-curator`、`ah-plugins-model-allocator`、`ah-plugins-prompt-attachment`、`ah-plugins-interaction-router`、`ah-plugins-inbound-render`、`ah-plugins-external-format`、`ah-plugins-bridge-compose`。
+- Agent Loop 当前是基础日志驱动 ReAct;相对 Python `ReActAgent.invoke` 仍缺完整 rails/lifecycle、HITL/workflow interrupt 恢复、steering、并行 tool call、multimodal、stream 和取消清理语义。
+- AgentBuilder 当前是关键词设计 + 空参数串行 Workflow DSL,不是 Python 的 LLM builder/executor、session history 和状态机。
+- DataLoader 当前提供 JSON 解析、画像、批次规划和 YAML 写入原语,尚无 Python `DataLoader.load` 的目录扫描、文件加载、路径/索引注入和迭代完整入口。
+- A2A 当前主要是纯 JSON 适配;Python 的 protobuf 对象、真实 client/server、Task event 和完整 SSE 行为仍未对等。
+- `ah-hub::Context::mount_all` 已通过中途 `apply` 失败时服务和事件监听器回滚测试;Effect vector 的自然析构保证此前注册全部撤销。后台资源释放和 provider 热替换仍是 P1-09 缺口。
+- 当前 Python/Rust differential 只覆盖 `stop_condition`、`messager_inprocess` 两个 seam,共 6 个 case,另有 1 个已知差异;首批六 Seam 仍未接入。
+- 阶段一验证结果:10 个新增插件已加入 workspace;阶段二已接入 catalog/Profile,并通过 1 个 `ah-app` mount/resolve/invoke/unmount 集成测试;`cargo check --workspace --offline` 通过;新增插件单元测试共 117 个 case 全部通过。上述测试只证明 Rust 内部接线和回归稳定,不升级 Python parity 或 production verification。
+
+旧版逐域缺口表仍可作为历史线索,但必须结合 `parity-audit.md` 的重新审计结果使用。
 
 ## 1. core(2226 符号 / 796 文件)—— 缺口最大
 

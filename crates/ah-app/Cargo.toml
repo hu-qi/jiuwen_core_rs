@@ -12,6 +12,9 @@ path = "src/main.rs"
 [[bin]]
 name = "ah-cli"
 path = "src/bin/ah-cli.rs"
+[[bin]]
+name = "audit-ledger"
+path = "src/bin/audit-ledger.rs"
 
 [dependencies]
 ah-contracts = { workspace = true }
@@ -25,13 +28,16 @@ ah-plugins-openai = { workspace = true }
 ah-plugins-agent-loop = { workspace = true }
 ah-plugins-agent-control = { workspace = true }
 ah-plugins-application = { workspace = true }
+ah-plugins-agentbuilder = { workspace = true }
 ah-plugins-ability = { workspace = true }
 ah-plugins-model-backup = { workspace = true }
 ah-plugins-rails = { workspace = true }
 ah-plugins-session-log = { workspace = true }
+ah-plugins-a2a = { workspace = true }
 ah-plugins-workflow = { workspace = true }
 ah-plugins-memory = { workspace = true }
 ah-plugins-manifest = { workspace = true }
+ah-plugins-bridge-compose = { workspace = true }
 ah-plugins-mcp = { workspace = true }
 ah-plugins-lsp = { workspace = true }
 ah-plugins-member-optimizer = { workspace = true }
@@ -44,17 +50,22 @@ ah-plugins-team-monitor = { workspace = true }
 ah-plugins-evolving = { workspace = true }
 ah-plugins-external = { workspace = true }
 ah-plugins-rsi = { workspace = true }
+ah-plugins-data-loader = { workspace = true }
 ah-plugins-rsi-evaluator = { workspace = true }
+ah-plugins-dataset-curator = { workspace = true }
 ah-plugins-context = { workspace = true }
 ah-plugins-context-evolver = { workspace = true }
 ah-plugins-controller = { workspace = true }
 ah-plugins-store = { workspace = true }
+ah-plugins-external-format = { workspace = true }
 ah-plugins-prompt = { workspace = true }
 ah-plugins-queue = { workspace = true }
 ah-plugins-workspace = { workspace = true }
 ah-plugins-worktree = { workspace = true }
+ah-plugins-inbound-render = { workspace = true }
 ah-plugins-sandbox = { workspace = true }
 ah-plugins-code = { workspace = true }
+ah-plugins-interaction-router = { workspace = true }
 ah-plugins-web = { workspace = true }
 ah-plugins-transport = { workspace = true }
 ah-plugins-git = { workspace = true }
@@ -75,6 +86,7 @@ ah-plugins-model-catalog = { workspace = true }
 ah-plugins-signals = { workspace = true }
 ah-plugins-team-dispatch = { workspace = true }
 ah-plugins-team-pool = { workspace = true }
+ah-plugins-model-allocator = { workspace = true }
 ah-plugins-team-status = { workspace = true }
 ah-plugins-team-verdict = { workspace = true }
 ah-plugins-team-message = { workspace = true }
@@ -86,6 +98,7 @@ ah-plugins-team-context = { workspace = true }
 ah-plugins-team-context-text = { workspace = true }
 ah-plugins-scheduler-render = { workspace = true }
 ah-plugins-team-join-descriptor = { workspace = true }
+ah-plugins-prompt-attachment = { workspace = true }
 ah-plugins-team-task-status = { workspace = true }
 ah-plugins-prompt-builder = { workspace = true }
 ah-plugins-prompt-builder-devtools = { workspace = true }
@@ -115,6 +128,7 @@ ah-plugins-optimizer = { workspace = true }
 ah-plugins-symphony = { workspace = true }
 ah-plugins-anthropic = { workspace = true }
 ah-plugins-telemetry = { workspace = true }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }

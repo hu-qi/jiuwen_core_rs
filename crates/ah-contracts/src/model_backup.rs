@@ -47,12 +47,28 @@ pub trait ModelBackup: Seam {
         primary: &dyn ModelProvider,
         request: ModelRequest,
         sink: mpsc::Sender<ModelChunk>,
-        _policy: ModelBackupPolicy,
+        policy: ModelBackupPolicy,
     ) -> Result<(), ModelBackupError> {
-        primary
-            .stream_chat(request, sink)
+        let response = self.chat_with_policy(primary, request, policy).await?;
+        let chunk = ModelChunk {
+            content_delta: response.content,
+            reasoning_delta: response.reasoning_content.unwrap_or_default(),
+            tool_call_deltas: response
+                .tool_calls
+                .into_iter()
+                .enumerate()
+                .map(|(index, call)| crate::llm::ToolCallDelta {
+                    index,
+                    id: Some(call.id),
+                    name: Some(call.name),
+                    arguments: call.arguments.to_string(),
+                })
+                .collect(),
+            done: true,
+        };
+        sink.send(chunk)
             .await
-            .map_err(|e| ModelBackupError(e.0))
+            .map_err(|_| ModelBackupError("stream sink closed".into()))
     }
 
     fn models(&self) -> Vec<String>;

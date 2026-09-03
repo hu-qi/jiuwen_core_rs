@@ -140,12 +140,12 @@ impl SubagentRuntime for LocalSubagentRuntime {
                     .as_ref()
                     .map(|allow| allow.contains(&call.name))
                     .unwrap_or(true);
-                let output = if !allowed {
-                    format!("tool not allowed: {}", call.name)
+                let (status, output) = if !allowed {
+                    ("error", format!("tool not allowed: {}", call.name))
                 } else {
                     match self.tools.invoke(&call.name, call.arguments.clone()).await {
-                        Ok(value) => value.to_string(),
-                        Err(error) => format!("tool error: {error}"),
+                        Ok(value) => ("completed", value.to_string()),
+                        Err(error) => ("error", format!("tool error: {error}")),
                     }
                 };
                 session
@@ -153,6 +153,7 @@ impl SubagentRuntime for LocalSubagentRuntime {
                         SessionEventKind::ToolResult,
                         json!({
                             "tool_call_id": call.id,
+                            "status": status,
                             "output": output,
                         }),
                     )

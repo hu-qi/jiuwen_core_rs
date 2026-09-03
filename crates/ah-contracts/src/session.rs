@@ -31,9 +31,9 @@ pub enum SessionEventKind {
 ///
 /// payload 约定(投影 derive_messages 依赖):
 /// - User / Assistant(无 tool_calls):{"content": string}
-/// - Assistant 工具调用:{"tool_calls": [{id, name, arguments}]}
+/// - Assistant 工具调用:{"tool_calls": [{id, name, arguments}]};该事件在工具执行前落盘,
+///   恢复时仅对声明可幂等重试且消费 call_id 的工具自动补执行,其他工具进入未知结果。
 /// - ToolResult:{"tool_call_id": string, "output": string}
-/// - AgentStep:{"iteration": int, "tool_calls": int, "done": bool}
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SessionEvent {
     /// 单调递增序号(append-only)。
@@ -72,6 +72,17 @@ pub trait SessionLog: Seam {
 
     /// 全部事件(按 seq 升序)。
     fn events(&self) -> Vec<SessionEvent>;
+    /// 全部事件的可失败读取,用于恢复流程避免把 I/O 错误当成空日志。
+    fn try_events(&self) -> Result<Vec<SessionEvent>, SessionError> {
+        Ok(self.events())
+    }
+    /// 原子声明一个未完成工具调用的恢复权;false 表示已被其他执行者占用或已完成。
+    fn claim_tool_call(
+        &self,
+        call_id: &str,
+        owner: &str,
+        lease_ms: u64,
+    ) -> Result<bool, SessionError>;
 
     /// seq 之后的增量事件。
     fn since(&self, seq: u64) -> Vec<SessionEvent>;

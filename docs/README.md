@@ -8,27 +8,23 @@ Seam 契约、普通插件、类型化事件和 Profile 组合。Python 源码�
 
 ## 当前基线
 
-- agent-harness 审查基线:`cc561c0`;
-- agent-core Python 参考基线:`aeb88cd8`;
-- 当前 workspace 约 111 个 crate,其中约 108 个 `ah-plugins-*` crate;
-- `profiles/dev.toml` 当前声明 113 个插件(展开去重后),包含 `ah-plugins-mock`;
-- `profiles/prod.toml` 当前声明 113 个插件,不包含 `ah-plugins-mock`;
-- `ah-hub` 聚焦测试 18 项通过,`ah-plugins-application` 聚焦测试 14 项通过;
-- 本次审查未在执行时限内完成全 workspace、production boot 和覆盖率实测,不得引用历史回合数字作为当前结果。
-- 已实测(HEAD `b455702`):`cargo clippy --workspace --all-targets -- -D warnings` 零警告、
-  `cargo fmt --all --check` 通过、`ah-app` 全部 34 项测试通过(含 cli/golden/differential/mock_gate);
-  全 workspace `cargo test` 与覆盖率门禁仍待实测。
+- agent-harness 当前代码 HEAD:`7404142`。代码审查基线和历史审计快照仍可能引用更早 commit,不能视为当前状态。
+- `cargo metadata --no-deps` 当前发现 **112 个 workspace package**;仓库中有 112 个 Cargo manifest。阶段一已将 10 个新增插件加入 workspace members,阶段二已接入 `ah-app::plugin_catalog` 与 dev/prod Profile。
+- 阶段二接入插件:`ah-plugins-agentbuilder`、`ah-plugins-a2a`、`ah-plugins-data-loader`、`ah-plugins-dataset-curator`、`ah-plugins-model-allocator`、`ah-plugins-prompt-attachment`、`ah-plugins-interaction-router`、`ah-plugins-inbound-render`、`ah-plugins-external-format`、`ah-plugins-bridge-compose`。
+- 阶段二集成测试 `ah-app/tests/stage2_plugins.rs` 已覆盖目录解析、依赖挂载、服务解析、代表性调用和 Effect drop 卸载;`static_composition`/`mock_gate` 另有 7 个 Profile 与门禁测试通过;`dev.toml` 无云凭据 boot + demo E2E 已通过,prod boot 仍受真实 Redis/OpenAI 等外部依赖门控。
+- 当前 Python/Rust differential 仍仅验证 `stop_condition` 和 `messager_inprocess` 两个 seam,共 6 个 case,另有 1 个已知差异;Rust-only contract runner 已接入 `session`、`tools`、`controller`,不依赖 Python。阶段一新增 10 个插件的单元测试共 **117 个 case 全部通过**;全 workspace 测试和覆盖率不得引用历史数字作为当前结果。
 
-以上是代码结构与本次实测快照,不是 Python 行为对等证明。严格状态见
-[parity-audit.md](parity-audit.md),当前任务顺序见 [ROADMAP.md](ROADMAP.md)。
+本页只记录当前可复核的结构事实;工作包状态、域汇总和状态百分比由
+[audit/ledger.json](../audit/ledger.json) 生成,见 [生成审计摘要](generated/audit-summary.md)。
+严格能力验收标准见 [parity-audit.md](parity-audit.md),执行顺序见 [ROADMAP.md](ROADMAP.md)。
 
 ## 状态口径
 
 | 维度 | 含义 | 当前结论 |
 | --- | --- | --- |
-| 插件架构 | hub、Seam、Effect、事件、Profile 和依赖装配 | 已形成,仍需补 production composition/boot 与失败原子性测试 |
+| 插件架构 | hub、Seam、Effect、事件、Profile 和依赖装配 | 已形成;阶段二 catalog/Profile、targeted mount/invoke/unmount 与 `mount_all` 失败回滚测试已通过,仍需补 production boot 与完整差分 |
 | Rust 功能覆盖 | Python 能力是否在 Rust 中有可调用实现 | 广泛覆盖,多数子模块仍为 partial |
-| 严格行为对等 | 同一 fixture 驱动 Python 与 Rust 后行为一致 | 尚未建立真实 Python/Rust 差分门禁 |
+| 严格行为对等 | 同一 fixture 驱动 Python 与 Rust 后行为一致 | Rust-only contract 已接入 session、tools、controller;Python differential 仅对可同层比较的两个 seam 提供辅助证据 |
 | Python 迁移/切流 | Python agent-core 是否调用或切换到 Rust runtime | 非项目目标,当前没有切流 |
 
 `done` 只表示对应审计口径下满足完成定义。Golden fixture 或 Rust 自生成 reference 不能单独证明

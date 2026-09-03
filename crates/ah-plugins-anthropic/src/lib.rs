@@ -314,6 +314,7 @@ impl ModelProvider for AnthropicModelProvider {
         Ok(ModelResponse {
             content,
             tool_calls,
+            reasoning_content: None,
         })
     }
 }

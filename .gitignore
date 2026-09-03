@@ -6,3 +6,6 @@
 .agent-harness/
 /logs/
 /differential/out/
+.env
+.env.*
+!.env.example

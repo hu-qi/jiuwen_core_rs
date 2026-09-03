@@ -101,8 +101,9 @@ impl ExternalCliRuntime for StreamingCliRuntime {
         command
             .args(args)
             .stdin(Stdio::piped())
-            .stdout(Stdio::piped());
-        // 注入团队成员身份环境(对齐 OPENJIUWEN_TEAM_JOIN)。
+            .stdout(Stdio::piped())
+            // 插件正常关闭或 Effect drop 时必须终止长驻子进程。
+            .kill_on_drop(true);
         let mut child = command
             .spawn()
             .map_err(|e| ExternalCliError(format!("spawn {binary}: {e}")))?;
@@ -207,9 +208,8 @@ impl ExternalCliRuntime for StreamingCliRuntime {
 
     fn abort(&self) -> Result<(), ExternalCliError> {
         if let Some(mut child) = self.child.lock().unwrap().take() {
-            // start_kill 是同步信号;子进程退出后由 tokio 运行时收割。
+            // start_kill 是同步信号;kill_on_drop 兜底子进程不会脱离插件生命周期。
             let _ = child.start_kill();
-            let _ = child;
         }
         *self.stdin.lock().unwrap() = None;
         self.pending.lock().unwrap().clear();
@@ -222,6 +222,17 @@ impl ExternalCliRuntime for StreamingCliRuntime {
 
     fn is_running(&self) -> bool {
         self.child.lock().unwrap().is_some()
+    }
+}
+
+impl Drop for StreamingCliRuntime {
+    fn drop(&mut self) {
+        // Drop 不能 await;Child 的 kill_on_drop 保证同步释放路径仍会杀掉进程。
+        if let Some(mut child) = self.child.get_mut().expect("child mutex").take() {
+            let _ = child.start_kill();
+        }
+        *self.stdin.get_mut().expect("stdin mutex") = None;
+        self.pending.lock().unwrap().clear();
     }
 }
 

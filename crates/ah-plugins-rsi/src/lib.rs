@@ -548,6 +548,7 @@ mod tests {
                     r#"[{"task":"variant one"},{"task":"variant two"},{"task":"variant three"}]"#
                         .to_string(),
                 tool_calls: vec![],
+                reasoning_content: None,
             })
         }
     }

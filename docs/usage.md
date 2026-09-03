@@ -9,7 +9,7 @@
 cargo run -p ah-app -- profiles/dev.toml
 ```
 
-`dev.toml` 当前声明 114 个插件并包含 `ah-plugins-mock`,用于无云凭据的开发冒烟。典型输出包含:
+`dev.toml` 包含 `ah-plugins-mock`,用于无云凭据的开发冒烟。阶段二的 10 个新增插件已接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并有 targeted mount/resolve/invoke/unmount 集成测试。Profile 插件数量不在本文手工复制,以实际解析结果为准。当前 Cargo workspace 可见 112 个 package。
 
 ```text
 [boot] mounted services: [ServiceKey("llm"), ServiceKey("tools"), ...]
@@ -28,9 +28,8 @@ Profile -> ah-app catalog -> 参数化插件 -> Context::mount_all -> ctx.servic
 cargo run -p ah-app -- profiles/prod.toml
 ```
 
-`prod.toml` 当前声明 112 个插件且不含 mock,但需要 OpenAI 凭据、本地 Redis 和若干外部能力。
-当前 CI 只验证 prod 不含 mock,尚未统一验证完整 production boot。启动失败时应根据显式错误补齐依赖,
-不得回退到 mock 后仍视为生产验证通过。
+`prod.toml` 不应包含 mock,但需要 OpenAI 凭据、本地 Redis 和若干外部能力。
+当前仅有 mock exclusion/static composition 证据;当前 HEAD 尚无统一的无 mock production boot + `ApplicationRuntime::invoke` 验证。启动失败时应根据显式错误补齐依赖,不得回退到 mock 后仍视为生产验证通过。
 
 ## 编写插件
 

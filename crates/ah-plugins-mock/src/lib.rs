@@ -69,6 +69,7 @@ impl ModelProvider for MockModelProvider {
                     name: "list_dir".to_string(),
                     arguments: json!({ "path": "." }),
                 }],
+                reasoning_content: None,
             });
         }
 
@@ -83,6 +84,7 @@ impl ModelProvider for MockModelProvider {
         Ok(ModelResponse {
             content: format!("mock final answer; last tool result: {last_tool}"),
             tool_calls: Vec::new(),
+            reasoning_content: None,
         })
     }
 }

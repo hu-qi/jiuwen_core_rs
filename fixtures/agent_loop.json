@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "seam": "agent_loop",
+  "description": "agent loop Rust-only contract traces",
+  "categories": ["success", "invalid"],
+  "cases": [
+    {
+      "name": "completed_react_trace",
+      "category": "success",
+      "input": {"text": "explore the workspace", "answer_contains": "mock final answer"},
+      "expect": {
+        "state": "completed",
+        "failure": null,
+        "iterations": 1,
+        "tool_calls": 1,
+        "answer_contains": true,
+        "event_kinds": ["user", "assistant", "tool_result", "assistant"]
+      }
+    },
+    {
+      "name": "empty_input_rejected",
+      "category": "invalid",
+      "input": {"text": "  "},
+      "expect": {
+        "state": "failed",
+        "failure": "invalid_input",
+        "iterations": 0,
+        "tool_calls": 0,
+        "answer_contains": false,
+        "event_kinds": []
+      }
+    }
+  ]
+}

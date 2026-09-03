@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "seam": "session",
   "description": "session seam golden fixtures (real JSONL session log)",
   "categories": ["success", "serialization"],
@@ -12,7 +13,14 @@
           { "kind": "assistant", "content": "here is the listing" }
         ]
       },
-      "expect": { "derived_roles": ["user", "assistant"] }
+      "expect": {
+        "events": [
+          { "seq": 0, "kind": "user" },
+          { "seq": 1, "kind": "assistant" }
+        ],
+        "since_after_first": 1,
+        "derived_roles": ["user", "assistant"]
+      }
     },
     {
       "name": "jsonl_roundtrip_resume",
@@ -23,7 +31,108 @@
           { "kind": "assistant", "content": "done" }
         ]
       },
-      "expect": { "resumed_event_count": 2 }
+      "expect": {
+        "event_count_before_resume": 2,
+        "resumed_event_count": 2,
+        "next_seq": 2
+      }
+    },
+    {
+      "name": "fork_isolated_history",
+      "category": "fork",
+      "input": {
+        "source_id": "fork-source",
+        "target_id": "fork-target",
+        "events": [
+          { "kind": "user", "content": "before fork" }
+        ],
+        "source_after_fork": "source only"
+      },
+      "expect": {
+        "source_event_count": 2,
+        "fork_event_count": 1,
+        "fork_last_content": "before fork"
+      }
+    },
+    {
+      "name": "checkpoint_persists_snapshot",
+      "category": "checkpoint",
+      "input": {
+        "session_id": "checkpoint-session",
+        "checkpoint": "before-change",
+        "events": [
+          { "kind": "user", "content": "stable" }
+        ]
+      },
+      "expect": {
+        "checkpoint_event_count": 1,
+        "checkpoint_exists": true
+      }
+    },
+    {
+      "name": "restore_rolls_back_and_continues",
+      "category": "restore",
+      "input": {
+        "session_id": "restore-session",
+        "checkpoint": "restore-point",
+        "before": "keep",
+        "after": "discard"
+      },
+      "expect": {
+        "restored_event_count": 1,
+        "restored_content": "keep",
+        "next_seq": 1,
+        "disk_event_count": 1
+      }
+    },
+    {
+      "name": "corrupted_log_rejected",
+      "category": "corruption",
+      "input": {
+        "session_id": "corrupt-session",
+        "content": "not-json"
+      },
+      "expect": { "ok": false, "error_class": "invalid_session_line" }
+    },
+    {
+      "name": "unsupported_log_version_rejected",
+      "category": "version",
+      "input": {
+        "session_id": "version-session",
+        "version": 99
+      },
+      "expect": { "ok": false, "error_class": "unsupported_session_log_version" }
+    },
+    {
+      "name": "concurrent_append_is_contiguous",
+      "category": "concurrency",
+      "input": {
+        "session_id": "concurrent-session",
+        "workers": 4,
+        "events_per_worker": 8
+      },
+      "expect": {
+        "event_count": 32,
+        "seq_first": 0,
+        "seq_last": 31,
+        "persisted_event_count": 32,
+        "seq_contiguous": true
+      }
+    },
+    {
+      "name": "restore_is_idempotent",
+      "category": "idempotency",
+      "input": {
+        "session_id": "idempotent-session",
+        "checkpoint": "same-point",
+        "content": "only once"
+      },
+      "expect": {
+        "first_restore_count": 1,
+        "second_restore_count": 1,
+        "disk_event_count": 1,
+        "next_seq": 1
+      }
     }
   ]
 }

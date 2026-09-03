@@ -34,6 +34,8 @@ pub const SESSION_MANAGER: ServiceKey = ServiceKey::new("session-manager");
 
 /// `workflow` seam 服务键(工作流引擎)。
 pub const WORKFLOW: ServiceKey = ServiceKey::new("workflow");
+/// `workflow-components` seam 服务键(可注册组件能力)。
+pub const WORKFLOW_COMPONENTS: ServiceKey = ServiceKey::new("workflow-components");
 
 /// `memory` seam 服务键(持久化记忆)。
 pub const MEMORY: ServiceKey = ServiceKey::new("memory");

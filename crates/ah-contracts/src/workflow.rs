@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use serde_json::Value;
+use std::sync::Arc;
 
 use crate::seam::Seam;
 
@@ -21,7 +22,7 @@ pub enum NodeKind {
     Loop,
     /// 子工作流组件:执行内嵌 WorkflowSpec(config: {workflow: WorkflowSpec})。
     SubWorkflow,
-    /// 并行组件:并发执行多个目标节点(config: {targets: [node_id...]})。
+    /// 并行组件:并发执行多个目标节点(config: {targets: [node_id...]}).
     Parallel,
     /// HTTP 组件:真实请求(config: {url, timeout_ms?}),输出 {status, body}。
     Http,
@@ -31,6 +32,27 @@ pub enum NodeKind {
     /// 提问组件(config: {question, timeout_ms?}):经 queue 发布问题并等待回答,
     /// 输出 {answer}。
     Questioner,
+    /// 用户注册的组件(config: {component: string, ability: string})。
+    Component,
+}
+
+/// 可注册的 workflow 组件;能力模型对齐 Python Executable。
+#[async_trait]
+pub trait WorkflowComponent: Seam {
+    /// 批量输入、批量输出。
+    async fn invoke(&self, input: Value) -> Result<Value, WorkflowError>;
+    /// 批量输入、流式输出;Vec 的顺序就是 stream chunk 顺序。
+    async fn stream(&self, input: Value) -> Result<Vec<Value>, WorkflowError>;
+    /// 流式输入、批量输出。
+    async fn collect(&self, inputs: Vec<Value>) -> Result<Value, WorkflowError>;
+    /// 流式输入、流式输出;Vec 的顺序就是 transform chunk 顺序。
+    async fn transform(&self, inputs: Vec<Value>) -> Result<Vec<Value>, WorkflowError>;
+}
+
+/// workflow 组件注册表 seam。
+#[async_trait]
+pub trait WorkflowComponentRegistry: Seam {
+    fn get(&self, name: &str) -> Option<Arc<dyn WorkflowComponent>>;
 }
 
 /// 节点规格。
@@ -94,12 +116,52 @@ impl core::fmt::Display for WorkflowError {
 
 impl std::error::Error for WorkflowError {}
 
+/// Workflow 流式输出接收端;实现方负责背压、校验和生命周期关闭。
+#[async_trait]
+pub trait WorkflowStreamSink: Seam {
+    /// 发送一个可序列化的 workflow chunk。
+    async fn emit(&self, chunk: Value) -> Result<(), WorkflowError>;
+
+    /// 结束本次流并释放接收端资源。
+    async fn close(&self) -> Result<(), WorkflowError>;
+    /// 查询接收端是否请求中断当前 workflow。
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
 /// 工作流执行引擎 Seam(Service Definition)。
 #[async_trait]
 pub trait WorkflowEngine: Seam {
     /// 执行工作流;组件真实调用 llm/tools seam,执行轨迹通过事件发布。
     async fn run(&self, spec: &WorkflowSpec, input: Value)
     -> Result<WorkflowOutput, WorkflowError>;
+    /// 流式执行工作流;节点输出和最终输出按产生顺序发送给 sink。
+    async fn stream(
+        &self,
+        spec: &WorkflowSpec,
+        input: Value,
+        sink: Arc<dyn WorkflowStreamSink>,
+    ) -> Result<WorkflowOutput, WorkflowError> {
+        let _ = (spec, input, sink);
+        Err(WorkflowError(
+            "workflow stream is not supported".to_string(),
+        ))
+    }
+
+    /// 流式执行并按节点持久化 checkpoint;已有节点输出会作为 resumed chunk 发送。
+    async fn stream_checkpointed(
+        &self,
+        spec: &WorkflowSpec,
+        input: Value,
+        checkpoint_path: &std::path::Path,
+        sink: Arc<dyn WorkflowStreamSink>,
+    ) -> Result<CheckpointedOutput, WorkflowError> {
+        let _ = (spec, input, checkpoint_path, sink);
+        Err(WorkflowError(
+            "workflow checkpointed stream is not supported".to_string(),
+        ))
+    }
 
     /// 带检查点执行:每节点输出追加到 JSONL(checkpoint_path),已有记录直接复用;
     /// 返回新执行与复用的节点序列。

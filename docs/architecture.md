@@ -86,6 +86,8 @@ agent-harness/
 - **mock 门禁**:生产 profile 展开后不得包含 `plugin-mock` 插件;CI 校验(见 development.md);
 - 同一个插件实例可被多个 profile 复用;环境选择通过 profile/overlay 表达,不改代码。
 
+当前插件模型是静态编译、启动时组合、关闭时释放;运行中热插拔和动态 ABI 不属于产品范围。插件仍必须在正常关闭时通过 `Effect` 撤销注册,并显式终止自己创建的后台任务、子进程和 transport。
+
 ### 3.6 日志即真相(session log)
 
 会话子系统(ah-plugins-session-log)已实现,采用 DSH 原则:**模型可见即已记录**。

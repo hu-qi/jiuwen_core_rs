@@ -43,6 +43,8 @@ pub struct ChatMessage {
     pub tool_call_id: Option<String>,
     /// Assistant 消息携带的工具调用。
     pub tool_calls: Option<Vec<ToolCall>>,
+    /// Thinking-mode provider 要求回传的推理内容。
+    pub reasoning_content: Option<String>,
 }
 
 impl ChatMessage {
@@ -53,6 +55,7 @@ impl ChatMessage {
             content: content.into(),
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 
@@ -63,6 +66,7 @@ impl ChatMessage {
             content: String::new(),
             tool_call_id: None,
             tool_calls: Some(tool_calls),
+            reasoning_content: None,
         }
     }
 
@@ -73,6 +77,7 @@ impl ChatMessage {
             content: content.into(),
             tool_call_id: Some(tool_call_id.into()),
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 }
@@ -93,6 +98,8 @@ pub struct ModelResponse {
     pub content: String,
     /// 模型请求执行的工具调用(空表示直接给出最终回答)。
     pub tool_calls: Vec<ToolCall>,
+    /// Thinking-mode provider 返回的推理内容。
+    pub reasoning_content: Option<String>,
 }
 
 /// 流式输出块(SSE / chunk 的增量)。
@@ -100,12 +107,13 @@ pub struct ModelResponse {
 pub struct ModelChunk {
     /// 本轮内容增量。
     pub content_delta: String,
+    /// Thinking-mode provider 的推理内容增量。
+    pub reasoning_delta: String,
     /// 增量工具调用(参数为增量拼接,消费方负责累加)。
     pub tool_call_deltas: Vec<ToolCallDelta>,
     /// 是否结束。
     pub done: bool,
 }
-
 /// 工具调用增量(SSE tool_calls 的 delta)。
 #[derive(Debug, Clone, Default)]
 pub struct ToolCallDelta {
@@ -149,6 +157,7 @@ pub trait ModelProvider: Seam {
         let response = self.chat(request).await?;
         let chunk = ModelChunk {
             content_delta: response.content,
+            reasoning_delta: response.reasoning_content.unwrap_or_default(),
             tool_call_deltas: response
                 .tool_calls
                 .into_iter()

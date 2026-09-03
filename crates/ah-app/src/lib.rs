@@ -3,6 +3,7 @@
 //! boot 入口:读取 profile → 组装插件 → 返回已挂载的 Context。
 //! demo(main.rs)与交互 CLI(bin/ah-cli.rs)共用本模块。
 
+pub mod audit;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -11,13 +12,16 @@ use ah_contracts::session::SessionManager;
 use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
 use ah_hub::profile::Profile;
+use ah_plugins_a2a::A2APlugin;
 use ah_plugins_ability::AbilityPlugin;
 use ah_plugins_agent_control::AgentControlPlugin;
 use ah_plugins_agent_loop::AgentLoopPlugin;
+use ah_plugins_agentbuilder::AgentBuilderPlugin;
 use ah_plugins_anthropic::AnthropicPlugin;
 use ah_plugins_application::ApplicationPlugin;
 use ah_plugins_autoharness::AutoHarnessPlugin;
-use ah_plugins_checkpointer::CheckpointerPlugin;
+use ah_plugins_bridge_compose::BridgeComposePlugin;
+use ah_plugins_checkpointer::{CheckpointerPlugin, redis_store::RedisCheckpointerStore};
 use ah_plugins_ci::CiPlugin;
 use ah_plugins_cli::CliPlugin;
 use ah_plugins_code::CodePlugin;
@@ -26,12 +30,17 @@ use ah_plugins_context::ContextPlugin;
 use ah_plugins_context_evolver::ContextEvolverPlugin;
 use ah_plugins_controller::ControllerPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
+use ah_plugins_data_loader::DataLoaderPlugin;
+use ah_plugins_dataset_curator::DatasetCuratorPlugin;
 use ah_plugins_evolving::EvolvingPlugin;
 use ah_plugins_experience_scorer::ExperienceScorerPlugin;
 use ah_plugins_external::ExternalCliPlugin;
 use ah_plugins_external::ExternalClientPlugin;
+use ah_plugins_external_format::ExternalFormatPlugin;
 use ah_plugins_git::GitPlugin;
 use ah_plugins_graph_memory::GraphMemoryPlugin;
+use ah_plugins_inbound_render::InboundRenderPlugin;
+use ah_plugins_interaction_router::InteractionRouterPlugin;
 use ah_plugins_json_parser::JsonParserPlugin;
 use ah_plugins_kv_cache::KvcCachePlugin;
 use ah_plugins_lsp::LspPlugin;
@@ -41,6 +50,7 @@ use ah_plugins_member_optimizer::MemberOptimizerPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_memory_lite::MemoryLitePlugin;
 use ah_plugins_mock::MockPlugin;
+use ah_plugins_model_allocator::ModelAllocatorPlugin;
 use ah_plugins_model_backup::{ModelBackupPlugin, ModelBackupPolicyPlugin};
 use ah_plugins_model_catalog::ModelCatalogPlugin;
 use ah_plugins_oauth::OAuthPlugin;
@@ -81,6 +91,7 @@ use ah_plugins_team_schema::TeamSchemaPlugin;
 use ah_plugins_team_task_status::TeamTaskStatusPlugin;
 use ah_plugins_tools_metadata::ToolsMetadataPlugin;
 
+use ah_plugins_prompt_attachment::PromptAttachmentPlugin;
 use ah_plugins_security::SecurityRailPlugin;
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_sharing::{LocalSharingBackend, SharingPlugin};
@@ -126,6 +137,10 @@ use ah_plugins_worktree::WorktreePlugin;
 /// - ah-plugins-openai 惰性解析配置:apply 时先查 credentials seam
 ///   (openai.api_key),再 fallback 到 OPENAI_API_KEY 环境变量;
 ///   两者都无 key 时挂载显式失败(不静默降级)。
+fn redis_url() -> String {
+    std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".to_string())
+}
+
 pub fn plugin_catalog(
     workspace_root: &Path,
     session_path: &PathBuf,
@@ -134,6 +149,7 @@ pub fn plugin_catalog(
     retrieval_dir: &PathBuf,
     telemetry_dir: &PathBuf,
 ) -> Vec<(&'static str, DynPlugin)> {
+    let redis_url = redis_url();
     let mut catalog: Vec<(&'static str, DynPlugin)> = vec![
         ("ah-plugins-mock", Arc::new(MockPlugin) as DynPlugin),
         (
@@ -251,7 +267,7 @@ pub fn plugin_catalog(
         ),
         (
             "ah-plugins-store-redis",
-            Arc::new(RedisStorePlugin::new("redis://127.0.0.1:6379/")) as DynPlugin,
+            Arc::new(RedisStorePlugin::new(redis_url.clone())) as DynPlugin,
         ),
         (
             "ah-plugins-store-pg",
@@ -269,7 +285,7 @@ pub fn plugin_catalog(
         ),
         (
             "ah-plugins-queue-redis",
-            Arc::new(RedisQueuePlugin::new("redis://127.0.0.1:6379/")) as DynPlugin,
+            Arc::new(RedisQueuePlugin::new(redis_url.clone())) as DynPlugin,
         ),
         (
             "ah-plugins-workspace",
@@ -294,6 +310,7 @@ pub fn plugin_catalog(
                 skills: vec!["agent".to_string()],
             })) as DynPlugin,
         ),
+        ("ah-plugins-a2a", Arc::new(A2APlugin) as DynPlugin),
         ("ah-plugins-git", Arc::new(GitPlugin) as DynPlugin),
         (
             "ah-plugins-graph-memory",
@@ -301,14 +318,15 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-ci", Arc::new(CiPlugin) as DynPlugin),
         (
+            "ah-plugins-bridge-compose",
+            Arc::new(BridgeComposePlugin) as DynPlugin,
+        ),
+        (
             "ah-plugins-checkpointer",
-            // 真实 Redis checkpointer;store_factory 由宿主注入 RedisStore 后端。
-            // 无真实 Redis 时挂载失败由后端显式报错(不静默 fallback)。
+            // 真实 Redis checkpointer;连接失败显式阻止 production boot。
             Arc::new(CheckpointerPlugin::new(Arc::new(|info| {
-                Err(ah_contracts::checkpointer::CheckpointerError(format!(
-                    "no redis-store backend injected for checkpointer: {} (cluster={})",
-                    info.url, info.cluster_mode
-                )))
+                RedisCheckpointerStore::open(&info.url)
+                    .map(|store| Arc::new(store) as Arc<dyn ah_contracts::checkpointer::RedisStore>)
             }))) as DynPlugin,
         ),
         ("ah-plugins-cli", Arc::new(CliPlugin) as DynPlugin),
@@ -340,6 +358,10 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-kv-cache", Arc::new(KvcCachePlugin) as DynPlugin),
         (
+            "ah-plugins-model-allocator",
+            Arc::new(ModelAllocatorPlugin) as DynPlugin,
+        ),
+        (
             "ah-plugins-model-catalog",
             Arc::new(ModelCatalogPlugin) as DynPlugin,
         ),
@@ -363,6 +385,14 @@ pub fn plugin_catalog(
         (
             "ah-plugins-team-message",
             Arc::new(TeamMessagePlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-data-loader",
+            Arc::new(DataLoaderPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-dataset-curator",
+            Arc::new(DatasetCuratorPlugin) as DynPlugin,
         ),
         (
             "ah-plugins-timefmt",
@@ -413,6 +443,10 @@ pub fn plugin_catalog(
             ))) as DynPlugin,
         ),
         ("ah-plugins-stream", Arc::new(StreamPlugin) as DynPlugin),
+        (
+            "ah-plugins-prompt-attachment",
+            Arc::new(PromptAttachmentPlugin) as DynPlugin,
+        ),
         (
             "ah-plugins-tag-manager",
             Arc::new(TagManagerPlugin) as DynPlugin,
@@ -564,6 +598,22 @@ pub fn plugin_catalog(
             Arc::new(ModelBackupPlugin::new(Vec::new())) as DynPlugin,
         ),
         (
+            "ah-plugins-external-format",
+            Arc::new(ExternalFormatPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-inbound-render",
+            Arc::new(InboundRenderPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-interaction-router",
+            Arc::new(InteractionRouterPlugin) as DynPlugin,
+        ),
+        (
+            "ah-plugins-agentbuilder",
+            Arc::new(AgentBuilderPlugin) as DynPlugin,
+        ),
+        (
             // 真实外部成员客户端工厂(ExternalTeamClient):依赖 external-format /
             // team-message / team-i18n / team-context / timefmt / inbound-render
             // / team-prompt-loader seam,须排在它们之后挂载(apply 时解析,缺失显式报错)。
@@ -679,6 +729,110 @@ pub type BootResult = (Context, Vec<ah_contracts::Effect>);
 
 /// 按 profile 组装插件并返回已挂载的 Context 与注册 Effects。
 ///
+fn parse_env_line(line: &str, line_number: usize) -> Result<Option<(String, String)>, String> {
+    let line = line.trim_start_matches('\u{feff}').trim();
+    if line.is_empty() || line.starts_with('#') {
+        return Ok(None);
+    }
+    let assignment = line.strip_prefix("export ").unwrap_or(line);
+    let (raw_key, raw_value) = assignment
+        .split_once('=')
+        .ok_or_else(|| format!("invalid env file line {line_number}: expected KEY=VALUE"))?;
+    let key = raw_key.trim();
+    if key.is_empty()
+        || !key
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        return Err(format!("invalid env key on line {line_number}"));
+    }
+    let value = raw_value.trim();
+    let value = if value.starts_with('"') {
+        if !value.ends_with('"') || value.len() < 2 {
+            return Err(format!(
+                "unterminated double-quoted env value on line {line_number}"
+            ));
+        }
+        let mut unescaped = String::new();
+        let mut escaped = false;
+        for character in value[1..value.len() - 1].chars() {
+            if escaped {
+                unescaped.push(match character {
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    other => other,
+                });
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else {
+                unescaped.push(character);
+            }
+        }
+        if escaped {
+            return Err(format!("invalid escape on line {line_number}"));
+        }
+        unescaped
+    } else if value.starts_with('\'') {
+        if !value.ends_with('\'') || value.len() < 2 {
+            return Err(format!(
+                "unterminated single-quoted env value on line {line_number}"
+            ));
+        }
+        value[1..value.len() - 1].to_string()
+    } else {
+        value.to_string()
+    };
+    Ok(Some((key.to_string(), value)))
+}
+
+fn load_env_file(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    load_env_file_mode(path, false)
+}
+
+fn load_env_file_mode(
+    path: &Path,
+    override_existing: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|error| format!("read env file {}: {error}", path.display()))?;
+    for (index, line) in content.lines().enumerate() {
+        if let Some((key, value)) = parse_env_line(line, index + 1)
+            .map_err(|error| format!("{}: {error}", path.display()))?
+            && (override_existing || std::env::var_os(&key).is_none())
+        {
+            // SAFETY: boot loads configuration before starting application
+            // work. Explicit AH_ENV_FILE is an intentional configuration source.
+            unsafe { std::env::set_var(key, value) };
+        }
+    }
+    Ok(())
+}
+
+fn load_env_for_boot(profile_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(path) = std::env::var_os("AH_ENV_FILE") {
+        let path = PathBuf::from(path);
+        if path.as_os_str().is_empty() {
+            return Err("AH_ENV_FILE must not be empty".into());
+        }
+        return load_env_file_mode(&path, true);
+    }
+    let mut candidates = vec![std::env::current_dir()?.join(".env")];
+    let profile = Path::new(profile_path);
+    if let Some(parent) = profile.parent().and_then(Path::parent) {
+        let candidate = parent.join(".env");
+        if !candidates.iter().any(|path| path == &candidate) {
+            candidates.push(candidate);
+        }
+    }
+    if let Some(path) = candidates.into_iter().find(|path| path.is_file()) {
+        load_env_file(&path)?;
+    }
+    Ok(())
+}
+
+/// 按 profile 组装插件的结果:Context + 必须持有的注册 Effects。
 /// **调用方必须持有返回的 Effects 直到不再需要服务**(drop 即反注册)。
 pub fn boot(
     profile_path: &str,
@@ -689,6 +843,7 @@ pub fn boot(
     retrieval_dir: &PathBuf,
     telemetry_dir: &PathBuf,
 ) -> Result<BootResult, Box<dyn std::error::Error>> {
+    load_env_for_boot(profile_path)?;
     let profile = Profile::load(profile_path)?;
     let configured_backup_names = model_backup_provider_names(&profile);
     let configured_controller_snapshot = controller_snapshot_path(&profile, workspace_root)
@@ -820,8 +975,75 @@ impl ah_contracts::skill_creator::SkillGenerator for UninjectedSkillGenerator {
 
 #[cfg(test)]
 mod tests {
-    use super::{controller_snapshot_path, model_backup_policy, model_backup_provider_names};
+    use super::{
+        controller_snapshot_path, load_env_file, load_env_for_boot, model_backup_policy,
+        model_backup_provider_names, parse_env_line, redis_url,
+    };
     use ah_hub::profile::Profile;
+    #[test]
+    fn parses_dotenv_lines_without_expanding_values() {
+        assert_eq!(
+            parse_env_line("export OPENAI_MODEL=deepseek-chat", 1).unwrap(),
+            Some(("OPENAI_MODEL".into(), "deepseek-chat".into()))
+        );
+        assert_eq!(
+            parse_env_line("OPENAI_BASE_URL=\"https://example.test/v1\"", 2).unwrap(),
+            Some(("OPENAI_BASE_URL".into(), "https://example.test/v1".into()))
+        );
+        assert!(parse_env_line("OPENAI-API-KEY=bad", 3).is_err());
+    }
+
+    #[test]
+    fn loads_dotenv_value_without_overwriting_process_environment() {
+        let key = format!("AH_APP_ENV_FILE_TEST_{}", std::process::id());
+        let path = std::env::temp_dir().join(format!("ah-app-env-{}.env", std::process::id()));
+        let previous = std::env::var_os(&key);
+        unsafe { std::env::remove_var(&key) };
+        std::fs::write(&path, format!("{key}=loaded\n")).expect("write env file");
+        load_env_file(&path).expect("load env file");
+        assert_eq!(std::env::var(&key).as_deref(), Ok("loaded"));
+        match previous {
+            Some(value) => unsafe { std::env::set_var(&key, value) },
+            None => unsafe { std::env::remove_var(&key) },
+        }
+        let _ = std::fs::remove_file(path);
+    }
+    #[test]
+    fn explicit_env_file_path_is_loaded_before_profile() {
+        let key = format!("AH_APP_EXPLICIT_ENV_TEST_{}", std::process::id());
+        let path = std::env::temp_dir().join(format!("ah-app-explicit-{}.env", std::process::id()));
+        let previous_key = std::env::var_os(&key);
+        let previous_file = std::env::var_os("AH_ENV_FILE");
+        unsafe {
+            std::env::set_var(&key, "inherited");
+            std::env::set_var("AH_ENV_FILE", &path);
+        }
+        std::fs::write(&path, format!("{key}=explicit\n")).expect("write env file");
+        load_env_for_boot("profiles/prod.toml").expect("load explicit env file");
+        assert_eq!(std::env::var(&key).as_deref(), Ok("explicit"));
+        match previous_key {
+            Some(value) => unsafe { std::env::set_var(&key, value) },
+            None => unsafe { std::env::remove_var(&key) },
+        }
+        match previous_file {
+            Some(value) => unsafe { std::env::set_var("AH_ENV_FILE", value) },
+            None => unsafe { std::env::remove_var("AH_ENV_FILE") },
+        }
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn redis_url_uses_environment_and_has_local_default() {
+        let previous = std::env::var_os("REDIS_URL");
+        unsafe { std::env::remove_var("REDIS_URL") };
+        assert_eq!(redis_url(), "redis://127.0.0.1:6379/");
+        unsafe { std::env::set_var("REDIS_URL", "redis://:secret@example.test:6380/2") };
+        assert_eq!(redis_url(), "redis://:secret@example.test:6380/2");
+        match previous {
+            Some(value) => unsafe { std::env::set_var("REDIS_URL", value) },
+            None => unsafe { std::env::remove_var("REDIS_URL") },
+        }
+    }
 
     #[test]
     fn parses_controller_snapshot_path_and_rejects_escape() {

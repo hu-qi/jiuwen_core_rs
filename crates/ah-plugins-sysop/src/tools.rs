@@ -127,6 +127,9 @@ impl Tool for ListDirTool {
             "properties": { "path": { "type": "string" } },
         })
     }
+    fn idempotent(&self) -> bool {
+        true
+    }
 
     async fn invoke(&self, arguments: Value) -> Result<Value, ToolError> {
         let path = arguments.get("path").and_then(Value::as_str).unwrap_or(".");

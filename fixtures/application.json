@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "seam": "application",
+  "description": "application Rust-only boot and invoke contract traces",
+  "categories": ["boot", "agent", "workflow", "invalid"],
+  "cases": [
+    {
+      "name": "dev_boot_agent_invoke",
+      "category": "agent",
+      "input": {
+        "session_id": "application-agent",
+        "input": "hello",
+        "timeout_ms": 5000,
+        "answer_contains": "mock final answer"
+      },
+      "expect": {
+        "state": "completed",
+        "failure": null,
+        "session_id": "application-agent",
+        "answer_contains": true
+      }
+    },
+    {
+      "name": "dev_boot_workflow_invoke",
+      "category": "workflow",
+      "input": {
+        "session_id": "application-workflow",
+        "input": "run workflow",
+        "timeout_ms": 5000,
+        "workflow": {
+          "id": "application-workflow",
+          "nodes": [
+            {"id": "start", "kind": "start", "config": {}},
+            {"id": "end", "kind": "end", "config": {}}
+          ],
+          "edges": [{"from": "start", "to": "end"}]
+        }
+      },
+      "expect": {
+        "state": "completed",
+        "failure": null,
+        "session_id": "application-workflow",
+        "answer": "{\"input\":\"run workflow\"}"
+      }
+    },
+    {
+      "name": "empty_request_rejected",
+      "category": "invalid",
+      "input": {"session_id": "", "input": "hello"},
+      "expect": {"ok": false, "error_class": "invalid_request"}
+    }
+  ]
+}

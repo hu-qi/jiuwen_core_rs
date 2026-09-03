@@ -39,6 +39,18 @@ pub trait Tool: Send + Sync + 'static {
 
     /// 执行工具,返回 JSON 结果。
     async fn invoke(&self, arguments: Value) -> Result<Value, ToolError>;
+
+    /// 是否允许在崩溃恢复时重试同一调用。
+    ///
+    /// 默认 false,采取失败关闭策略。只有工具能以 `call_id` 去重时才可返回 true。
+    fn idempotent(&self) -> bool {
+        false
+    }
+
+    /// 携带持久化 tool-call id 执行,供幂等工具实现去重。
+    async fn invoke_with_id(&self, _call_id: &str, arguments: Value) -> Result<Value, ToolError> {
+        self.invoke(arguments).await
+    }
 }
 
 /// 工具注册表 seam:工具集合的 Service Definition。
@@ -55,8 +67,18 @@ pub trait ToolRegistry: Seam {
     /// 当前全部工具名(无序)。
     fn names(&self) -> Vec<String>;
 
-    /// 按名调用工具。
     async fn invoke(&self, name: &str, arguments: Value) -> Result<Value, ToolError>;
+    /// 按名调用工具。
+    /// Execute a tool while preserving the stable call ID.
+    async fn invoke_with_id(
+        &self,
+        name: &str,
+        call_id: &str,
+        arguments: Value,
+    ) -> Result<Value, ToolError> {
+        let _ = call_id;
+        self.invoke(name, arguments).await
+    }
 }
 
 // ------------------------------------------------------------------

@@ -280,6 +280,7 @@ mod tests {
             Ok(ModelResponse {
                 content: "ok".into(),
                 tool_calls: vec![],
+                reasoning_content: None,
             })
         }
     }
@@ -296,6 +297,7 @@ mod tests {
             Ok(ModelResponse {
                 content: "late".into(),
                 tool_calls: vec![],
+                reasoning_content: None,
             })
         }
     }

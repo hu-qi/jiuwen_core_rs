@@ -38,6 +38,51 @@ impl LocalToolRegistry {
         }
     }
 }
+impl LocalToolRegistry {
+    async fn invoke_impl(
+        &self,
+        name: &str,
+        call_id: Option<&str>,
+        arguments: Value,
+    ) -> Result<Value, ToolError> {
+        let decision = self
+            .ctx
+            .waterfall(
+                ToolInvocation {
+                    name: name.to_string(),
+                    arguments: arguments.clone(),
+                },
+                ToolDecision::allow(arguments.clone()),
+            )
+            .await;
+        if !decision.allow {
+            let reason = decision
+                .reason
+                .unwrap_or_else(|| "rejected by rail".to_string());
+            return Err(ToolError(format!("rejected by rail: {reason}")));
+        }
+
+        let tool = self
+            .get(name)
+            .ok_or_else(|| ToolError(format!("tool not found: {name}")))?;
+        let started = Instant::now();
+        let output = if let Some(call_id) = call_id {
+            tool.invoke_with_id(call_id, decision.arguments).await?
+        } else {
+            tool.invoke(decision.arguments).await?
+        };
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        self.ctx
+            .serial(ToolExecuted {
+                name: name.to_string(),
+                arguments,
+                output: output.clone(),
+                elapsed_ms,
+            })
+            .await;
+        Ok(output)
+    }
+}
 
 impl Seam for LocalToolRegistry {}
 
@@ -61,43 +106,16 @@ impl ToolRegistry for LocalToolRegistry {
     }
 
     async fn invoke(&self, name: &str, arguments: Value) -> Result<Value, ToolError> {
-        // 1) pre-execute:waterfall(rails 可拒绝/改写)。
-        let decision = self
-            .ctx
-            .waterfall(
-                ToolInvocation {
-                    name: name.to_string(),
-                    arguments: arguments.clone(),
-                },
-                ToolDecision::allow(arguments.clone()),
-            )
-            .await;
-        if !decision.allow {
-            let reason = decision
-                .reason
-                .unwrap_or_else(|| "rejected by rail".to_string());
-            return Err(ToolError(format!("rejected by rail: {reason}")));
-        }
+        self.invoke_impl(name, None, arguments).await
+    }
 
-        // 2) 执行(使用可能被改写后的参数)。
-        let tool = self
-            .get(name)
-            .ok_or_else(|| ToolError(format!("tool not found: {name}")))?;
-        let started = Instant::now();
-        let output = tool.invoke(decision.arguments).await?;
-        let elapsed_ms = started.elapsed().as_millis() as u64;
-
-        // 3) post-execute:serial(顺序通知遥测/审计)。
-        self.ctx
-            .serial(ToolExecuted {
-                name: name.to_string(),
-                arguments: arguments.clone(),
-                output: output.clone(),
-                elapsed_ms,
-            })
-            .await;
-
-        Ok(output)
+    async fn invoke_with_id(
+        &self,
+        name: &str,
+        call_id: &str,
+        arguments: Value,
+    ) -> Result<Value, ToolError> {
+        self.invoke_impl(name, Some(call_id), arguments).await
     }
 }
 
@@ -175,6 +193,55 @@ mod tests {
         assert_eq!(output["echo"]["x"], 1);
         assert_eq!(*seen.lock().unwrap(), vec!["noop".to_string()]);
 
+        drop(effects);
+    }
+    #[tokio::test]
+    async fn invoke_with_id_passes_stable_id_to_tool() {
+        struct IdAwareTool {
+            seen: Arc<Mutex<Vec<String>>>,
+        }
+
+        #[async_trait]
+        impl Tool for IdAwareTool {
+            fn name(&self) -> &'static str {
+                "id_aware"
+            }
+
+            fn description(&self) -> &'static str {
+                "records the idempotency key"
+            }
+
+            fn idempotent(&self) -> bool {
+                true
+            }
+
+            async fn invoke(&self, _arguments: Value) -> Result<Value, ToolError> {
+                Ok(json!({"fallback": true}))
+            }
+
+            async fn invoke_with_id(
+                &self,
+                call_id: &str,
+                _arguments: Value,
+            ) -> Result<Value, ToolError> {
+                self.seen.lock().unwrap().push(call_id.to_string());
+                Ok(json!({"deduplicated": true}))
+            }
+        }
+
+        let ctx = Context::new();
+        let plugin: DynPlugin = Arc::new(ToolsPlugin);
+        let effects = ctx.mount(&plugin).expect("mount tools");
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let tool_effect = registry.register(Arc::new(IdAwareTool { seen: seen.clone() }));
+        let result = registry
+            .invoke_with_id("id_aware", "call-42", json!({}))
+            .await
+            .expect("invoke with id");
+        assert_eq!(result["deduplicated"], true);
+        assert_eq!(*seen.lock().unwrap(), vec!["call-42"]);
+        drop(tool_effect);
         drop(effects);
     }
 

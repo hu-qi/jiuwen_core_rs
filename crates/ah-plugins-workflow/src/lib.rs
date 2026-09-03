@@ -8,18 +8,16 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use ah_contracts::event::Event;
-use ah_contracts::keys::{LLM, QUEUE, SESSIONS, TOOLS, WEB, WORKFLOW};
+use ah_contracts::keys::{LLM, QUEUE, SESSIONS, TOOLS, WEB, WORKFLOW, WORKFLOW_COMPONENTS};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
-use ah_contracts::prelude::Effect;
-use ah_contracts::queue::MessageQueue;
-use ah_contracts::seam::Seam;
-use ah_contracts::service::ServiceKey;
-use ah_contracts::session::{SessionEventKind, SessionLog};
-use ah_contracts::tools::ToolRegistry;
-use ah_contracts::web::{WebFetchRequest, WebProvider};
+use ah_contracts::prelude::{
+    Effect, MessageQueue, Seam, ServiceKey, SessionEventKind, SessionLog, ToolRegistry,
+    WebFetchRequest, WebProvider,
+};
 use ah_contracts::workflow::{
-    CheckpointedOutput, EdgeSpec, NodeKind, NodeSpec, WorkflowEngine, WorkflowError,
-    WorkflowOutput, WorkflowSpec,
+    CheckpointedOutput, ComponentAbility, EdgeSpec, NodeKind, NodeSpec, WorkflowComponent,
+    WorkflowComponentRegistry, WorkflowEngine, WorkflowError, WorkflowOutput, WorkflowSpec,
+    WorkflowStreamSink,
 };
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
@@ -38,7 +36,6 @@ pub struct WorkflowNodeEvent {
 impl Event for WorkflowNodeEvent {
     const ID: &'static str = "workflow/node";
 }
-
 /// 真实工作流引擎。
 pub struct WorkflowEngineImpl {
     llm: Arc<dyn ModelProvider>,
@@ -48,6 +45,8 @@ pub struct WorkflowEngineImpl {
     web: Option<Arc<dyn WebProvider>>,
     /// 可选 queue seam(Questioner 节点用;未挂载时显式报错)。
     queue: Option<Arc<dyn MessageQueue>>,
+    /// 用户组件 registry;未注册组件时显式报错,不静默降级。
+    components: Option<Arc<dyn WorkflowComponentRegistry>>,
     ctx: Context,
 }
 
@@ -67,8 +66,23 @@ impl WorkflowEngineImpl {
             sessions,
             web,
             queue,
+            components: None,
             ctx,
         }
+    }
+
+    /// 设置用户组件 registry;组件查找按 node.config.component 名称进行。
+    pub fn with_components(mut self, components: Arc<dyn WorkflowComponentRegistry>) -> Self {
+        self.components = Some(components);
+        self
+    }
+
+    /// 从 Context 读取可选组件 registry。
+    fn components_from_context(&self) -> Option<Arc<dyn WorkflowComponentRegistry>> {
+        self.components.clone().or_else(|| {
+            self.ctx
+                .service::<dyn WorkflowComponentRegistry>(&WORKFLOW_COMPONENTS)
+        })
     }
 
     /// 挂载 web seam(可选;Http 节点使用)。
@@ -264,6 +278,51 @@ impl WorkflowEngineImpl {
             .iter()
             .find(|n| n.id == id)
             .ok_or_else(|| WorkflowError(format!("node not found: {id}")))
+    }
+
+    fn component_ability(node: &NodeSpec) -> Result<ComponentAbility, WorkflowError> {
+        let raw = node
+            .config
+            .get("ability")
+            .and_then(Value::as_str)
+            .unwrap_or("invoke");
+        serde_json::from_value(Value::String(raw.to_string())).map_err(|_| {
+            WorkflowError(format!(
+                "component node {} has unknown ability {raw}",
+                node.id
+            ))
+        })
+    }
+
+    fn component(&self, node: &NodeSpec) -> Result<Arc<dyn WorkflowComponent>, WorkflowError> {
+        let name = node
+            .config
+            .get("component")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                WorkflowError(format!("component node {} missing component", node.id))
+            })?;
+        self.components_from_context()
+            .and_then(|registry| registry.get(name))
+            .ok_or_else(|| WorkflowError(format!("workflow component not registered: {name}")))
+    }
+
+    async fn execute_component(
+        &self,
+        node: &NodeSpec,
+        input: &Value,
+    ) -> Result<Value, WorkflowError> {
+        let component = self.component(node)?;
+        match Self::component_ability(node)? {
+            ComponentAbility::Invoke => component.invoke(input.clone()).await,
+            ComponentAbility::Stream => {
+                Ok(json!({ "chunks": component.stream(input.clone()).await? }))
+            }
+            ComponentAbility::Collect => component.collect(stream_values(input)).await,
+            ComponentAbility::Transform => {
+                Ok(json!({ "chunks": component.transform(stream_values(input)).await? }))
+            }
+        }
     }
 
     fn outgoing<'a>(&self, spec: &'a WorkflowSpec, id: &str) -> Vec<&'a EdgeSpec> {
@@ -473,10 +532,14 @@ impl WorkflowEngineImpl {
                         target_node.id.clone(),
                         self.run_tool(&target_node, &input).await,
                     ),
+                    NodeKind::Component => (
+                        target_node.id.clone(),
+                        self.execute_component(&target_node, &input).await,
+                    ),
                     _ => (
                         target_node.id.clone(),
                         Err(WorkflowError(format!(
-                            "parallel target must be Llm or Tool, got {:?}",
+                            "parallel target must be Llm, Tool, or Component, got {:?}",
                             target_node.kind
                         ))),
                     ),
@@ -498,31 +561,31 @@ impl WorkflowEngineImpl {
         node: &NodeSpec,
         input: &Value,
     ) -> Result<Value, WorkflowError> {
-        let output = match node.kind {
-            NodeKind::Start => input.clone(),
-            NodeKind::End => input.clone(),
-            NodeKind::Llm => self.run_llm(node, input).await?,
-            NodeKind::Tool => self.run_tool(node, input).await?,
-            NodeKind::Loop => self.run_loop(spec, node, input).await?,
-            NodeKind::SubWorkflow => self.run_subworkflow(node, input).await?,
-            NodeKind::Parallel => self.run_parallel(spec, node, input).await?,
-            NodeKind::Http => self.run_http(node, input).await?,
-            NodeKind::Intent => self.run_intent(node, input).await?,
-            NodeKind::Questioner => self.run_questioner(node, input).await?,
+        let output = if node.config.get("component").is_some() || node.kind == NodeKind::Component {
+            self.execute_component(node, input).await?
+        } else {
+            match node.kind {
+                NodeKind::Start => input.clone(),
+                NodeKind::End => input.clone(),
+                NodeKind::Llm => self.run_llm(node, input).await?,
+                NodeKind::Tool => self.run_tool(node, input).await?,
+                NodeKind::Loop => self.run_loop(spec, node, input).await?,
+                NodeKind::SubWorkflow => self.run_subworkflow(node, input).await?,
+                NodeKind::Parallel => self.run_parallel(spec, node, input).await?,
+                NodeKind::Http => self.run_http(node, input).await?,
+                NodeKind::Intent => self.run_intent(node, input).await?,
+                NodeKind::Questioner => self.run_questioner(node, input).await?,
+                NodeKind::Component => unreachable!("component nodes are handled above"),
+            }
         };
         self.ctx.emit(WorkflowNodeEvent {
             workflow_id: spec.id.clone(),
             node_id: node.id.clone(),
             output: output.clone(),
         });
-        // 轨迹写入会话日志(可审计;AgentStep 不影响消息投影)。
         let _ = self.sessions.append(
             SessionEventKind::AgentStep,
-            json!({
-                "workflow": spec.id,
-                "node": node.id,
-                "output": output,
-            }),
+            json!({ "workflow": spec.id, "node": node.id, "output": output }),
         );
         Ok(output)
     }
@@ -557,6 +620,405 @@ impl WorkflowEngineImpl {
             return Err(WorkflowError("workflow contains a cycle".to_string()));
         }
         Ok(order)
+    }
+    async fn run_llm_stream(
+        &self,
+        node: &NodeSpec,
+        input: &Value,
+        workflow_id: &str,
+        sink: &Arc<dyn WorkflowStreamSink>,
+        next_index: &mut usize,
+    ) -> Result<Value, WorkflowError> {
+        let prompt = node
+            .config
+            .get("prompt")
+            .and_then(Value::as_str)
+            .unwrap_or("continue");
+        let context = input
+            .get("output")
+            .cloned()
+            .unwrap_or_else(|| input.clone());
+        let request = ModelRequest {
+            messages: vec![ChatMessage::new(
+                ChatRole::User,
+                format!("{prompt}\nContext: {context}"),
+            )],
+            ..Default::default()
+        };
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        let llm = self.llm.clone();
+        let producer = tokio::spawn(async move { llm.stream_chat(request, tx).await });
+
+        let mut content = String::new();
+        let mut tool_calls: Vec<ah_contracts::llm::ToolCall> = Vec::new();
+        while let Some(chunk) = rx.recv().await {
+            if sink.is_cancelled() {
+                producer.abort();
+                return Err(WorkflowError("workflow stream cancelled".to_string()));
+            }
+            if !chunk.content_delta.is_empty()
+                || !chunk.reasoning_delta.is_empty()
+                || !chunk.tool_call_deltas.is_empty()
+            {
+                let deltas: Vec<Value> = chunk
+                    .tool_call_deltas
+                    .iter()
+                    .map(|delta| {
+                        json!({
+                            "index": delta.index,
+                            "id": delta.id,
+                            "name": delta.name,
+                            "arguments": delta.arguments,
+                        })
+                    })
+                    .collect();
+                sink.emit(json!({
+                    "type": "workflow_delta",
+
+                    "index": *next_index,
+                    "payload": {
+                        "workflow": workflow_id,
+                        "node": node.id,
+                        "content_delta": chunk.content_delta,
+                        "reasoning_delta": chunk.reasoning_delta,
+                        "tool_call_deltas": deltas,
+                    }
+                }))
+                .await?;
+                *next_index += 1;
+            }
+            content.push_str(&chunk.content_delta);
+            for delta in chunk.tool_call_deltas {
+                while tool_calls.len() <= delta.index {
+                    tool_calls.push(ah_contracts::llm::ToolCall {
+                        id: String::new(),
+                        name: String::new(),
+                        arguments: Value::Null,
+                    });
+                }
+                if let Some(id) = delta.id {
+                    tool_calls[delta.index].id = id;
+                }
+                if let Some(name) = delta.name {
+                    tool_calls[delta.index].name = name;
+                }
+                if !delta.arguments.is_empty() {
+                    let current = tool_calls[delta.index]
+                        .arguments
+                        .as_str()
+                        .unwrap_or_default();
+                    let joined = format!("{current}{}", delta.arguments);
+                    tool_calls[delta.index].arguments =
+                        serde_json::from_str(&joined).unwrap_or_else(|_| json!(joined));
+                }
+            }
+        }
+        let producer_result = producer
+            .await
+            .map_err(|error| WorkflowError(format!("llm stream task failed: {error}")))?;
+        producer_result.map_err(|error| WorkflowError(format!("llm node failed: {error}")))?;
+        if !tool_calls.is_empty() {
+            Ok(json!({ "content": content, "tool_calls": tool_calls }))
+        } else {
+            Ok(json!({ "content": content }))
+        }
+    }
+    async fn run_component_stream(
+        &self,
+        node: &NodeSpec,
+        input: &Value,
+        workflow_id: &str,
+        sink: &Arc<dyn WorkflowStreamSink>,
+        stream_index: &mut usize,
+    ) -> Result<Value, WorkflowError> {
+        let component = self.component(node)?;
+        let ability = Self::component_ability(node)?;
+        let output = match ability {
+            ComponentAbility::Invoke => component.invoke(input.clone()).await?,
+            ComponentAbility::Collect => component.collect(stream_values(input)).await?,
+            ComponentAbility::Stream => {
+                let chunks = component.stream(input.clone()).await?;
+                for chunk in &chunks {
+                    if sink.is_cancelled() {
+                        return Err(WorkflowError("workflow stream cancelled".to_string()));
+                    }
+                    sink.emit(json!({
+                        "type": "workflow_delta",
+                        "index": *stream_index,
+                        "payload": {"workflow": workflow_id, "node": node.id, "output": chunk}
+                    }))
+                    .await?;
+                    *stream_index += 1;
+                }
+                json!({ "chunks": chunks })
+            }
+            ComponentAbility::Transform => {
+                let chunks = component.transform(stream_values(input)).await?;
+                for chunk in &chunks {
+                    if sink.is_cancelled() {
+                        return Err(WorkflowError("workflow stream cancelled".to_string()));
+                    }
+                    sink.emit(json!({
+                        "type": "workflow_delta",
+                        "index": *stream_index,
+                        "payload": {"workflow": workflow_id, "node": node.id, "output": chunk}
+                    }))
+                    .await?;
+                    *stream_index += 1;
+                }
+                json!({ "chunks": chunks })
+            }
+        };
+        Ok(output)
+    }
+    async fn stream_checkpointed_workflow(
+        &self,
+        spec: &WorkflowSpec,
+        input: Value,
+        checkpoint_path: &std::path::Path,
+        sink: Arc<dyn WorkflowStreamSink>,
+    ) -> Result<CheckpointedOutput, WorkflowError> {
+        let mut checkpoint = HashMap::new();
+        if let Ok(text) = std::fs::read_to_string(checkpoint_path) {
+            for line in text.lines() {
+                if let Ok(entry) = serde_json::from_str::<serde_json::Map<String, Value>>(line)
+                    && let (Some(node_id), Some(output)) = (
+                        entry.get("node_id").and_then(Value::as_str),
+                        entry.get("output"),
+                    )
+                {
+                    checkpoint.insert(node_id.to_string(), output.clone());
+                }
+            }
+        }
+        if let Some(parent) = checkpoint_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| WorkflowError(format!("create checkpoint dir: {error}")))?;
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(checkpoint_path)
+            .map_err(|error| WorkflowError(format!("open checkpoint: {error}")))?;
+        use std::io::Write;
+
+        let order = self.topo_order(spec)?;
+        if !spec.nodes.iter().any(|node| node.kind == NodeKind::Start) {
+            return Err(WorkflowError("workflow missing Start node".to_string()));
+        }
+        let mut state = HashMap::new();
+        let mut executed = Vec::new();
+        let mut resumed = Vec::new();
+        let mut stream_index = 0usize;
+        for node_id in order {
+            if sink.is_cancelled() {
+                return Err(WorkflowError("workflow stream cancelled".to_string()));
+            }
+            let node = self.node(spec, &node_id)?;
+            if node.kind == NodeKind::End {
+                continue;
+            }
+            let incoming: Vec<&EdgeSpec> = spec
+                .edges
+                .iter()
+                .filter(|edge| edge.to == node_id)
+                .collect();
+            if !incoming.is_empty() && !incoming.iter().all(|edge| Self::edge_allows(edge, &state))
+            {
+                continue;
+            }
+            if let Some(output) = checkpoint.get(&node_id) {
+                state.insert(node_id.clone(), output.clone());
+                resumed.push(node_id.clone());
+                sink.emit(json!({
+                    "type": "workflow_resume",
+                    "index": stream_index,
+                    "payload": {"workflow": spec.id, "node": node.id, "output": output}
+                }))
+                .await?;
+                stream_index += 1;
+                continue;
+            }
+            let input_for_node = if node.kind == NodeKind::Start {
+                input.clone()
+            } else {
+                incoming
+                    .iter()
+                    .find_map(|edge| state.get(&edge.from).cloned())
+                    .unwrap_or_else(|| json!({}))
+            };
+            let output = if node.kind == NodeKind::Llm {
+                let output = self
+                    .run_llm_stream(
+                        node,
+                        &input_for_node,
+                        spec.id.as_str(),
+                        &sink,
+                        &mut stream_index,
+                    )
+                    .await?;
+                self.ctx.emit(WorkflowNodeEvent {
+                    workflow_id: spec.id.clone(),
+                    node_id: node.id.clone(),
+                    output: output.clone(),
+                });
+                let _ = self.sessions.append(
+                    SessionEventKind::AgentStep,
+                    json!({"workflow": spec.id, "node": node.id, "output": output}),
+                );
+                output
+            } else if node.config.get("component").is_some() || node.kind == NodeKind::Component {
+                self.run_component_stream(
+                    node,
+                    &input_for_node,
+                    spec.id.as_str(),
+                    &sink,
+                    &mut stream_index,
+                )
+                .await?
+            } else {
+                self.execute_node(spec, node, &input_for_node).await?
+            };
+            let line = serde_json::json!({"node_id": node_id, "output": output});
+            writeln!(file, "{line}")
+                .map_err(|error| WorkflowError(format!("write checkpoint: {error}")))?;
+            sink.emit(json!({
+                "type": "workflow_node",
+                "index": stream_index,
+                "payload": {"workflow": spec.id, "node": node.id, "output": output}
+            }))
+            .await?;
+            stream_index += 1;
+            state.insert(node_id.clone(), output);
+            executed.push(node_id);
+        }
+        let end_id = spec
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::End)
+            .ok_or_else(|| WorkflowError("workflow missing End node".to_string()))?;
+        let output = spec
+            .edges
+            .iter()
+            .filter(|edge| edge.to == end_id.id)
+            .find_map(|edge| state.get(&edge.from).cloned())
+            .unwrap_or_else(|| json!({}));
+        sink.emit(json!({"type": "workflow_final", "index": stream_index, "payload": output}))
+            .await?;
+        Ok(CheckpointedOutput {
+            executed,
+            resumed,
+            output,
+        })
+    }
+
+    async fn stream_workflow(
+        &self,
+        spec: &WorkflowSpec,
+        input: Value,
+        sink: Arc<dyn WorkflowStreamSink>,
+    ) -> Result<WorkflowOutput, WorkflowError> {
+        let order = self.topo_order(spec)?;
+        if !spec.nodes.iter().any(|node| node.kind == NodeKind::Start) {
+            return Err(WorkflowError("workflow missing Start node".to_string()));
+        }
+
+        let mut state: HashMap<String, Value> = HashMap::new();
+        let mut executed = Vec::new();
+        let mut stream_index = 0usize;
+        for node_id in order {
+            if sink.is_cancelled() {
+                return Err(WorkflowError("workflow stream cancelled".to_string()));
+            }
+            let node = self.node(spec, &node_id)?;
+            if node.kind == NodeKind::End {
+                continue;
+            }
+            let incoming: Vec<&EdgeSpec> = spec
+                .edges
+                .iter()
+                .filter(|edge| edge.to == node_id)
+                .collect();
+            if !incoming.is_empty() && !incoming.iter().all(|edge| Self::edge_allows(edge, &state))
+            {
+                continue;
+            }
+            let input_for_node = if node.kind == NodeKind::Start {
+                input.clone()
+            } else {
+                incoming
+                    .iter()
+                    .find_map(|edge| state.get(&edge.from).cloned())
+                    .unwrap_or_else(|| json!({}))
+            };
+            let output = if node.kind == NodeKind::Llm {
+                let output = self
+                    .run_llm_stream(
+                        node,
+                        &input_for_node,
+                        spec.id.as_str(),
+                        &sink,
+                        &mut stream_index,
+                    )
+                    .await?;
+                self.ctx.emit(WorkflowNodeEvent {
+                    workflow_id: spec.id.clone(),
+                    node_id: node.id.clone(),
+                    output: output.clone(),
+                });
+                let _ = self.sessions.append(
+                    SessionEventKind::AgentStep,
+                    json!({"workflow": spec.id, "node": node.id, "output": output}),
+                );
+                output
+            } else if node.config.get("component").is_some() || node.kind == NodeKind::Component {
+                self.run_component_stream(
+                    node,
+                    &input_for_node,
+                    spec.id.as_str(),
+                    &sink,
+                    &mut stream_index,
+                )
+                .await?
+            } else {
+                self.execute_node(spec, node, &input_for_node).await?
+            };
+            sink.emit(json!({
+                "type": "workflow_node",
+                "index": stream_index,
+                "payload": {
+                    "workflow": spec.id,
+                    "node": node.id,
+                    "output": output,
+                }
+            }))
+            .await?;
+            stream_index += 1;
+            state.insert(node_id.clone(), output);
+            executed.push(node_id);
+        }
+
+        let end_id = spec
+            .nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::End)
+            .ok_or_else(|| WorkflowError("workflow missing End node".to_string()))?;
+        let end_input = spec
+            .edges
+            .iter()
+            .filter(|edge| edge.to == end_id.id)
+            .find_map(|edge| state.get(&edge.from).cloned())
+            .unwrap_or_else(|| json!({}));
+        sink.emit(json!({
+            "type": "workflow_final",
+            "index": stream_index,
+            "payload": end_input.clone(),
+        }))
+        .await?;
+        Ok(WorkflowOutput {
+            output: end_input,
+            executed,
+        })
     }
 }
 
@@ -625,6 +1087,38 @@ impl WorkflowEngine for WorkflowEngineImpl {
             output: end_input,
             executed,
         })
+    }
+
+    async fn stream(
+        &self,
+        spec: &WorkflowSpec,
+        input: Value,
+        sink: Arc<dyn WorkflowStreamSink>,
+    ) -> Result<WorkflowOutput, WorkflowError> {
+        let result = self.stream_workflow(spec, input, sink.clone()).await;
+        let close_result = sink.close().await;
+        match (result, close_result) {
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
+            (Ok(output), Ok(())) => Ok(output),
+        }
+    }
+    async fn stream_checkpointed(
+        &self,
+        spec: &WorkflowSpec,
+        input: Value,
+        checkpoint_path: &std::path::Path,
+        sink: Arc<dyn WorkflowStreamSink>,
+    ) -> Result<CheckpointedOutput, WorkflowError> {
+        let result = self
+            .stream_checkpointed_workflow(spec, input, checkpoint_path, sink.clone())
+            .await;
+        let close_result = sink.close().await;
+        match (result, close_result) {
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
+            (Ok(output), Ok(())) => Ok(output),
+        }
     }
 
     async fn run_checkpointed(
@@ -725,6 +1219,18 @@ fn lookup_path<'a>(state: &'a HashMap<String, Value>, path: &str) -> Option<&'a 
 
 /// 工作流插件:注入 llm + tools,提供 workflow seam。
 pub struct WorkflowPlugin;
+/// 将组件输出规范化为 Python stream actor 使用的 chunk 列表。
+fn stream_values(value: &Value) -> Vec<Value> {
+    for key in ["chunks", "stream", "outputs"] {
+        if let Some(values) = value.get(key).and_then(Value::as_array) {
+            return values.clone();
+        }
+    }
+    if let Some(values) = value.as_array() {
+        return values.clone();
+    }
+    vec![value.clone()]
+}
 
 impl Plugin for WorkflowPlugin {
     fn name(&self) -> &'static str {
@@ -758,14 +1264,19 @@ impl Plugin for WorkflowPlugin {
                     plugin: self.name(),
                     message: "sessions seam not registered".to_string(),
                 })?;
-        let engine: Arc<dyn WorkflowEngine> = Arc::new(WorkflowEngineImpl::new(
+        let mut engine = WorkflowEngineImpl::new(
             llm,
             tools,
             sessions,
             ctx.service::<dyn WebProvider>(&WEB),
             ctx.service::<dyn MessageQueue>(&QUEUE),
             ctx.clone(),
-        ));
+        );
+        if let Some(components) = ctx.service::<dyn WorkflowComponentRegistry>(&WORKFLOW_COMPONENTS)
+        {
+            engine = engine.with_components(components);
+        }
+        let engine: Arc<dyn WorkflowEngine> = Arc::new(engine);
         Ok(vec![ctx.register(WORKFLOW, engine)])
     }
 }
@@ -776,6 +1287,31 @@ mod tests {
     use ah_contracts::keys::WORKFLOW;
     use ah_hub::plugin::DynPlugin;
     use std::sync::Arc as StdArc;
+
+    #[derive(Default)]
+    struct RecordingSink {
+        chunks: std::sync::Mutex<Vec<Value>>,
+        closed: std::sync::atomic::AtomicBool,
+        cancelled: std::sync::atomic::AtomicBool,
+    }
+
+    impl Seam for RecordingSink {}
+
+    #[async_trait]
+    impl ah_contracts::workflow::WorkflowStreamSink for RecordingSink {
+        async fn emit(&self, chunk: Value) -> Result<(), WorkflowError> {
+            self.chunks.lock().unwrap().push(chunk);
+            Ok(())
+        }
+
+        async fn close(&self) -> Result<(), WorkflowError> {
+            self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+        fn is_cancelled(&self) -> bool {
+            self.cancelled.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
 
     fn build_ctx(root: &std::path::Path) -> (Context, Vec<Effect>) {
         let ctx = Context::new();
@@ -1623,6 +2159,305 @@ mod tests {
             "all nodes resumed"
         );
         assert_eq!(second.output, first.output, "output preserved");
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+    #[tokio::test]
+    async fn stream_emits_node_outputs_and_final_output() {
+        let root = std::env::temp_dir().join(format!("ah-wf-stream-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("workflow");
+        let sink = StdArc::new(RecordingSink::default());
+        let spec = WorkflowSpec {
+            id: "wf-stream".into(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".into(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "write".into(),
+                    kind: NodeKind::Tool,
+                    config: json!({"tool": "write_file", "args": {"path": "stream.txt", "content": "ok"}}),
+                },
+                NodeSpec {
+                    id: "llm".into(),
+                    kind: NodeKind::Llm,
+                    config: json!({"prompt": "summarize"}),
+                },
+                NodeSpec {
+                    id: "end".into(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".into(),
+                    to: "write".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "write".into(),
+                    to: "llm".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "llm".into(),
+                    to: "end".into(),
+                    condition: None,
+                },
+            ],
+        };
+
+        let _output = engine
+            .stream(&spec, json!({"input": "go"}), sink.clone())
+            .await
+            .expect("stream");
+        let chunks = sink.chunks.lock().unwrap().clone();
+        assert_eq!(chunks.len(), 5);
+        assert_eq!(chunks[0]["type"], "workflow_node");
+        assert_eq!(chunks[0]["payload"]["node"], "start");
+        assert_eq!(chunks[1]["payload"]["node"], "write");
+        assert_eq!(
+            chunks[1]["payload"]["output"]["output"]["path"],
+            "stream.txt"
+        );
+        assert_eq!(chunks[2]["type"], "workflow_delta");
+        assert_eq!(chunks[3]["payload"]["node"], "llm");
+        assert_eq!(chunks[4]["type"], "workflow_final");
+        assert!(sink.closed.load(std::sync::atomic::Ordering::SeqCst));
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+    #[tokio::test]
+    async fn stream_closes_sink_when_cancelled() {
+        let root = std::env::temp_dir().join(format!("ah-wf-stream-cancel-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("workflow");
+        let sink = StdArc::new(RecordingSink::default());
+        sink.cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let spec = WorkflowSpec {
+            id: "wf-stream-cancel".into(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".into(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "end".into(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![EdgeSpec {
+                from: "start".into(),
+                to: "end".into(),
+                condition: None,
+            }],
+        };
+
+        let error = engine
+            .stream(&spec, json!({}), sink.clone())
+            .await
+            .expect_err("cancelled stream");
+        assert!(error.0.contains("cancelled"));
+        assert!(sink.closed.load(std::sync::atomic::Ordering::SeqCst));
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+    #[tokio::test]
+    async fn checkpointed_stream_reuses_nodes_and_emits_resume_chunks() {
+        let root = std::env::temp_dir().join(format!("ah-wf-stream-cp-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("workflow");
+        let checkpoint = root.join("workflow.jsonl");
+        let spec = WorkflowSpec {
+            id: "wf-stream-cp".into(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".into(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "write".into(),
+                    kind: NodeKind::Tool,
+                    config: json!({"tool": "write_file", "args": {"path": "checkpoint-stream.txt", "content": "ok"}}),
+                },
+                NodeSpec {
+                    id: "end".into(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".into(),
+                    to: "write".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "write".into(),
+                    to: "end".into(),
+                    condition: None,
+                },
+            ],
+        };
+        let first_sink = StdArc::new(RecordingSink::default());
+        let first = engine
+            .stream_checkpointed(&spec, json!({}), &checkpoint, first_sink)
+            .await
+            .expect("first stream");
+        assert_eq!(first.executed, vec!["start", "write"]);
+        assert!(first.resumed.is_empty());
+
+        let second_sink = StdArc::new(RecordingSink::default());
+        let second = engine
+            .stream_checkpointed(&spec, json!({}), &checkpoint, second_sink.clone())
+            .await
+            .expect("resumed stream");
+        assert!(second.executed.is_empty());
+        assert_eq!(second.resumed, vec!["start", "write"]);
+        let chunks = second_sink.chunks.lock().unwrap().clone();
+        assert_eq!(chunks[0]["type"], "workflow_resume");
+        assert_eq!(chunks[1]["type"], "workflow_resume");
+        assert_eq!(chunks[2]["type"], "workflow_final");
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+    struct ComponentRegistry;
+
+    struct StreamTransformCollectComponent;
+
+    impl Seam for ComponentRegistry {}
+    impl Seam for StreamTransformCollectComponent {}
+
+    #[async_trait]
+    impl ah_contracts::workflow::WorkflowComponent for StreamTransformCollectComponent {
+        async fn invoke(&self, input: Value) -> Result<Value, WorkflowError> {
+            Ok(input)
+        }
+
+        async fn stream(&self, input: Value) -> Result<Vec<Value>, WorkflowError> {
+            Ok(vec![json!({"streamed": input}), json!({"streamed": true})])
+        }
+
+        async fn collect(&self, inputs: Vec<Value>) -> Result<Value, WorkflowError> {
+            Ok(json!({"collected": inputs}))
+        }
+
+        async fn transform(&self, inputs: Vec<Value>) -> Result<Vec<Value>, WorkflowError> {
+            Ok(inputs
+                .into_iter()
+                .map(|input| json!({"transformed": input}))
+                .collect())
+        }
+    }
+
+    #[async_trait]
+    impl ah_contracts::workflow::WorkflowComponentRegistry for ComponentRegistry {
+        fn get(&self, name: &str) -> Option<Arc<dyn WorkflowComponent>> {
+            (name == "test-component").then(|| Arc::new(StreamTransformCollectComponent) as _)
+        }
+    }
+
+    #[tokio::test]
+    async fn component_stream_transform_collect_follow_python_ability_contract() {
+        let root = std::env::temp_dir().join(format!("ah-wf-components-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let llm = ctx.service::<dyn ModelProvider>(&LLM).expect("llm");
+        let tools = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let sessions = ctx.service::<dyn SessionLog>(&SESSIONS).expect("sessions");
+        let engine = WorkflowEngineImpl::new(llm, tools, sessions, None, None, ctx)
+            .with_components(Arc::new(ComponentRegistry));
+        let sink = Arc::new(RecordingSink::default());
+        let spec = WorkflowSpec {
+            id: "wf-components".into(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".into(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "stream".into(),
+                    kind: NodeKind::Component,
+                    config: json!({"component": "test-component", "ability": "stream"}),
+                },
+                NodeSpec {
+                    id: "transform".into(),
+                    kind: NodeKind::Component,
+                    config: json!({"component": "test-component", "ability": "transform"}),
+                },
+                NodeSpec {
+                    id: "collect".into(),
+                    kind: NodeKind::Component,
+                    config: json!({"component": "test-component", "ability": "collect"}),
+                },
+                NodeSpec {
+                    id: "end".into(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".into(),
+                    to: "stream".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "stream".into(),
+                    to: "transform".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "transform".into(),
+                    to: "collect".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "collect".into(),
+                    to: "end".into(),
+                    condition: None,
+                },
+            ],
+        };
+
+        let output = engine
+            .stream(&spec, json!({"input": 7}), sink.clone())
+            .await
+            .expect("stream");
+        assert_eq!(
+            output.output["collected"][0]["transformed"]["streamed"]["input"],
+            7
+        );
+        let chunks = sink.chunks.lock().unwrap();
+        assert_eq!(
+            chunks
+                .iter()
+                .filter(|chunk| chunk["type"] == "workflow_delta")
+                .count(),
+            4
+        );
+        assert_eq!(
+            chunks.last().expect("final chunk")["type"],
+            "workflow_final"
+        );
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);

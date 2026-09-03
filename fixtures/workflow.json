@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "seam": "workflow",
+  "description": "workflow Rust-only contract traces",
+  "categories": ["success", "checkpoint", "invalid"],
+  "cases": [
+    {
+      "name": "sequential_tool_llm_trace",
+      "category": "success",
+      "input": {
+        "spec": {
+          "id": "contract-workflow",
+          "nodes": [
+            {"id": "start", "kind": "start", "config": {}},
+            {"id": "write", "kind": "tool", "config": {"tool": "write_file", "args": {"path": "workflow.txt", "content": "42"}}},
+            {"id": "llm", "kind": "llm", "config": {"prompt": "summarize"}},
+            {"id": "end", "kind": "end", "config": {}}
+          ],
+          "edges": [
+            {"from": "start", "to": "write"},
+            {"from": "write", "to": "llm"},
+            {"from": "llm", "to": "end"}
+          ]
+        },
+        "input": {"request": "summarize"},
+        "answer_contains": "mock final answer"
+      },
+      "expect": {
+        "executed": ["start", "write", "llm"],
+        "output_content_contains": false,
+        "file_content": "42"
+      }
+    },
+    {
+      "name": "checkpoint_reuses_completed_nodes",
+      "category": "checkpoint",
+      "input": {
+        "spec": {
+          "id": "checkpoint-workflow",
+          "nodes": [
+            {"id": "start", "kind": "start", "config": {}},
+            {"id": "end", "kind": "end", "config": {}}
+          ],
+          "edges": [{"from": "start", "to": "end"}]
+        },
+        "input": {"value": "checkpoint"}
+      },
+      "expect": {
+        "first_executed": ["start"],
+        "second_executed": [],
+        "second_resumed": ["start"],
+        "second_output": {"value": "checkpoint"}
+      }
+    },
+    {
+      "name": "cycle_rejected",
+      "category": "invalid",
+      "input": {
+        "spec": {
+          "id": "cycle-workflow",
+          "nodes": [
+            {"id": "a", "kind": "start", "config": {}},
+            {"id": "b", "kind": "end", "config": {}}
+          ],
+          "edges": [
+            {"from": "a", "to": "b"},
+            {"from": "b", "to": "a"}
+          ]
+        },
+        "input": {}
+      },
+      "expect": {"ok": false, "error_class": "workflow_cycle"}
+    }
+  ]
+}

@@ -14,6 +14,8 @@
 //! Rust 侧以 JSON typed 二元组(dump_type="json" + JSON 字节)代替——"typed
 //! (dump_type, blob) 契约"对齐,字节格式为内部实现,跨语言互通不承诺。
 
+pub mod redis_store;
+
 use std::sync::Arc;
 
 use ah_contracts::checkpointer::{
