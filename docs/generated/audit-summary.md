@@ -142,7 +142,7 @@ Percentages below are status shares, not weighted capability completion.
 
 - Status: `partial`
 - Implementation: `crates/ah-contracts/src/agent.rs`, `crates/ah-plugins-agent-loop/src/lib.rs`, `crates/ah-plugins-application/src/lib.rs`
-- Verification: `application tests: 14 passed`, `structured command, LLM intent, request-scoped model/temperature/timeout, memory context/write rails implemented`
+- Verification: `application tests: 16 passed`, `ah-app rust_contract application case passed`, `structured command, LLM intent, request-scoped model/temperature/timeout, memory context/write rails implemented`
 - Production: production ApplicationRuntime::invoke passed in P0-03; memory rail requires user_id and mounted memory seam
 - Differential: not verified
 
@@ -150,7 +150,7 @@ Percentages below are status shares, not weighted capability completion.
 
 - Status: `partial`
 - Implementation: `crates/ah-contracts/src/controller.rs`, `crates/ah-plugins-controller/src/lib.rs`
-- Verification: `controller tests: 24 passed`, `session-level working reservation, stable priority order, parent hierarchy, snapshot validation, structured LLM intent parser implemented`
+- Verification: `controller tests: 25 passed`, `ah-app rust_contract controller case passed`, `session-level working reservation, stable priority order, parent hierarchy, snapshot validation, structured LLM intent parser implemented`
 - Production: not verified
 - Differential: LLM intent and full snapshot differential pending
 
