@@ -207,4 +207,16 @@ pub struct AgentRequest {
 #[async_trait]
 pub trait ApplicationRuntime: Seam {
     async fn invoke(&self, request: AgentRequest) -> Result<AgentResult, AgentControlError>;
+
+    /// 流式执行 workflow;实现方负责按顺序向 sink 发送 chunk。
+    /// 默认实现显式拒绝,避免外部 runtime 实现被静默降级。
+    async fn stream(
+        &self,
+        _request: AgentRequest,
+        _sink: std::sync::Arc<dyn crate::workflow::WorkflowStreamSink>,
+    ) -> Result<AgentResult, AgentControlError> {
+        Err(AgentControlError(
+            "application workflow stream is not supported".to_string(),
+        ))
+    }
 }

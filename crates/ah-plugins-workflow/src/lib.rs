@@ -778,19 +778,7 @@ impl WorkflowEngineImpl {
         checkpoint_path: &std::path::Path,
         sink: Arc<dyn WorkflowStreamSink>,
     ) -> Result<CheckpointedOutput, WorkflowError> {
-        let mut checkpoint = HashMap::new();
-        if let Ok(text) = std::fs::read_to_string(checkpoint_path) {
-            for line in text.lines() {
-                if let Ok(entry) = serde_json::from_str::<serde_json::Map<String, Value>>(line)
-                    && let (Some(node_id), Some(output)) = (
-                        entry.get("node_id").and_then(Value::as_str),
-                        entry.get("output"),
-                    )
-                {
-                    checkpoint.insert(node_id.to_string(), output.clone());
-                }
-            }
-        }
+        let checkpoint = load_workflow_checkpoint(checkpoint_path)?;
         if let Some(parent) = checkpoint_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|error| WorkflowError(format!("create checkpoint dir: {error}")))?;
@@ -801,6 +789,7 @@ impl WorkflowEngineImpl {
             .open(checkpoint_path)
             .map_err(|error| WorkflowError(format!("open checkpoint: {error}")))?;
         use std::io::Write;
+        ensure_checkpoint_header(&mut file)?;
 
         let order = self.topo_order(spec)?;
         if !spec.nodes.iter().any(|node| node.kind == NodeKind::Start) {
@@ -882,6 +871,8 @@ impl WorkflowEngineImpl {
             let line = serde_json::json!({"node_id": node_id, "output": output});
             writeln!(file, "{line}")
                 .map_err(|error| WorkflowError(format!("write checkpoint: {error}")))?;
+            file.sync_data()
+                .map_err(|error| WorkflowError(format!("sync checkpoint: {error}")))?;
             sink.emit(json!({
                 "type": "workflow_node",
                 "index": stream_index,
@@ -1128,17 +1119,7 @@ impl WorkflowEngine for WorkflowEngineImpl {
         checkpoint_path: &std::path::Path,
     ) -> Result<CheckpointedOutput, WorkflowError> {
         // 加载检查点:{node_id: output}。
-        let mut checkpoint: HashMap<String, Value> = HashMap::new();
-        if let Ok(text) = std::fs::read_to_string(checkpoint_path) {
-            for line in text.lines() {
-                if let Ok(entry) = serde_json::from_str::<serde_json::Map<String, Value>>(line)
-                    && let Some(node_id) = entry.get("node_id").and_then(Value::as_str)
-                    && let Some(output) = entry.get("output")
-                {
-                    checkpoint.insert(node_id.to_string(), output.clone());
-                }
-            }
-        }
+        let checkpoint = load_workflow_checkpoint(checkpoint_path)?;
         // 追加模式打开(真实续写)。
         if let Some(parent) = checkpoint_path.parent() {
             std::fs::create_dir_all(parent)
@@ -1150,6 +1131,7 @@ impl WorkflowEngine for WorkflowEngineImpl {
             .open(checkpoint_path)
             .map_err(|e| WorkflowError(format!("open checkpoint: {e}")))?;
         use std::io::Write;
+        ensure_checkpoint_header(&mut file)?;
 
         let order = self.topo_order(spec)?;
         let mut state: HashMap<String, Value> = HashMap::new();
@@ -1183,6 +1165,8 @@ impl WorkflowEngine for WorkflowEngineImpl {
             let line = serde_json::json!({ "node_id": node_id, "output": output.clone() });
             writeln!(file, "{line}")
                 .map_err(|e| WorkflowError(format!("write checkpoint: {e}")))?;
+            file.sync_data()
+                .map_err(|e| WorkflowError(format!("sync checkpoint: {e}")))?;
             state.insert(node_id.clone(), output);
             executed.push(node_id.clone());
         }
@@ -1204,6 +1188,70 @@ impl WorkflowEngine for WorkflowEngineImpl {
         })
     }
 }
+const WORKFLOW_CHECKPOINT_VERSION: u64 = 1;
+
+fn ensure_checkpoint_header(file: &mut std::fs::File) -> Result<(), WorkflowError> {
+    if file
+        .metadata()
+        .map_err(|error| WorkflowError(format!("checkpoint metadata: {error}")))?
+        .len()
+        == 0
+    {
+        use std::io::Write;
+        writeln!(file, "{{\"version\":{WORKFLOW_CHECKPOINT_VERSION}}}")
+            .map_err(|error| WorkflowError(format!("write checkpoint header: {error}")))?;
+        file.sync_data()
+            .map_err(|error| WorkflowError(format!("sync checkpoint header: {error}")))?;
+    }
+    Ok(())
+}
+
+fn load_workflow_checkpoint(
+    checkpoint_path: &std::path::Path,
+) -> Result<HashMap<String, Value>, WorkflowError> {
+    let text = match std::fs::read_to_string(checkpoint_path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(HashMap::new()),
+        Err(error) => return Err(WorkflowError(format!("read checkpoint: {error}"))),
+    };
+    let mut checkpoint = HashMap::new();
+    for (index, line) in text.lines().enumerate() {
+        let entry: serde_json::Map<String, Value> =
+            serde_json::from_str(line).map_err(|error| {
+                WorkflowError(format!(
+                    "checkpoint line {}: invalid JSON: {error}",
+                    index + 1
+                ))
+            })?;
+        if index == 0 && entry.get("version").is_some() {
+            let version = entry
+                .get("version")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    WorkflowError("checkpoint line 1: version must be an integer".to_string())
+                })?;
+            if version != WORKFLOW_CHECKPOINT_VERSION {
+                return Err(WorkflowError(format!(
+                    "checkpoint version unsupported: {version}"
+                )));
+            }
+            continue;
+        }
+        let node_id = entry
+            .get("node_id")
+            .and_then(Value::as_str)
+            .filter(|node_id| !node_id.trim().is_empty())
+            .ok_or_else(|| {
+                WorkflowError(format!("checkpoint line {}: missing node_id", index + 1))
+            })?;
+        let output = entry.get("output").cloned().ok_or_else(|| {
+            WorkflowError(format!("checkpoint line {}: missing output", index + 1))
+        })?;
+        checkpoint.insert(node_id.to_string(), output);
+    }
+    Ok(checkpoint)
+}
+
 /// 从 state map 按 "a.b" 路径取值。
 fn lookup_path<'a>(state: &'a HashMap<String, Value>, path: &str) -> Option<&'a Value> {
     let mut current: Option<&Value> = None;
@@ -2277,6 +2325,49 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
     #[tokio::test]
+    async fn checkpointed_stream_rejects_corrupt_checkpoint_records() {
+        let root =
+            std::env::temp_dir().join(format!("ah-wf-stream-corrupt-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let engine = ctx
+            .service::<dyn WorkflowEngine>(&WORKFLOW)
+            .expect("workflow");
+        let checkpoint = root.join("workflow.jsonl");
+        std::fs::write(&checkpoint, b"not-json\n").unwrap();
+        let spec = WorkflowSpec {
+            id: "wf-corrupt".into(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".into(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "end".into(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![EdgeSpec {
+                from: "start".into(),
+                to: "end".into(),
+                condition: None,
+            }],
+        };
+        let error = engine
+            .stream_checkpointed(
+                &spec,
+                json!({}),
+                &checkpoint,
+                StdArc::new(RecordingSink::default()),
+            )
+            .await
+            .expect_err("corrupt checkpoint must be rejected");
+        assert!(error.0.contains("checkpoint line 1"));
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
+    }
+    #[tokio::test]
     async fn checkpointed_stream_reuses_nodes_and_emits_resume_chunks() {
         let root = std::env::temp_dir().join(format!("ah-wf-stream-cp-{}", std::process::id()));
         let (ctx, effects) = build_ctx(&root);
@@ -2323,6 +2414,8 @@ mod tests {
             .expect("first stream");
         assert_eq!(first.executed, vec!["start", "write"]);
         assert!(first.resumed.is_empty());
+        let checkpoint_text = std::fs::read_to_string(&checkpoint).unwrap();
+        assert!(checkpoint_text.starts_with("{\"version\":1}\n"));
 
         let second_sink = StdArc::new(RecordingSink::default());
         let second = engine

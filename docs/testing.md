@@ -10,8 +10,8 @@
 | 单元测试 | Rust 内核和插件内部逻辑 | 各 crate `#[cfg(test)]`;`cargo test -p <crate>` | 已广泛覆盖;阶段一新增 10 个插件共 117 个单元测试 case 通过 |
 | Golden fixture | Rust seam 对固定语言中立样例的契约稳定性 | `fixtures/` + `ah-app/tests/golden.rs` | 已有 9 个 seam |
 | Rust contract fixture | Rust-only 规范化输入、状态轨迹、错误分类和恢复结果 | `fixtures/` + `ah-app/tests/rust_contract.rs` | 已接入 session、tools、controller、agent-loop、workflow、application;fixture schema version=1 |
-| Rust regression reference | Rust 当前完整可观测输出不发生非预期变化 | `references/` + `ah-app/tests/differential.rs` | 已有 5 个 seam |
-| Python/Rust differential | 同一输入下 Python 与 Rust 的公开行为一致 | 外部 Python runner + 语言中立 fixture + Rust runner | 辅助证据:仅 `stop_condition`、`messager_inprocess` 两 seam 的 6 个 case 一致,另有 1 个 known divergence;不作为 Rust 运行时依赖 |
+| Rust regression reference | Rust 当前完整可观测输出不发生非预期变化 | `references/` + `ah-app/tests/differential.rs` | 已覆盖 session、security、retrieval、teams、evolving、messager 以及 application/controller traces |
+| Python/Rust differential | 同一输入下 Python 与 Rust 的公开行为一致 | 外部 Python runner + 语言中立 fixture + Rust runner | 辅助证据:仅 `stop_condition`、`messager_inprocess` 两 seam 的 6 个 case 一致,另有 1 个 known divergence;application/controller 无同层 Python runtime,不强行比较;不作为 Rust 运行时依赖 |
 | Production composition | prod profile 可解析、依赖闭合且无 mock | profile/catalog/依赖图测试 | mock exclusion/static composition 已有;10 个新增插件已进入 workspace、catalog 和 dev/prod Profile;`stage2_plugins` + `static_composition`/`mock_gate` 共 8 个测试通过 |
 | Production boot/E2E | 无 mock 的真实组合可启动并执行 | 本地 HTTP fixture、服务容器或真实凭据 | **partial:dev Profile 无云凭据 boot + demo E2E 通过;prod Profile 缺少 OpenAI key 时显式失败,完整 prod boot + `ApplicationRuntime::invoke` 仍待真实依赖** |
 | 覆盖率 | Rust 测试执行到的代码比例 | `cargo llvm-cov --workspace --fail-under-lines 80` | CI 有门禁;当前 HEAD 数字须以完整实测为准,不得引用历史数字 |

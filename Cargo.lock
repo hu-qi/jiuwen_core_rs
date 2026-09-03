@@ -372,6 +372,7 @@ dependencies = [
  "ah-plugins-sysop",
  "ah-plugins-tools",
  "async-trait",
+ "futures-util",
  "serde",
  "serde_json",
  "tokio",

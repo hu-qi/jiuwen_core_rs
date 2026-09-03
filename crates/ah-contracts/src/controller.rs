@@ -186,6 +186,12 @@ pub trait Controller: Seam {
     /// 执行一个已提交任务(经注册表找 executor;冲突处理:同会话已有 working 任务 → 拒绝)。
     async fn run_task(&self, task_id: &str) -> Result<String, ControllerError>;
 
+    /// 并发执行待提交任务:不同 session 可并行,同一 session 保持调度顺序。
+    async fn run_pending(
+        &self,
+        session_id: Option<&str>,
+    ) -> Vec<(String, Result<String, ControllerError>)>;
+
     /// 取消任务(working 可取消;completed 不可)。
     async fn cancel_task(&self, task_id: &str) -> Result<(), ControllerError>;
 

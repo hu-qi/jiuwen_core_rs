@@ -7,10 +7,10 @@
 //! - IntentRecognizer:确定性关键词意图识别(create/pause/resume/cancel/
 //!   switch/modify/continue/supplement,未知 → UnknownTask)。
 
+use futures_util::stream::{FuturesUnordered, StreamExt};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use tokio::task::JoinSet;
 
 use ah_contracts::controller::{
     Controller, ControllerError, Intent, IntentType, Task, TaskExecutor, TaskFilter,
@@ -311,7 +311,7 @@ impl LocalController {
 
     /// 并发调度待执行任务:不同 session 并行,同一 session 按优先级和创建序列串行。
     pub async fn run_pending_concurrent(
-        self: Arc<Self>,
+        &self,
         session_id: Option<&str>,
     ) -> Vec<(String, Result<String, ControllerError>)> {
         let grouped = {
@@ -336,13 +336,12 @@ impl LocalController {
             grouped
         };
 
-        let mut workers = JoinSet::new();
+        let mut workers = FuturesUnordered::new();
         for task_ids in grouped.into_values() {
-            let controller = self.clone();
-            workers.spawn(async move {
+            workers.push(async move {
                 let mut outcomes = Vec::with_capacity(task_ids.len());
                 for (_, _, task_id) in task_ids {
-                    let outcome = controller.run_task(&task_id).await;
+                    let outcome = self.run_task(&task_id).await;
                     outcomes.push((task_id, outcome));
                 }
                 outcomes
@@ -350,10 +349,8 @@ impl LocalController {
         }
 
         let mut outcomes = Vec::new();
-        while let Some(joined) = workers.join_next().await {
-            if let Ok(mut session_outcomes) = joined {
-                outcomes.append(&mut session_outcomes);
-            }
+        while let Some(mut session_outcomes) = workers.next().await {
+            outcomes.append(&mut session_outcomes);
         }
         outcomes.sort_by(|(left, _), (right, _)| left.cmp(right));
         outcomes
@@ -726,6 +723,13 @@ impl Controller for LocalController {
                 Err(error)
             }
         }
+    }
+
+    async fn run_pending(
+        &self,
+        session_id: Option<&str>,
+    ) -> Vec<(String, Result<String, ControllerError>)> {
+        self.run_pending_concurrent(session_id).await
     }
 
     async fn cancel_task(&self, task_id: &str) -> Result<(), ControllerError> {
@@ -1627,7 +1631,8 @@ mod scheduler_parity_tests {
             entered: entered.clone(),
         }));
 
-        let results = controller.clone().run_pending_concurrent(None).await;
+        let api: &dyn Controller = controller.as_ref();
+        let results = api.run_pending(None).await;
         assert_eq!(entered.load(Ordering::SeqCst), 2);
         assert_eq!(results.len(), 2);
         assert!(results.iter().all(|(_, result)| result.is_ok()));

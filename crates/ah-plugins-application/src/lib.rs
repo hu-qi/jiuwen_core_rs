@@ -13,7 +13,7 @@ use ah_contracts::memory::MemoryProvider;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::session::{SessionEventKind, SessionManager};
-use ah_contracts::workflow::{WorkflowEngine, WorkflowSpec};
+use ah_contracts::workflow::{WorkflowEngine, WorkflowSpec, WorkflowStreamSink};
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
@@ -423,6 +423,76 @@ impl ApplicationRuntime for LocalApplicationRuntime {
             error: None,
         })
     }
+    async fn stream(
+        &self,
+        request: AgentRequest,
+        sink: Arc<dyn WorkflowStreamSink>,
+    ) -> Result<AgentResult, AgentControlError> {
+        if request.session_id.trim().is_empty() || request.input.trim().is_empty() {
+            return Err(AgentControlError(
+                "session_id and input must not be empty".to_string(),
+            ));
+        }
+        let session = if let Some(checkpoint) = request.restore_checkpoint.as_deref() {
+            if checkpoint.trim().is_empty() {
+                return Err(AgentControlError(
+                    "restore_checkpoint must not be empty".to_string(),
+                ));
+            }
+            self.sessions
+                .restore(&request.session_id, checkpoint)
+                .map_err(|e| AgentControlError(format!("session restore failed: {e}")))?
+        } else {
+            self.sessions
+                .open(&request.session_id)
+                .or_else(|_| self.sessions.create(&request.session_id))
+                .map_err(|e| AgentControlError(format!("session open failed: {e}")))?
+        };
+        let workflow = request
+            .workflow
+            .ok_or_else(|| AgentControlError("stream requires a workflow".to_string()))?;
+        let spec: WorkflowSpec = serde_json::from_value(workflow)
+            .map_err(|e| AgentControlError(format!("invalid workflow: {e}")))?;
+        let output = self
+            .workflow
+            .stream(&spec, serde_json::json!({"input": request.input}), sink)
+            .await
+            .map_err(|e| AgentControlError(e.0))?;
+        session
+            .append(
+                SessionEventKind::User,
+                serde_json::json!({"content": request.input}),
+            )
+            .map_err(|e| AgentControlError(format!("session append failed: {e}")))?;
+        let answer = output.output.to_string();
+        session
+            .append(
+                SessionEventKind::Assistant,
+                serde_json::json!({"content": answer}),
+            )
+            .map_err(|e| AgentControlError(format!("session append failed: {e}")))?;
+        if let (Some(user_id), Some(memory)) = (
+            request.user_id.as_deref(),
+            self.ctx.service::<dyn MemoryProvider>(&MEMORY),
+        ) {
+            persist_memory(
+                memory.as_ref(),
+                user_id,
+                &request.session_id,
+                &request.input,
+                &answer,
+            );
+        }
+        Ok(AgentResult {
+            session_id: request.session_id,
+            state: AgentRunState::Completed,
+            answer: Some(answer),
+            iterations: output.executed.len(),
+            tool_calls: 0,
+            failure: None,
+            error: None,
+        })
+    }
 }
 
 pub struct ApplicationPlugin;
@@ -475,7 +545,97 @@ mod tests {
     use ah_contracts::keys::SESSION_MANAGER;
     use ah_contracts::session::{SessionEventKind, SessionManager};
     use ah_contracts::tools::ToolRegistry;
+    use ah_contracts::workflow::{WorkflowError, WorkflowStreamSink};
     use ah_plugins_agent_loop::AgentLoop;
+
+    struct RecordingApplicationSink {
+        chunks: std::sync::Mutex<Vec<serde_json::Value>>,
+        closed: std::sync::atomic::AtomicBool,
+    }
+
+    impl Seam for RecordingApplicationSink {}
+
+    #[async_trait]
+    impl WorkflowStreamSink for RecordingApplicationSink {
+        async fn emit(&self, chunk: serde_json::Value) -> Result<(), WorkflowError> {
+            self.chunks.lock().unwrap().push(chunk);
+            Ok(())
+        }
+
+        async fn close(&self) -> Result<(), WorkflowError> {
+            self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn streams_workflow_through_application_runtime() {
+        let root = std::env::temp_dir().join(format!("ah-app-stream-{}", std::process::id()));
+        let session_dir = root.join("sessions");
+        let ctx = Context::new();
+        let effects = ctx
+            .mount_all(vec![
+                Arc::new(ah_plugins_mock::MockPlugin),
+                Arc::new(ah_plugins_tools::ToolsPlugin),
+                Arc::new(ah_plugins_sysop::SysopPlugin::new(&root)),
+                Arc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                    session_dir.join("default.jsonl"),
+                    &session_dir,
+                )),
+                Arc::new(ah_plugins_agent_control::AgentControlPlugin),
+                Arc::new(ah_plugins_model_backup::ModelBackupPlugin::new(Vec::new())),
+                Arc::new(ah_plugins_workflow::WorkflowPlugin),
+                Arc::new(ah_plugins_agent_loop::AgentLoopPlugin::default()),
+                Arc::new(ApplicationPlugin),
+            ])
+            .expect("mount");
+        let application = ctx
+            .service::<dyn ApplicationRuntime>(&ah_contracts::keys::APPLICATION)
+            .unwrap();
+        let sink = Arc::new(RecordingApplicationSink {
+            chunks: std::sync::Mutex::new(Vec::new()),
+            closed: std::sync::atomic::AtomicBool::new(false),
+        });
+        let result = application
+            .stream(
+                AgentRequest {
+                    session_id: "stream-session".into(),
+                    input: "stream input".into(),
+                    workflow: Some(serde_json::json!({
+                        "id": "stream-workflow",
+                        "nodes": [
+                            {"id": "start", "kind": "start", "config": {}},
+                            {"id": "end", "kind": "end", "config": {}}
+                        ],
+                        "edges": [{"from": "start", "to": "end"}]
+                    })),
+                    timeout_ms: None,
+                    restore_checkpoint: None,
+                    command: None,
+                    user_id: None,
+                    model: None,
+                    temperature: None,
+                },
+                sink.clone(),
+            )
+            .await
+            .expect("stream invoke");
+        assert_eq!(result.state, AgentRunState::Completed);
+        assert_eq!(
+            result.answer.as_deref(),
+            Some("{\"input\":\"stream input\"}")
+        );
+        assert!(sink.closed.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(
+            sink.chunks
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|chunk| chunk["type"] == "workflow_final")
+        );
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     #[tokio::test]
     async fn routes_llm_request_into_named_persistent_session() {
@@ -1190,6 +1350,15 @@ mod tests {
             } else {
                 Ok("resumed".into())
             }
+        }
+        async fn run_pending(
+            &self,
+            _: Option<&str>,
+        ) -> Vec<(
+            String,
+            Result<String, ah_contracts::controller::ControllerError>,
+        )> {
+            vec![]
         }
         fn retry_task(&self, _: &str) -> Result<(), ah_contracts::controller::ControllerError> {
             if self.fail {
