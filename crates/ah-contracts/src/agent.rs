@@ -47,6 +47,8 @@ pub enum AgentFailure {
     Model,
     Context,
     IterationLimit,
+    /// A crashed tool may have applied an external side effect without a durable result.
+    ToolRecoveryRequired,
 }
 
 /// Public result returned by an agent execution.
@@ -121,6 +123,20 @@ pub trait AgentCallbackManager: Seam {
     async fn notify(&self, callback: AgentCallbackContext) -> Result<(), AgentControlError>;
 }
 
+/// Agent loop per-request overrides passed by ApplicationRuntime.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct AgentRunConfig {
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub temperature: Option<f32>,
+    /// System context supplied by application rails, such as memory hits.
+    #[serde(default)]
+    pub system_context: Option<String>,
+}
+
 /// Agent loop execution seam consumed by application routing.
 #[async_trait]
 pub trait AgentLoopRuntime: Seam {
@@ -151,6 +167,17 @@ pub trait AgentLoopRuntime: Seam {
     ) -> AgentResult {
         self.run_in_session(session, input).await
     }
+
+    /// Execute with request-scoped model, temperature, timeout and system context.
+    async fn run_in_session_with_config(
+        &self,
+        session: std::sync::Arc<dyn crate::session::SessionLog>,
+        input: &str,
+        config: AgentRunConfig,
+    ) -> AgentResult {
+        self.run_in_session_with_timeout(session, input, config.timeout_ms)
+            .await
+    }
 }
 
 /// Application-level request selecting an LLM agent or workflow agent.
@@ -163,6 +190,17 @@ pub struct AgentRequest {
     /// Optional named session checkpoint to restore before execution.
     #[serde(default)]
     pub restore_checkpoint: Option<String>,
+    /// Optional structured controller command. Natural-language parsing is not required.
+    #[serde(default)]
+    pub command: Option<serde_json::Value>,
+    /// User identity used by application memory rails.
+    #[serde(default)]
+    pub user_id: Option<String>,
+    /// Request-scoped model/provider parameters.
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub temperature: Option<f32>,
 }
 
 /// Application runtime seam for routing agent requests.

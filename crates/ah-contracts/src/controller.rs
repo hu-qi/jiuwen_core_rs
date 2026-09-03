@@ -105,6 +105,9 @@ pub struct Intent {
     pub intent_type: IntentType,
     /// 提取的任务描述(create/continue 等携带)。
     pub task_text: Option<String>,
+    /// LLM 或结构化 command 提取出的目标任务。
+    #[serde(default)]
+    pub task_id: Option<String>,
     pub confidence: f64,
 }
 
@@ -175,6 +178,16 @@ pub trait Controller: Seam {
 
     // ---- 意图识别 ----
 
-    /// 从用户文本识别意图(确定性关键词;LLM 识别留待后续)。
+    /// 从用户文本识别意图(确定性关键词;LLM 识别由实现提供)。
     fn recognize_intent(&self, query: &str) -> Intent;
+
+    /// 使用注入的模型识别结构化意图。
+    async fn recognize_intent_with_llm(
+        &self,
+        query: &str,
+        llm: std::sync::Arc<dyn crate::llm::ModelProvider>,
+    ) -> Result<Intent, ControllerError> {
+        let _ = llm;
+        Ok(self.recognize_intent(query))
+    }
 }

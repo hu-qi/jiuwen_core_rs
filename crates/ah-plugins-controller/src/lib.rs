@@ -17,6 +17,7 @@ use ah_contracts::controller::{
 };
 use ah_contracts::effect::Effect;
 use ah_contracts::keys::{CONTROLLER, TASK_SNAPSHOT_STORE};
+use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_hub::context::Context;
@@ -167,10 +168,11 @@ pub struct LocalController {
     parent_to_children: Mutex<HashMap<String, HashSet<String>>>,
     /// task_id → parent。
     child_to_parent: Mutex<HashMap<String, String>>,
+    /// task_type → executor。
     executors: Arc<Mutex<HashMap<String, Arc<dyn TaskExecutor>>>>,
-    /// 每个 session 当前 working 的任务(冲突检测)。
+    /// 每个 session 当前 working 的任务(session_id → task_id),用于并发冲突检测。
     working: Mutex<HashMap<String, String>>,
-    /// 创建序号(同优先级排序)。
+    /// 创建序号(同优先级稳定排序)。
     order: Mutex<std::collections::HashMap<String, u64>>,
     next_order: Mutex<u64>,
     snapshot_store: Option<Arc<dyn TaskSnapshotStore>>,
@@ -406,7 +408,6 @@ impl Controller for LocalController {
                 "task has children: {task_id} (remove children first)"
             )));
         }
-        // 解除父链接。
         if let Some(parent) = self.child_to_parent.lock().unwrap().remove(task_id) {
             let mut parents = self.parent_to_children.lock().unwrap();
             if let Some(children) = parents.get_mut(&parent) {
@@ -416,8 +417,14 @@ impl Controller for LocalController {
                 }
             }
         }
+        let session_id = tasks.get(task_id).map(|task| task.session_id.clone());
         self.order.lock().unwrap().remove(task_id);
-        self.working.lock().unwrap().remove(task_id);
+        if let Some(session_id) = session_id {
+            let mut working = self.working.lock().unwrap();
+            if working.get(&session_id).is_some_and(|id| id == task_id) {
+                working.remove(&session_id);
+            }
+        }
         tasks.remove(task_id);
         drop(tasks);
         self.persist()?;
@@ -438,17 +445,26 @@ impl Controller for LocalController {
                 "illegal transition {from:?} -> {status:?} for {task_id}"
             )));
         }
-        // working 登记簿维护。
+        let session_id = task.session_id.clone();
         let mut working = self.working.lock().unwrap();
         match status {
             TaskStatus::Working => {
-                working.insert(task_id.to_string(), task.session_id.clone());
+                if let Some(existing) = working.get(&session_id)
+                    && existing != task_id
+                {
+                    return Err(ControllerError(format!(
+                        "session {session_id} already has working task {existing}"
+                    )));
+                }
+                working.insert(session_id, task_id.to_string());
             }
             TaskStatus::Completed
             | TaskStatus::Failed
             | TaskStatus::Canceled
             | TaskStatus::Paused => {
-                working.remove(task_id);
+                if working.get(&session_id).is_some_and(|id| id == task_id) {
+                    working.remove(&session_id);
+                }
             }
             _ => {}
         }
@@ -519,12 +535,18 @@ impl Controller for LocalController {
 
     fn pending_tasks(&self, session_id: &str) -> Vec<Task> {
         let tasks = self.tasks.lock().unwrap();
+        let order = self.order.lock().unwrap();
         let mut pending: Vec<Task> = tasks
             .values()
             .filter(|t| t.session_id == session_id && t.status == TaskStatus::Submitted)
             .cloned()
             .collect();
-        pending.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.task_id.cmp(&b.task_id)));
+        pending.sort_by(|a, b| {
+            a.priority
+                .cmp(&b.priority)
+                .then(order.get(&a.task_id).cmp(&order.get(&b.task_id)))
+                .then(a.task_id.cmp(&b.task_id))
+        });
         pending
     }
 
@@ -644,9 +666,51 @@ impl Controller for LocalController {
         Intent {
             intent_type,
             task_text,
+            task_id: extract_task_id(query),
             confidence,
         }
     }
+
+    async fn recognize_intent_with_llm(
+        &self,
+        query: &str,
+        llm: Arc<dyn ModelProvider>,
+    ) -> Result<Intent, ControllerError> {
+        let response = llm
+            .chat(ModelRequest {
+                messages: vec![ChatMessage::new(
+                    ChatRole::System,
+                    "Classify the request. Reply with only JSON: {\"intent_type\":\"create_task|pause_task|resume_task|retry_task|continue_task|supplement_task|cancel_task|modify_task|switch_task|unknown_task\",\"task_id\":null,\"task_text\":null,\"confidence\":0.0}",
+                ), ChatMessage::new(ChatRole::User, query)],
+                ..Default::default()
+            })
+            .await
+            .map_err(|error| ControllerError(format!("intent LLM failed: {error}")))?;
+        let value = extract_json_object(&response.content)
+            .ok_or_else(|| ControllerError("intent LLM returned unparseable JSON".to_string()))?;
+        let intent: Intent = serde_json::from_value(value)
+            .map_err(|error| ControllerError(format!("invalid intent response: {error}")))?;
+        if !(0.0..=1.0).contains(&intent.confidence) {
+            return Err(ControllerError(
+                "intent confidence must be between 0 and 1".to_string(),
+            ));
+        }
+        Ok(intent)
+    }
+}
+
+fn extract_task_id(query: &str) -> Option<String> {
+    query.split_whitespace().find_map(|token| {
+        let id =
+            token.trim_matches(|ch: char| !ch.is_ascii_alphanumeric() && ch != '-' && ch != '_');
+        (id.starts_with("task-") && id.len() > 5).then(|| id.to_string())
+    })
+}
+
+fn extract_json_object(content: &str) -> Option<serde_json::Value> {
+    let start = content.find('{')?;
+    let end = content.rfind('}')?;
+    (end > start).then(|| serde_json::from_str(&content[start..=end]).ok())?
 }
 
 /// 控制器插件:提供 controller seam。

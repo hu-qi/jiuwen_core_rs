@@ -5,9 +5,11 @@
 //! 每次模型请求的消息序列由日志投影(derive_messages)重建,
 //! 每轮的用户消息/助手消息/工具调用/工具结果都追加到日志。
 
-use std::sync::Arc;
-
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static RECOVERY_OWNER_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use ah_contracts::agent::{
     AgentCallbackContext, AgentCallbackManager, AgentControl, AgentFailure, AgentResult,
@@ -18,7 +20,9 @@ use ah_contracts::keys::{
     AGENT_CALLBACKS, AGENT_LOOP, CONTEXT, INTERRUPT, LLM, MODEL_BACKUP, MODEL_BACKUP_POLICY,
     PROMPT, SESSIONS, TOOLS,
 };
-use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest, ToolSchema};
+use ah_contracts::llm::{
+    ChatMessage, ChatRole, ModelProvider, ModelRequest, ModelResponse, ToolCall, ToolSchema,
+};
 use ah_contracts::model_backup::{ModelBackup, ModelBackupPolicy, ModelBackupPolicyProvider};
 use ah_contracts::prelude::Effect;
 use ah_contracts::prompt::PromptRegistry;
@@ -83,10 +87,12 @@ pub struct AgentLoop {
     interrupt: Option<Arc<dyn InterruptRuntime>>,
     callbacks: Option<Arc<dyn AgentCallbackManager>>,
     timeout_ms: Option<u64>,
+    request_model: Option<String>,
+    request_temperature: Option<f32>,
+    system_context: Option<String>,
     backup: Option<Arc<dyn ModelBackup>>,
     backup_policy: ModelBackupPolicy,
 }
-
 impl AgentLoop {
     /// 构建循环。
     pub fn new(
@@ -109,6 +115,9 @@ impl AgentLoop {
             interrupt: None,
             callbacks: None,
             timeout_ms: None,
+            request_model: None,
+            request_temperature: None,
+            system_context: None,
             backup: None,
             backup_policy: ModelBackupPolicy::default(),
         }
@@ -261,9 +270,16 @@ impl AgentLoop {
         self.backup = backup;
         self
     }
-
     pub fn with_model_backup_policy(mut self, policy: ModelBackupPolicy) -> Self {
         self.backup_policy = policy;
+        self
+    }
+
+    pub fn with_request_config(mut self, config: &ah_contracts::agent::AgentRunConfig) -> Self {
+        self.timeout_ms = config.timeout_ms;
+        self.request_model = config.model.clone();
+        self.request_temperature = config.temperature;
+        self.system_context = config.system_context.clone();
         self
     }
 
@@ -314,6 +330,26 @@ impl AgentLoop {
                 AgentFailure::Cancelled,
                 SessionEventKind::AgentCanceled,
             ),
+            AgentLoopFailure::Session => (
+                AgentRunState::Failed,
+                AgentFailure::Session,
+                SessionEventKind::System,
+            ),
+            AgentLoopFailure::Context => (
+                AgentRunState::Failed,
+                AgentFailure::Context,
+                SessionEventKind::System,
+            ),
+            AgentLoopFailure::Model => (
+                AgentRunState::Failed,
+                AgentFailure::Model,
+                SessionEventKind::System,
+            ),
+            AgentLoopFailure::ToolRecoveryRequired => (
+                AgentRunState::Failed,
+                AgentFailure::ToolRecoveryRequired,
+                SessionEventKind::System,
+            ),
             _ => (
                 AgentRunState::Failed,
                 AgentFailure::Model,
@@ -334,6 +370,387 @@ impl AgentLoop {
             iteration,
             tool_calls,
         )
+    }
+    fn pending_tool_calls(session: &dyn SessionLog) -> Result<Vec<ToolCall>, AgentLoopError> {
+        let mut pending = Vec::new();
+        let mut completed = Vec::new();
+        let mut streamed: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
+        for event in session.try_events().map_err(|error| {
+            AgentLoopError::new(
+                AgentLoopFailure::Session,
+                format!("read session during recovery failed: {error}"),
+            )
+        })? {
+            match event.kind {
+                SessionEventKind::Assistant => {
+                    if let Some(calls) = event.payload.get("tool_calls").and_then(Value::as_array) {
+                        for call in calls {
+                            let call = serde_json::from_value::<ToolCall>(call.clone()).map_err(
+                                |error| {
+                                    AgentLoopError::new(
+                                        AgentLoopFailure::Session,
+                                        format!(
+                                            "invalid pending tool call during recovery: {error}"
+                                        ),
+                                    )
+                                },
+                            )?;
+                            if !pending.iter().any(|item: &ToolCall| item.id == call.id) {
+                                pending.push(call);
+                            }
+                        }
+                    }
+                }
+                SessionEventKind::ToolResult => {
+                    if let Some(id) = event.payload.get("tool_call_id").and_then(Value::as_str) {
+                        completed.push(id.to_string());
+                        pending.retain(|call| call.id != id);
+                    }
+                }
+                SessionEventKind::System
+                    if event.payload.get("event").and_then(Value::as_str)
+                        == Some("assistant_stream_delta") =>
+                {
+                    let Some(stream_id) = event.payload.get("stream_id").and_then(Value::as_str)
+                    else {
+                        continue;
+                    };
+                    let Some(deltas) = event
+                        .payload
+                        .get("tool_call_deltas")
+                        .and_then(Value::as_array)
+                    else {
+                        continue;
+                    };
+                    let calls = streamed.entry(stream_id.to_string()).or_default();
+                    for delta in deltas {
+                        let index = delta.get("index").and_then(Value::as_u64).ok_or_else(|| {
+                            AgentLoopError::new(
+                                AgentLoopFailure::ToolRecoveryRequired,
+                                "stream tool call delta has no index",
+                            )
+                        })? as usize;
+                        while calls.len() <= index {
+                            calls.push((String::new(), String::new(), String::new()));
+                        }
+                        let call = &mut calls[index];
+                        if let Some(id) = delta.get("id").and_then(Value::as_str) {
+                            call.0 = id.to_string();
+                        }
+                        if let Some(name) = delta.get("name").and_then(Value::as_str) {
+                            call.1 = name.to_string();
+                        }
+                        if let Some(arguments) = delta.get("arguments").and_then(Value::as_str) {
+                            call.2.push_str(arguments);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for calls in streamed.into_values() {
+            for (id, name, arguments) in calls {
+                if id.trim().is_empty() && name.trim().is_empty() {
+                    continue;
+                }
+                if id.trim().is_empty() || name.trim().is_empty() {
+                    return Err(AgentLoopError::new(
+                        AgentLoopFailure::ToolRecoveryRequired,
+                        "stream tool call identity is incomplete; manual recovery required",
+                    ));
+                }
+                let arguments = serde_json::from_str(&arguments).map_err(|error| {
+                    AgentLoopError::new(
+                        AgentLoopFailure::ToolRecoveryRequired,
+                        format!("stream tool call arguments are incomplete: {error}"),
+                    )
+                })?;
+                if !completed.iter().any(|item| item == &id)
+                    && !pending.iter().any(|item: &ToolCall| item.id == id)
+                {
+                    pending.push(ToolCall {
+                        id,
+                        name,
+                        arguments,
+                    });
+                }
+            }
+        }
+        Ok(pending)
+    }
+
+    /// Complete tool calls persisted before a process crash.
+    async fn recover_pending_tool_calls(
+        &self,
+        session: &Arc<dyn SessionLog>,
+        session_id: &str,
+        deadline: Option<tokio::time::Instant>,
+    ) -> Result<usize, AgentLoopError> {
+        let pending = Self::pending_tool_calls(session.as_ref())?;
+        let owner = format!(
+            "{}:{}",
+            std::process::id(),
+            RECOVERY_OWNER_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let mut recovered = 0;
+        for call in pending {
+            let claimed = session
+                .claim_tool_call(&call.id, &owner, 300_000)
+                .map_err(|error| {
+                    AgentLoopError::new(
+                        AgentLoopFailure::Session,
+                        format!("claim pending tool call failed: {error}"),
+                    )
+                })?;
+            if !claimed {
+                return Err(AgentLoopError::new(
+                    AgentLoopFailure::ToolRecoveryRequired,
+                    format!(
+                        "pending tool call {} is already claimed or completed; retry after the other recovery worker finishes",
+                        call.id
+                    ),
+                ));
+            }
+            let tool = self.tools.get(&call.name).ok_or_else(|| {
+                AgentLoopError::new(
+                    AgentLoopFailure::ToolRecoveryRequired,
+                    format!(
+                        "tool execution outcome unknown after crash: tool {} is unavailable; manual retry required",
+                        call.name
+                    ),
+                )
+            })?;
+            if !tool.idempotent() {
+                let message = format!(
+                    "tool execution outcome unknown after crash: {} is non-idempotent; manual retry required",
+                    call.name
+                );
+                session
+                    .append(
+                        SessionEventKind::ToolResult,
+                        json!({
+                            "tool_call_id": call.id,
+                            "status": "unknown",
+                            "output": message,
+                        }),
+                    )
+                    .map_err(|error| {
+                        AgentLoopError::new(
+                            AgentLoopFailure::Session,
+                            format!("persist unknown tool result failed: {error}"),
+                        )
+                    })?;
+                return Err(AgentLoopError::new(
+                    AgentLoopFailure::ToolRecoveryRequired,
+                    message,
+                ));
+            }
+
+            let invoke = self
+                .tools
+                .invoke_with_id(&call.name, &call.id, call.arguments.clone());
+            let (status, output) = match self.race_control(session_id, deadline, invoke).await? {
+                Ok(value) => ("completed", value.to_string()),
+                Err(error) => ("error", format!("tool error: {error}")),
+            };
+            session
+                .append(
+                    SessionEventKind::ToolResult,
+                    json!({
+                        "tool_call_id": call.id,
+                        "status": status,
+                        "output": output,
+                    }),
+                )
+                .map_err(|error| {
+                    AgentLoopError::new(
+                        AgentLoopFailure::Session,
+                        format!("persist recovered tool result failed: {error}"),
+                    )
+                })?;
+            recovered += 1;
+        }
+        Ok(recovered)
+    }
+    async fn stream_response(
+        &self,
+        request: ModelRequest,
+        session: &Arc<dyn SessionLog>,
+        session_id: &str,
+        iteration: usize,
+        deadline: Option<tokio::time::Instant>,
+    ) -> Result<ModelResponse, AgentLoopError> {
+        struct PartialCall {
+            id: String,
+            name: String,
+            arguments: String,
+        }
+
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(64);
+        let llm = self.llm.clone();
+        let backup = self.backup.clone();
+        let policy = self.backup_policy;
+        let producer = tokio::spawn(async move {
+            if let Some(backup) = backup {
+                backup
+                    .stream_chat_with_policy(llm.as_ref(), request, sender, policy)
+                    .await
+                    .map_err(|error| format!("model backup failed: {error}"))
+            } else {
+                llm.stream_chat(request, sender)
+                    .await
+                    .map_err(|error| format!("model error: {error}"))
+            }
+        });
+        tokio::pin!(producer);
+
+        let mut producer_result: Option<Result<(), String>> = None;
+        let mut receiver_closed = false;
+        let mut content = String::new();
+        let mut reasoning = String::new();
+        let mut calls: Vec<PartialCall> = Vec::new();
+        let stream_id = format!(
+            "{}:{}:{}",
+            session_id,
+            iteration,
+            RECOVERY_OWNER_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let mut consume_chunk = |chunk: ah_contracts::llm::ModelChunk| {
+            if !chunk.content_delta.is_empty()
+                || !chunk.reasoning_delta.is_empty()
+                || !chunk.tool_call_deltas.is_empty()
+            {
+                let deltas: Vec<Value> = chunk
+                    .tool_call_deltas
+                    .iter()
+                    .map(|delta| {
+                        json!({
+                            "index": delta.index,
+                            "id": delta.id,
+                            "name": delta.name,
+                            "arguments": delta.arguments,
+                        })
+                    })
+                    .collect();
+                session
+                    .append(
+                        SessionEventKind::System,
+                        json!({
+                            "event": "assistant_stream_delta",
+                            "stream_id": stream_id,
+                            "content_delta": chunk.content_delta.clone(),
+                            "reasoning_delta": chunk.reasoning_delta.clone(),
+                            "tool_call_deltas": deltas,
+                        }),
+                    )
+                    .map_err(|error| {
+                        AgentLoopError::new(
+                            AgentLoopFailure::Session,
+                            format!("persist stream delta failed: {error}"),
+                        )
+                    })?;
+            }
+            content.push_str(&chunk.content_delta);
+            reasoning.push_str(&chunk.reasoning_delta);
+            for delta in chunk.tool_call_deltas {
+                while calls.len() <= delta.index {
+                    calls.push(PartialCall {
+                        id: String::new(),
+                        name: String::new(),
+                        arguments: String::new(),
+                    });
+                }
+                let call = &mut calls[delta.index];
+                if let Some(id) = delta.id {
+                    call.id = id;
+                }
+                if let Some(name) = delta.name {
+                    call.name = name;
+                }
+                call.arguments.push_str(&delta.arguments);
+            }
+            Ok::<(), AgentLoopError>(())
+        };
+
+        let mut control_future = Box::pin(self.poll_control(session_id, deadline));
+        loop {
+            if let Some(result) = producer_result.as_ref() {
+                if let Err(error) = result {
+                    return Err(AgentLoopError::new(AgentLoopFailure::Model, error.clone()));
+                }
+                match receiver.recv().await {
+                    Some(chunk) => consume_chunk(chunk)?,
+                    None => break,
+                }
+                continue;
+            }
+            tokio::select! {
+                biased;
+                _ = &mut control_future => {
+                    producer.abort();
+                    if deadline.is_some_and(|dl| tokio::time::Instant::now() >= dl) {
+                        return Err(AgentLoopError::new(AgentLoopFailure::TimedOut, "agent run timed out"));
+                    }
+                    return match self.control(session_id) {
+                        AgentControl::Interrupt => Err(AgentLoopError::new(
+                            AgentLoopFailure::Interrupted,
+                            "agent run interrupted; resume the session to continue",
+                        )),
+                        AgentControl::Cancel => Err(AgentLoopError::new(
+                            AgentLoopFailure::Cancelled,
+                            "agent run cancelled",
+                        )),
+                        AgentControl::Continue => Err(AgentLoopError::new(
+                            AgentLoopFailure::Model,
+                            "control raced unexpectedly",
+                        )),
+                    };
+                }
+                result = &mut producer => {
+                    producer_result = Some(match result {
+                        Ok(result) => result,
+                        Err(error) => Err(format!("stream task failed: {error}")),
+                    });
+                }
+                chunk = receiver.recv(), if !receiver_closed => {
+                    match chunk {
+                        Some(chunk) => consume_chunk(chunk)?,
+                        None => receiver_closed = true,
+                    }
+                }
+            }
+        }
+
+        if let Some(Err(error)) = producer_result {
+            return Err(AgentLoopError::new(AgentLoopFailure::Model, error));
+        }
+        let tool_calls = calls
+            .into_iter()
+            .map(|call| {
+                if call.id.trim().is_empty() || call.name.trim().is_empty() {
+                    return Err(AgentLoopError::new(
+                        AgentLoopFailure::Model,
+                        "stream ended with incomplete tool call identity",
+                    ));
+                }
+                let arguments = serde_json::from_str(&call.arguments).map_err(|error| {
+                    AgentLoopError::new(
+                        AgentLoopFailure::Model,
+                        format!("stream ended with incomplete tool call arguments: {error}"),
+                    )
+                })?;
+                Ok(ToolCall {
+                    id: call.id,
+                    name: call.name,
+                    arguments,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ModelResponse {
+            content,
+            tool_calls,
+            reasoning_content: (!reasoning.is_empty()).then_some(reasoning),
+        })
     }
 
     /// 在指定会话上运行一轮任务:日志驱动的 ReAct 循环,返回结构化 AgentResult。
@@ -379,6 +796,19 @@ impl AgentLoop {
                 0,
                 total_tool_calls,
             );
+        }
+        // 恢复顺序必须先补齐历史 tool call,再追加本次用户消息,否则模型会看到
+        // assistant tool call 后紧跟 user 的非法对话序列。
+        match self
+            .recover_pending_tool_calls(&session, &session_id, deadline)
+            .await
+        {
+            Ok(count) => total_tool_calls += count,
+            Err(error) => {
+                return self
+                    .race_finish(&session, &session_id, 0, error, total_tool_calls)
+                    .await;
+            }
         }
         // 1) 用户消息入日志。
         if session
@@ -439,7 +869,7 @@ impl AgentLoop {
             }
             // 2) 模型可见消息:优先经 context seam 按预算组装(压缩时注入摘要),
             //    未挂载时用日志投影直通(日志即真相:完整历史始终在日志)。
-            let messages = if let Some(context) = &self.context {
+            let mut messages = if let Some(context) = &self.context {
                 match context.assemble(session.as_ref(), self.token_budget).await {
                     Ok(assembled) => assembled.messages,
                     Err(e) => {
@@ -457,8 +887,10 @@ impl AgentLoop {
             } else {
                 session.derive_messages()
             };
+            if let Some(context) = &self.system_context {
+                messages.insert(0, ChatMessage::new(ChatRole::System, context.clone()));
+            }
             // prompt seam 消费:注册的模板渲染为 system 消息(请求首条)。
-            let mut messages = messages;
             if let Some(registry) = &self.prompt
                 && registry.get(&self.prompt_name).is_some()
                 && let Ok(rendered) = registry.render(&self.prompt_name, &HashMap::new())
@@ -468,57 +900,64 @@ impl AgentLoop {
             let request = ModelRequest {
                 messages,
                 tools: self.tool_schemas(),
-                ..Default::default()
+                model: self.request_model.clone(),
+                temperature: self.request_temperature,
             };
-            // 3) 模型调用:执行中可被取消/超时中止(backup 链上的任意 provider 同被中止)。
-            let model_call = async {
-                if let Some(backup) = &self.backup {
-                    backup
-                        .chat_with_policy(self.llm.as_ref(), request, self.backup_policy)
-                        .await
-                        .map_err(|e| format!("model backup failed: {e}"))
-                } else {
-                    self.llm
-                        .chat(request)
-                        .await
-                        .map_err(|e| format!("model error: {e}"))
+            // 3) 模型调用:以流式接口为统一路径,增量 tool call 先写入日志。
+            let response = match self
+                .stream_response(request, &session, &session_id, iteration, deadline)
+                .await
+            {
+                Ok(response) => response,
+                Err(error)
+                    if matches!(
+                        error.kind,
+                        AgentLoopFailure::TimedOut
+                            | AgentLoopFailure::Interrupted
+                            | AgentLoopFailure::Cancelled
+                    ) =>
+                {
+                    return self
+                        .race_finish(&session, &session_id, iteration, error, total_tool_calls)
+                        .await;
                 }
-            };
-            let response = match self.race_control(&session_id, deadline, model_call).await {
-                Ok(Ok(response)) => response,
-                Ok(Err(message)) => {
+                Err(error) => {
+                    let failure = match error.kind {
+                        AgentLoopFailure::Session => AgentFailure::Session,
+                        AgentLoopFailure::Context => AgentFailure::Context,
+                        AgentLoopFailure::ToolRecoveryRequired => {
+                            AgentFailure::ToolRecoveryRequired
+                        }
+                        _ => AgentFailure::Model,
+                    };
+                    let message = error.message;
                     let _ = session.append(
                         SessionEventKind::System,
                         json!({
                             "event": "agent_error",
-                            "failure": "Model",
+                            "failure": format!("{failure:?}"),
                             "message": message,
                         }),
                     );
                     return Self::result_for(
                         &session_id,
                         AgentRunState::Failed,
-                        Some(AgentFailure::Model),
+                        Some(failure),
                         Some(message),
                         None,
                         iteration,
                         total_tool_calls,
                     );
                 }
-                Err(error) => {
-                    return self
-                        .race_finish(&session, &session_id, iteration, error, total_tool_calls)
-                        .await;
-                }
             };
 
             if response.tool_calls.is_empty() {
-                // 4) 最终回答入日志,结束。
+                let mut assistant_payload = json!({ "content": response.content });
+                if let Some(reasoning) = response.reasoning_content.clone() {
+                    assistant_payload["reasoning_content"] = Value::String(reasoning);
+                }
                 if session
-                    .append(
-                        SessionEventKind::Assistant,
-                        json!({ "content": response.content }),
-                    )
+                    .append(SessionEventKind::Assistant, assistant_payload)
                     .is_err()
                 {
                     return Self::result_for(
@@ -558,7 +997,7 @@ impl AgentLoop {
                 );
             }
 
-            // 5) 助手工具调用入日志。
+            // 5) 助手工具调用入日志,同时保存 thinking-mode 所需的 reasoning_content。
             let calls: Vec<Value> = response
                 .tool_calls
                 .iter()
@@ -570,8 +1009,12 @@ impl AgentLoop {
                     })
                 })
                 .collect();
+            let mut assistant_payload = json!({ "tool_calls": calls });
+            if let Some(reasoning) = response.reasoning_content.clone() {
+                assistant_payload["reasoning_content"] = Value::String(reasoning);
+            }
             if session
-                .append(SessionEventKind::Assistant, json!({ "tool_calls": calls }))
+                .append(SessionEventKind::Assistant, assistant_payload)
                 .is_err()
             {
                 return Self::result_for(
@@ -588,15 +1031,18 @@ impl AgentLoop {
             // 6) 真实执行工具。工具失败/被拒**不中断循环**,错误作为工具结果回喂模型
             //    (模型据此换方案),符合真实 agent 语义;执行中取消/超时则中止循环。
             for call in &response.tool_calls {
-                let invoke = self.tools.invoke(&call.name, call.arguments.clone());
-                let output = match self.race_control(&session_id, deadline, invoke).await {
+                let invoke =
+                    self.tools
+                        .invoke_with_id(&call.name, &call.id, call.arguments.clone());
+                let (status, output) = match self.race_control(&session_id, deadline, invoke).await
+                {
                     Ok(Ok(value)) => {
                         total_tool_calls += 1;
-                        value.to_string()
+                        ("completed", value.to_string())
                     }
                     Ok(Err(error)) => {
                         total_tool_calls += 1;
-                        format!("tool error: {error}")
+                        ("error", format!("tool error: {error}"))
                     }
                     Err(error) => {
                         return self
@@ -609,6 +1055,7 @@ impl AgentLoop {
                         SessionEventKind::ToolResult,
                         json!({
                             "tool_call_id": call.id,
+                            "status": status,
                             "output": output,
                         }),
                     )
@@ -698,17 +1145,37 @@ impl ah_contracts::agent::AgentLoopRuntime for AgentLoop {
             .run_in_session(session, input)
             .await
     }
+    async fn run_in_session_with_config(
+        &self,
+        session: Arc<dyn SessionLog>,
+        input: &str,
+        config: ah_contracts::agent::AgentRunConfig,
+    ) -> ah_contracts::agent::AgentResult {
+        AgentLoop::with_request_config(self.clone(), &config)
+            .run_in_session(session, input)
+            .await
+    }
 }
 
 /// agent 循环插件:注入 llm + tools + sessions,提供 agent-loop 服务。
 pub struct AgentLoopPlugin {
     max_iterations: usize,
+    timeout_ms: Option<u64>,
 }
 
 impl AgentLoopPlugin {
     /// 创建循环插件。
     pub fn new(max_iterations: usize) -> Self {
-        Self { max_iterations }
+        Self {
+            max_iterations,
+            timeout_ms: Some(120_000),
+        }
+    }
+
+    /// 覆盖插件运行级截止时间;None 表示不设置截止时间。
+    pub fn with_timeout(mut self, timeout_ms: Option<u64>) -> Self {
+        self.timeout_ms = timeout_ms;
+        self
     }
 }
 
@@ -777,6 +1244,7 @@ impl Plugin for AgentLoopPlugin {
         }
         agent = agent
             .with_controls(interrupt, callbacks, None)
+            .with_timeout(self.timeout_ms)
             .with_model_backup(backup)
             .with_model_backup_policy(backup_policy);
         let agent: Arc<dyn ah_contracts::agent::AgentLoopRuntime> = Arc::new(agent);
@@ -788,7 +1256,7 @@ impl Plugin for AgentLoopPlugin {
 mod tests {
     use super::*;
     use ah_contracts::keys::SESSIONS;
-    use ah_contracts::llm::{ChatRole, ModelResponse};
+    use ah_contracts::llm::{ChatRole, ModelChunk, ModelError, ModelResponse, ToolCallDelta};
     use ah_contracts::session::SessionLog;
     use ah_hub::plugin::DynPlugin;
     use async_trait::async_trait;
@@ -863,8 +1331,10 @@ mod tests {
             kinds,
             vec![
                 ah_contracts::session::SessionEventKind::User,
+                ah_contracts::session::SessionEventKind::System,
                 ah_contracts::session::SessionEventKind::Assistant,
                 ah_contracts::session::SessionEventKind::ToolResult,
+                ah_contracts::session::SessionEventKind::System,
                 ah_contracts::session::SessionEventKind::Assistant,
             ]
         );
@@ -930,6 +1400,7 @@ mod tests {
             .filter(|e| e.kind == ah_contracts::session::SessionEventKind::ToolResult)
             .collect();
         assert_eq!(tool_results.len(), 1);
+        assert_eq!(tool_results[0].payload["status"], "error");
         assert!(
             tool_results[0].payload["output"]
                 .as_str()
@@ -940,6 +1411,39 @@ mod tests {
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_file(&session_path);
+    }
+
+    #[test]
+    fn reconstructs_complete_stream_delta_after_restart() {
+        let path = std::env::temp_dir().join(format!(
+            "ah-loop-stream-recovery-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let log = ah_plugins_session_log::JsonlSessionLog::open(&path, Context::new())
+            .expect("open stream session");
+        for arguments in ["{\"path\":\"", ".\"}"] {
+            log.append(
+                SessionEventKind::System,
+                json!({
+                    "event": "assistant_stream_delta",
+                    "stream_id": "stream-1",
+                    "content_delta": "",
+                    "tool_call_deltas": [{
+                        "index": 0,
+                        "id": "stream-call",
+                        "name": "list_dir",
+                        "arguments": arguments
+                    }]
+                }),
+            )
+            .expect("persist stream delta");
+        }
+        let pending = AgentLoop::pending_tool_calls(&log).expect("reconstruct stream call");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, "stream-call");
+        assert_eq!(pending[0].arguments["path"], ".");
+        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
@@ -979,7 +1483,238 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&session_dir);
     }
+    #[tokio::test]
+    async fn recovers_pending_tool_call_after_restart() {
+        let root = std::env::temp_dir().join(format!("ah-loop-crash-root-{}", std::process::id()));
+        let session_dir =
+            std::env::temp_dir().join(format!("ah-loop-crash-sessions-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&session_dir);
+        std::fs::create_dir_all(&session_dir).expect("session dir");
+        let path = session_dir.join("default.jsonl");
 
+        // 模拟进程在工具返回前崩溃:助手调用已经持久化,ToolResult 尚未落盘。
+        let crashed = ah_plugins_session_log::JsonlSessionLog::open(&path, Context::new())
+            .expect("open crashed session");
+        crashed
+            .append(
+                SessionEventKind::User,
+                serde_json::json!({"content": "explore the workspace"}),
+            )
+            .expect("persist user");
+        crashed
+            .append(
+                SessionEventKind::Assistant,
+                serde_json::json!({
+                    "tool_calls": [{
+                        "id": "crashed-call",
+                        "name": "list_dir",
+                        "arguments": {"path": "."}
+                    }]
+                }),
+            )
+            .expect("persist pending tool call");
+        drop(crashed);
+
+        // 新进程重新挂载同一会话,应先补齐 pending ToolResult,再请求模型。
+        let (ctx, effects) = build_ctx_with_dir(&root, &session_dir);
+        let agent = ctx
+            .service::<dyn ah_contracts::agent::AgentLoopRuntime>(&AGENT_LOOP)
+            .expect("agent loop");
+        let result = agent.run("resume after crash").await;
+        assert_eq!(result.state, AgentRunState::Completed);
+        assert_eq!(result.tool_calls, 1, "pending tool call executes once");
+
+        let resumed = ah_plugins_session_log::JsonlSessionLog::open(&path, Context::new())
+            .expect("reopen resumed session");
+        let events = resumed.events();
+        let tool_results: Vec<_> = events
+            .iter()
+            .filter(|event| event.kind == SessionEventKind::ToolResult)
+            .collect();
+        assert_eq!(tool_results.len(), 1);
+        assert_eq!(tool_results[0].payload["tool_call_id"], "crashed-call");
+        assert!(
+            resumed
+                .derive_messages()
+                .iter()
+                .any(|message| message.role == ChatRole::Tool)
+        );
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(session_dir);
+    }
+    #[tokio::test]
+    async fn refuses_automatic_retry_for_non_idempotent_tool() {
+        use ah_contracts::tools::{Tool, ToolError};
+
+        struct SideEffectTool {
+            calls: StdArc<AtomicUsize>,
+        }
+
+        #[async_trait]
+        impl Tool for SideEffectTool {
+            fn name(&self) -> &'static str {
+                "side_effect"
+            }
+
+            fn description(&self) -> &'static str {
+                "non-idempotent test side effect"
+            }
+
+            async fn invoke(&self, _arguments: Value) -> Result<Value, ToolError> {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                Ok(json!({"executed": true}))
+            }
+        }
+
+        let root =
+            std::env::temp_dir().join(format!("ah-loop-no-retry-root-{}", std::process::id()));
+        let session_dir =
+            std::env::temp_dir().join(format!("ah-loop-no-retry-sessions-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&session_dir);
+        std::fs::create_dir_all(&session_dir).expect("session dir");
+        let path = session_dir.join("default.jsonl");
+        let crashed = ah_plugins_session_log::JsonlSessionLog::open(&path, Context::new())
+            .expect("open crashed session");
+        crashed
+            .append(
+                SessionEventKind::User,
+                json!({"content": "run the side effect"}),
+            )
+            .expect("persist user");
+        crashed
+            .append(
+                SessionEventKind::Assistant,
+                json!({
+                    "tool_calls": [{
+                        "id": "unknown-outcome",
+                        "name": "side_effect",
+                        "arguments": {}
+                    }]
+                }),
+            )
+            .expect("persist pending tool call");
+        drop(crashed);
+
+        let (ctx, effects) = build_ctx_with_dir(&root, &session_dir);
+        let calls = StdArc::new(AtomicUsize::new(0));
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let tool_effect = registry.register(StdArc::new(SideEffectTool {
+            calls: calls.clone(),
+        }));
+        let agent = ctx
+            .service::<dyn ah_contracts::agent::AgentLoopRuntime>(&AGENT_LOOP)
+            .expect("agent loop");
+        let result = agent.run("resume safely").await;
+
+        assert_eq!(result.state, AgentRunState::Failed);
+        assert_eq!(result.failure, Some(AgentFailure::ToolRecoveryRequired));
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "unknown outcome is not retried"
+        );
+        let second = agent.run("continue after review").await;
+        assert_eq!(second.state, AgentRunState::Completed);
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "unknown outcome stays deduplicated"
+        );
+        let resumed = ah_plugins_session_log::JsonlSessionLog::open(&path, Context::new())
+            .expect("reopen session");
+        let result_event = resumed
+            .events()
+            .into_iter()
+            .find(|event| event.kind == SessionEventKind::ToolResult)
+            .expect("recovery result");
+        assert_eq!(result_event.payload["status"], "unknown");
+        assert!(
+            result_event.payload["output"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("manual retry")
+        );
+
+        drop(tool_effect);
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(session_dir);
+    }
+
+    #[tokio::test]
+    async fn persists_partial_stream_tool_call_before_timeout() {
+        struct PartialStreamProvider;
+
+        impl Seam for PartialStreamProvider {}
+
+        #[async_trait]
+        impl ModelProvider for PartialStreamProvider {
+            fn name(&self) -> &'static str {
+                "partial-stream-test"
+            }
+
+            async fn chat(&self, _request: ModelRequest) -> Result<ModelResponse, ModelError> {
+                Err(ModelError("chat path must not be used".into()))
+            }
+
+            async fn stream_chat(
+                &self,
+                _request: ModelRequest,
+                sink: tokio::sync::mpsc::Sender<ModelChunk>,
+            ) -> Result<(), ModelError> {
+                sink.send(ModelChunk {
+                    content_delta: String::new(),
+                    reasoning_delta: String::new(),
+                    tool_call_deltas: vec![ToolCallDelta {
+                        index: 0,
+                        id: Some("partial-call".into()),
+                        name: Some("write_file".into()),
+                        arguments: "{\"path\":\"notes/".into(),
+                    }],
+                    done: false,
+                })
+                .await
+                .map_err(|_| ModelError("stream receiver closed".into()))?;
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                Ok(())
+            }
+        }
+
+        let root = std::env::temp_dir().join(format!("ah-loop-stream-root-{}", std::process::id()));
+        let session_dir =
+            std::env::temp_dir().join(format!("ah-loop-stream-sessions-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&session_dir);
+        let (ctx, effects) = build_ctx_with_dir(&root, &session_dir);
+        let session = ctx.service::<dyn SessionLog>(&SESSIONS).expect("session");
+        let tools = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let agent = AgentLoop::new(
+            StdArc::new(PartialStreamProvider),
+            tools,
+            session.clone(),
+            ctx,
+            2,
+        )
+        .with_timeout(Some(100));
+        let result = agent
+            .run_in_session(session.clone(), "start streaming")
+            .await;
+        assert_eq!(result.state, AgentRunState::TimedOut);
+        assert!(session.events().iter().any(|event| {
+            event.kind == SessionEventKind::System
+                && event.payload["event"] == "assistant_stream_delta"
+        }));
+        assert!(!session.events().iter().any(|event| {
+            event.kind == SessionEventKind::Assistant && event.payload.get("tool_calls").is_some()
+        }));
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(session_dir);
+    }
     #[tokio::test]
     async fn interruption_and_cancellation_are_logged() {
         let root = std::env::temp_dir().join(format!("ah-loop-control-{}", std::process::id()));
@@ -1190,6 +1925,7 @@ mod tests {
                     Ok(ModelResponse {
                         content: "backup answer".into(),
                         tool_calls: vec![],
+                        reasoning_content: None,
                     })
                 })
         }
@@ -1450,11 +2186,13 @@ mod tests {
                             name: "noop".to_string(),
                             arguments: json!({}),
                         }],
+                        reasoning_content: None,
                     })
                 } else {
                     Ok(ModelResponse {
                         content: "final answer".to_string(),
                         tool_calls: vec![],
+                        reasoning_content: None,
                     })
                 }
             }
@@ -1506,6 +2244,7 @@ mod tests {
                 Ok(ModelResponse {
                     content: "slow done".to_string(),
                     tool_calls: vec![],
+                    reasoning_content: None,
                 })
             }
         }
@@ -1557,6 +2296,7 @@ mod tests {
                 Ok(ModelResponse {
                     content: "slow done".to_string(),
                     tool_calls: vec![],
+                    reasoning_content: None,
                 })
             }
         }
@@ -1652,11 +2392,13 @@ mod tests {
                             name: "sleepy".to_string(),
                             arguments: json!({}),
                         }],
+                        reasoning_content: None,
                     })
                 } else {
                     Ok(ModelResponse {
                         content: "done".to_string(),
                         tool_calls: vec![],
+                        reasoning_content: None,
                     })
                 }
             }
@@ -1708,5 +2450,9 @@ mod tests {
         );
         drop(effects);
         let _ = std::fs::remove_dir_all(&session_dir);
+    }
+    #[test]
+    fn default_plugin_has_bounded_run_timeout() {
+        assert_eq!(AgentLoopPlugin::default().timeout_ms, Some(120_000));
     }
 }

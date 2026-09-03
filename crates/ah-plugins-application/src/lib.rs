@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
 use ah_contracts::agent::{
-    AgentControlError, AgentLoopRuntime, AgentRequest, AgentResult, AgentRunState,
+    AgentControlError, AgentLoopRuntime, AgentRequest, AgentResult, AgentRunConfig, AgentRunState,
     ApplicationRuntime,
 };
-use ah_contracts::controller::{Controller, IntentType};
-use ah_contracts::keys::{AGENT_LOOP, APPLICATION, CONTROLLER, SESSION_MANAGER, WORKFLOW};
+use ah_contracts::controller::{Controller, Intent, IntentType, Task, TaskStatus};
+use ah_contracts::keys::{
+    AGENT_LOOP, APPLICATION, CONTROLLER, LLM, MEMORY, SESSION_MANAGER, WORKFLOW,
+};
+use ah_contracts::llm::ModelProvider;
+use ah_contracts::memory::MemoryProvider;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::session::{SessionEventKind, SessionManager};
@@ -19,8 +23,8 @@ pub struct LocalApplicationRuntime {
     workflow: Arc<dyn WorkflowEngine>,
     sessions: Arc<dyn SessionManager>,
     controller: Option<Arc<dyn Controller>>,
+    ctx: Context,
 }
-
 impl Seam for LocalApplicationRuntime {}
 
 fn extract_task_id_from_natural_language(input: &str) -> Option<&str> {
@@ -29,6 +33,72 @@ fn extract_task_id_from_natural_language(input: &str) -> Option<&str> {
             token.trim_matches(|ch: char| !ch.is_ascii_alphanumeric() && ch != '-' && ch != '_');
         (candidate.starts_with("task-") && candidate.len() > "task-".len()).then_some(candidate)
     })
+}
+
+fn intent_from_command(command: &serde_json::Value) -> Result<Intent, AgentControlError> {
+    let object = command
+        .as_object()
+        .ok_or_else(|| AgentControlError("command must be a JSON object".to_string()))?;
+    let intent_type = object
+        .get("intent_type")
+        .or_else(|| object.get("type"))
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| AgentControlError("command requires intent_type".to_string()))?;
+    let intent_type =
+        serde_json::from_value::<IntentType>(serde_json::Value::String(intent_type.to_string()))
+            .map_err(|_| AgentControlError(format!("unknown command intent: {intent_type}")))?;
+    let task_text = object
+        .get("task_text")
+        .or_else(|| object.get("description"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let task_id = object
+        .get("task_id")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let confidence = object
+        .get("confidence")
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or(1.0);
+    if !(0.0..=1.0).contains(&confidence) {
+        return Err(AgentControlError(
+            "command confidence must be between 0 and 1".to_string(),
+        ));
+    }
+    Ok(Intent {
+        intent_type,
+        task_text,
+        task_id,
+        confidence,
+    })
+}
+
+fn memory_context(memory: &dyn MemoryProvider, query: &str) -> Option<String> {
+    let records = memory.search(query);
+    if records.is_empty() {
+        return None;
+    }
+    let content = records
+        .into_iter()
+        .map(|record| format!("{}: {}", record.key, record.content))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(format!("Relevant long-term memory:\n{content}"))
+}
+
+fn persist_memory(
+    memory: &dyn MemoryProvider,
+    user_id: &str,
+    session_id: &str,
+    input: &str,
+    answer: &str,
+) {
+    if answer.trim().is_empty() {
+        return;
+    }
+    let key = format!("{user_id}:session:{session_id}");
+    let content = format!("user: {input}\nassistant: {answer}");
+    let _ = memory.store(&key, &content, vec!["conversation".to_string()]);
 }
 
 #[async_trait]
@@ -55,44 +125,142 @@ impl ApplicationRuntime for LocalApplicationRuntime {
                 .map_err(|e| AgentControlError(format!("session open failed: {e}")))?
         };
         if let Some(controller) = &self.controller {
-            let intent = controller.recognize_intent(&request.input);
-            let command = request.input.split_once(':');
+            let intent = if let Some(command) = request.command.as_ref() {
+                intent_from_command(command)?
+            } else if let Some(llm) = self.ctx.service::<dyn ModelProvider>(&LLM) {
+                match controller
+                    .recognize_intent_with_llm(&request.input, llm.clone())
+                    .await
+                {
+                    Ok(intent) => intent,
+                    Err(error) if llm.name() == "mock" => {
+                        controller.recognize_intent(&request.input)
+                    }
+                    Err(error) => {
+                        return Err(AgentControlError(format!(
+                            "intent recognition failed: {error}"
+                        )));
+                    }
+                }
+            } else {
+                controller.recognize_intent(&request.input)
+            };
+            let command_task_id = request
+                .command
+                .as_ref()
+                .and_then(|command| command.get("task_id"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            if intent.intent_type == IntentType::CreateTask {
+                let task_id = intent
+                    .task_id
+                    .clone()
+                    .or(command_task_id.clone())
+                    .ok_or_else(|| {
+                        AgentControlError("create_task command requires task_id".to_string())
+                    })?;
+                let command = request.command.as_ref();
+                let task_type = command
+                    .and_then(|value| value.get("task_type"))
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("agent");
+                let priority = command
+                    .and_then(|value| value.get("priority"))
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(1);
+                let mut task = Task::submitted(
+                    &request.session_id,
+                    &task_id,
+                    task_type,
+                    intent
+                        .task_text
+                        .clone()
+                        .unwrap_or_else(|| request.input.clone()),
+                    priority as i32,
+                );
+                if let Some(payload) = command.and_then(|value| value.get("payload")) {
+                    task.payload = payload.clone();
+                }
+                let result = controller.create_task(task);
+                let (state, answer, error) = match result {
+                    Ok(_) => (
+                        AgentRunState::Completed,
+                        Some(format!("task {task_id} created")),
+                        None,
+                    ),
+                    Err(error) => (AgentRunState::Failed, None, Some(error.0)),
+                };
+                session
+                    .append(
+                        SessionEventKind::System,
+                        serde_json::json!({
+                            "command": request.command,
+                            "intent": "CreateTask",
+                            "task_id": task_id,
+                            "state": format!("{state:?}"),
+                            "error": error,
+                        }),
+                    )
+                    .map_err(|e| AgentControlError(format!("session append failed: {e}")))?;
+                return Ok(AgentResult {
+                    session_id: request.session_id,
+                    state,
+                    answer,
+                    iterations: 0,
+                    tool_calls: 0,
+                    failure: None,
+                    error,
+                });
+            }
             match intent.intent_type {
                 IntentType::CancelTask
                 | IntentType::PauseTask
                 | IntentType::ResumeTask
                 | IntentType::RetryTask => {
-                    let task_id = match command
-                        .and_then(|(_, id)| (!id.trim().is_empty()).then_some(id.trim()))
-                        .or_else(|| extract_task_id_from_natural_language(&request.input))
-                    {
+                    let task_id = match intent
+                        .task_id
+                        .clone()
+                        .or(command_task_id)
+                        .or_else(|| {
+                            request.input.split_once(':').and_then(|(_, id)| {
+                                (!id.trim().is_empty()).then_some(id.trim().to_string())
+                            })
+                        })
+                        .or_else(|| {
+                            extract_task_id_from_natural_language(&request.input)
+                                .map(str::to_string)
+                        }) {
                         Some(task_id) => task_id,
                         None => {
                             let error = "controller command requires task id after ':'";
-                            let _ = session.append(
-                                SessionEventKind::System,
-                                serde_json::json!({
-                                    "command": request.input,
-                                    "intent": format!("{:?}", intent.intent_type),
-                                    "state": "Failed",
-                                    "error": error,
-                                }),
-                            );
+                            session
+                                .append(
+                                    SessionEventKind::System,
+                                    serde_json::json!({
+                                        "command": request.input,
+                                        "intent": format!("{:?}", intent.intent_type),
+                                        "state": "Failed",
+                                        "error": error,
+                                    }),
+                                )
+                                .map_err(|e| {
+                                    AgentControlError(format!("session append failed: {e}"))
+                                })?;
                             return Err(AgentControlError(error.to_string()));
                         }
                     };
                     let result = match intent.intent_type {
-                        IntentType::CancelTask => controller.cancel_task(task_id).await,
+                        IntentType::CancelTask => controller.cancel_task(&task_id).await,
                         IntentType::PauseTask => controller
-                            .update_status(task_id, ah_contracts::controller::TaskStatus::Paused)
+                            .update_status(&task_id, TaskStatus::Paused)
                             .map(|_| ()),
-                        IntentType::ResumeTask => match controller
-                            .update_status(task_id, ah_contracts::controller::TaskStatus::Submitted)
-                        {
-                            Ok(()) => controller.run_task(task_id).await.map(|_| ()),
-                            Err(error) => Err(error),
-                        },
-                        IntentType::RetryTask => controller.retry_task(task_id),
+                        IntentType::ResumeTask => {
+                            match controller.update_status(&task_id, TaskStatus::Submitted) {
+                                Ok(()) => controller.run_task(&task_id).await.map(|_| ()),
+                                Err(error) => Err(error),
+                            }
+                        }
+                        IntentType::RetryTask => controller.retry_task(&task_id),
                         _ => unreachable!(),
                     };
                     let (state, answer, error) = match result {
@@ -107,10 +275,10 @@ impl ApplicationRuntime for LocalApplicationRuntime {
                         .append(
                             SessionEventKind::System,
                             serde_json::json!({
-                                "command": request.input,
+                                "command": request.command.as_ref().unwrap_or(&serde_json::Value::String(request.input.clone())),
                                 "intent": format!("{:?}", intent.intent_type),
                                 "task_id": task_id,
-                                "state": format!("{:?}", state),
+                                "state": format!("{state:?}"),
                                 "error": error,
                             }),
                         )
@@ -128,6 +296,11 @@ impl ApplicationRuntime for LocalApplicationRuntime {
                 _ => {}
             }
         }
+        let system_context = request
+            .user_id
+            .as_deref()
+            .and_then(|_| self.ctx.service::<dyn MemoryProvider>(&MEMORY))
+            .and_then(|memory| memory_context(memory.as_ref(), &request.input));
         if let Some(workflow) = request.workflow {
             let spec: WorkflowSpec = serde_json::from_value(workflow)
                 .map_err(|e| AgentControlError(format!("invalid workflow: {e}")))?;
@@ -148,10 +321,23 @@ impl ApplicationRuntime for LocalApplicationRuntime {
                     serde_json::json!({"content": output.output.to_string()}),
                 )
                 .map_err(|e| AgentControlError(format!("session append failed: {e}")))?;
+            let answer = output.output.to_string();
+            if let (Some(user_id), Some(memory)) = (
+                request.user_id.as_deref(),
+                self.ctx.service::<dyn MemoryProvider>(&MEMORY),
+            ) {
+                persist_memory(
+                    memory.as_ref(),
+                    user_id,
+                    &request.session_id,
+                    &request.input,
+                    &answer,
+                );
+            }
             return Ok(AgentResult {
                 session_id: request.session_id,
                 state: AgentRunState::Completed,
-                answer: Some(output.output.to_string()),
+                answer: Some(answer),
                 iterations: output.executed.len(),
                 tool_calls: 0,
                 failure: None,
@@ -163,7 +349,16 @@ impl ApplicationRuntime for LocalApplicationRuntime {
         // 不再解析错误字符串判定 interrupted/cancelled/timed out。
         let result = self
             .agent
-            .run_in_session_with_timeout(session.clone(), &request.input, request.timeout_ms)
+            .run_in_session_with_config(
+                session.clone(),
+                &request.input,
+                AgentRunConfig {
+                    timeout_ms: request.timeout_ms,
+                    model: request.model.clone(),
+                    temperature: request.temperature,
+                    system_context,
+                },
+            )
             .await;
         if result.state != AgentRunState::Completed {
             // 失败/中断/取消/超时:结构化状态写入 System 事件,原样返回 result。
@@ -196,6 +391,19 @@ impl ApplicationRuntime for LocalApplicationRuntime {
             }
             return Ok(result);
         }
+        if let (Some(user_id), Some(answer), Some(memory)) = (
+            request.user_id.as_deref(),
+            result.answer.as_deref(),
+            self.ctx.service::<dyn MemoryProvider>(&MEMORY),
+        ) {
+            persist_memory(
+                memory.as_ref(),
+                user_id,
+                &request.session_id,
+                &request.input,
+                answer,
+            );
+        }
         Ok(AgentResult {
             session_id: request.session_id,
             state: AgentRunState::Completed,
@@ -218,7 +426,7 @@ impl Plugin for ApplicationPlugin {
         vec![APPLICATION]
     }
     fn inject(&self) -> Vec<ServiceKey> {
-        vec![AGENT_LOOP, WORKFLOW, SESSION_MANAGER]
+        vec![AGENT_LOOP, WORKFLOW, SESSION_MANAGER, LLM]
     }
     fn apply(&self, ctx: &Context) -> Result<Vec<ah_contracts::Effect>, PluginError> {
         let agent = ctx
@@ -245,6 +453,7 @@ impl Plugin for ApplicationPlugin {
             workflow,
             sessions,
             controller,
+            ctx: ctx.clone(),
         });
         Ok(vec![ctx.register(APPLICATION, runtime)])
     }
@@ -290,6 +499,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .expect("invoke");
@@ -350,6 +563,10 @@ mod tests {
                 workflow: Some(workflow),
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .expect("workflow invoke");
@@ -404,6 +621,10 @@ mod tests {
                 workflow: Some(workflow),
                 timeout_ms: None,
                 restore_checkpoint: Some("before-run".into()),
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .unwrap();
@@ -463,6 +684,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .expect("structured cancellation");
@@ -480,6 +705,7 @@ mod tests {
             workflow: Arc::new(RejectWorkflow),
             sessions: sessions.clone(),
             controller: None,
+            ctx: Context::new(),
         };
         let result = runtime
             .invoke(AgentRequest {
@@ -488,6 +714,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .expect("structured failure");
@@ -519,6 +749,7 @@ mod tests {
             workflow: Arc::new(RejectWorkflow),
             sessions: Arc::new(TestSessions::default()),
             controller: Some(controller),
+            ctx: Context::new(),
         };
         let result = runtime
             .invoke(AgentRequest {
@@ -527,6 +758,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .unwrap();
@@ -551,6 +786,7 @@ mod tests {
             workflow: Arc::new(RejectWorkflow),
             sessions: Arc::new(TestSessions::default()),
             controller: Some(controller.clone()),
+            ctx: Context::new(),
         };
         let result = runtime
             .invoke(AgentRequest {
@@ -559,6 +795,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .unwrap();
@@ -584,6 +824,7 @@ mod tests {
             workflow: Arc::new(RejectWorkflow),
             sessions: Arc::new(TestSessions::default()),
             controller: Some(controller),
+            ctx: Context::new(),
         };
         let result = runtime
             .invoke(AgentRequest {
@@ -592,6 +833,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .unwrap();
@@ -623,6 +868,7 @@ mod tests {
             workflow: Arc::new(RejectWorkflow),
             sessions: Arc::new(TestSessions::default()),
             controller: Some(controller),
+            ctx: Context::new(),
         };
         let result = runtime
             .invoke(AgentRequest {
@@ -631,6 +877,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .unwrap();
@@ -661,6 +911,7 @@ mod tests {
                 fail: true,
                 runs: std::sync::atomic::AtomicUsize::new(0),
             })),
+            ctx: Context::new(),
         };
         let result = runtime
             .invoke(AgentRequest {
@@ -669,6 +920,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .unwrap();
@@ -706,6 +961,7 @@ mod tests {
                 fail: false,
                 runs: std::sync::atomic::AtomicUsize::new(0),
             })),
+            ctx: Context::new(),
         };
         let error = runtime
             .invoke(AgentRequest {
@@ -714,6 +970,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .unwrap_err();
@@ -745,6 +1005,7 @@ mod tests {
             workflow: Arc::new(RejectWorkflow),
             sessions: Arc::new(RejectSessions),
             controller: None,
+            ctx: Context::new(),
         };
         let error = runtime
             .invoke(AgentRequest {
@@ -753,6 +1014,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: Some(" ".into()),
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .unwrap_err();
@@ -772,6 +1037,7 @@ mod tests {
             workflow: Arc::new(RejectWorkflow),
             sessions: Arc::new(RejectSessions),
             controller: None,
+            ctx: Context::new(),
         };
         let error = runtime
             .invoke(AgentRequest {
@@ -780,6 +1046,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: Some("missing".into()),
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .unwrap_err();
@@ -799,6 +1069,7 @@ mod tests {
             workflow: Arc::new(RejectWorkflow),
             sessions: Arc::new(RejectSessions),
             controller: None,
+            ctx: Context::new(),
         };
         let err = runtime
             .invoke(AgentRequest {
@@ -807,6 +1078,10 @@ mod tests {
                 workflow: None,
                 timeout_ms: None,
                 restore_checkpoint: None,
+                command: None,
+                user_id: None,
+                model: None,
+                temperature: None,
             })
             .await
             .unwrap_err();
@@ -917,6 +1192,7 @@ mod tests {
                     IntentType::UnknownTask
                 },
                 task_text: None,
+                task_id: None,
                 confidence: 1.0,
             }
         }
@@ -1007,6 +1283,14 @@ mod tests {
         fn events(&self) -> Vec<ah_contracts::session::SessionEvent> {
             vec![]
         }
+        fn claim_tool_call(
+            &self,
+            _: &str,
+            _: &str,
+            _: u64,
+        ) -> Result<bool, ah_contracts::session::SessionError> {
+            Ok(false)
+        }
         fn since(&self, _: u64) -> Vec<ah_contracts::session::SessionEvent> {
             vec![]
         }
@@ -1096,6 +1380,14 @@ mod tests {
         }
         fn events(&self) -> Vec<ah_contracts::session::SessionEvent> {
             self.events.lock().unwrap().clone()
+        }
+        fn claim_tool_call(
+            &self,
+            _: &str,
+            _: &str,
+            _: u64,
+        ) -> Result<bool, ah_contracts::session::SessionError> {
+            Ok(false)
         }
         fn since(&self, seq: u64) -> Vec<ah_contracts::session::SessionEvent> {
             self.events
