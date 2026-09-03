@@ -1180,6 +1180,38 @@ mod tests {
             true
         }
     }
+    struct JsonIntentModel;
+
+    impl Seam for JsonIntentModel {}
+
+    #[async_trait]
+    impl ModelProvider for JsonIntentModel {
+        fn name(&self) -> &'static str {
+            "intent-test"
+        }
+
+        async fn chat(
+            &self,
+            _request: ModelRequest,
+        ) -> Result<ah_contracts::llm::ModelResponse, ah_contracts::llm::ModelError> {
+            Ok(ah_contracts::llm::ModelResponse {
+                content: r#"{"intent_type":"cancel_task","task_id":"task-7","task_text":null,"confidence":0.96}"#.to_string(),
+                ..Default::default()
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn llm_intent_returns_structured_task_target() {
+        let controller = LocalController::default();
+        let intent = controller
+            .recognize_intent_with_llm("please stop it", Arc::new(JsonIntentModel))
+            .await
+            .expect("structured intent");
+        assert_eq!(intent.intent_type, IntentType::CancelTask);
+        assert_eq!(intent.task_id.as_deref(), Some("task-7"));
+        assert_eq!(intent.confidence, 0.96);
+    }
 
     #[test]
     fn retry_resets_failed_task_and_persists() {
