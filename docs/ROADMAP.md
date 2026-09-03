@@ -1,6 +1,6 @@
 # 当前路线图
 
-> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前代码 HEAD:`934e38d`。
+> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前代码 HEAD:`4892b66`。
 > `audit/ledger.json` 是工作包状态、域汇总和状态百分比的唯一结构化来源;`docs/generated/audit-summary.md` 由 `audit-ledger` 生成。本文保留验收标准和执行顺序,不再手工累计状态数字。
 > HEAD 在旧快照之后新增了多个插件 crate;阶段一已将 10 个新增插件加入 Cargo workspace members,阶段二已将它们接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并完成 targeted mount/resolve/invoke/unmount 验证;源码和 targeted 集成测试通过不等于 production 能力完成。
 > 当前 Python differential 仅覆盖 `stop_condition`、`messager_inprocess` 两个 seam,共 6 个匹配 case,另有 1 个已知差异。Rust-only contract runner 已接入 `session`、`tools`、`controller`、`agent-loop`、`workflow`、`application`;本轮新增 application/controller Rust reference traces,但 agent-core 没有与 Rust `ApplicationRuntime` 等价的 Python runtime,因此不能伪造 Python parity 结论。
