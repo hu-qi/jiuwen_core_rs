@@ -17,7 +17,11 @@
 ### 非目标(正式排除)
 
 - Python import 路径兼容(不提供 openjiuwen.* 的 Rust 可导入等价物);
-- Python 对象模型兼容(继承、metaclass、协程对象、对象同一性)。
+- Python 对象模型兼容(继承、metaclass、协程对象、对象同一性);
+- Python 运行时依赖:产品、默认测试、CI 和生产 profile 不调用 Python。
+
+agent-core(Python) 只作为历史行为规格参考。需要执行用户提交的 Python 代码属于独立的
+`code` 能力边界,不是 agent-harness 的实现依赖；若该能力被启用,必须显式声明语言和解释器。
 
 ## 2. 分层结构
 

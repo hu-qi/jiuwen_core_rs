@@ -62,10 +62,10 @@ cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml
 | 1. 契约 | `ah-contracts` 中的 seam trait、事件和纯类型 | 契约零实现;类型和序列化单测 |
 | 2. 测试 provider | `ah-plugins-mock` 或测试模块中的确定性替身 | dev/test 可组装;不得进入 prod |
 | 3. 生产实现 | `ah-plugins-*` 中的真实协议、持久化或子进程路径 | 聚焦测试和 production E2E |
-| 4. Rust 回归 | Golden fixture 和 Rust regression reference | Rust 行为稳定 |
-| 5. Python 对等 | 独立 Python/Rust differential | 同 fixture 的公开行为一致 |
+| 4. Rust 回归 | Golden fixture、Rust-only contract 和 Rust regression reference | Rust 行为稳定 |
 
-阶段 3/4 可并行。阶段 5 未完成时,能力的 parity 状态必须保持 partial/unverified。
+所有产品实现、默认测试和 CI 均为 Rust-only。历史 Python 源码只用于人工理解行为规格,
+不属于构建、运行时或验收依赖。
 
 ## 依赖纪律
 
@@ -109,12 +109,12 @@ cargo llvm-cov --workspace --fail-under-lines 80
 4. `cargo test --workspace`;
 5. `cargo llvm-cov --workspace --fail-under-lines 80`。
 
-当前 CI **尚未**执行:
+
+当前 CI 尚未执行:
 
 - `cargo test --workspace --all-features`;
-- Python/Rust differential;
 - production profile static composition;
-- production `boot()` smoke:已验证 dev Profile;prod Profile 的无凭据失败门槛已验证,完整 prod boot 仍待 Redis/OpenAI 等真实依赖。
+- production `boot()` smoke 的统一门禁;
 - 插件生产依赖隔离扫描;
 - 文档路径、数字和状态自动一致性检查;
 - Linux/Windows/macOS 跨平台矩阵。
@@ -133,8 +133,9 @@ cargo llvm-cov --workspace --fail-under-lines 80
 6. fmt、clippy、测试和覆盖率门禁通过;
 7. capability-map 记录实现位置、测试名和 commit。
 
-只有再满足独立 Python/Rust differential,才可标记 parity done。Golden 或 Rust regression reference
-不能替代 differential。
+Rust regression reference 不能替代 production E2E,但不需要 Python runner 才能作为 Rust
+implementation 的回归门禁。无法由当前 Rust 环境验证的历史行为必须单独记录,不能标记为
+已对等。
 
 ## 提交规范
 

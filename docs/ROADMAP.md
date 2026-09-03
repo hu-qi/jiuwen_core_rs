@@ -3,8 +3,8 @@
 > 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前代码 HEAD:`4892b66`。
 > `audit/ledger.json` 是工作包状态、域汇总和状态百分比的唯一结构化来源;`docs/generated/audit-summary.md` 由 `audit-ledger` 生成。本文保留验收标准和执行顺序,不再手工累计状态数字。
 > HEAD 在旧快照之后新增了多个插件 crate;阶段一已将 10 个新增插件加入 Cargo workspace members,阶段二已将它们接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并完成 targeted mount/resolve/invoke/unmount 验证;源码和 targeted 集成测试通过不等于 production 能力完成。
-> 当前 Python differential 仅覆盖 `stop_condition`、`messager_inprocess` 两个 seam,共 6 个匹配 case,另有 1 个已知差异。Rust-only contract runner 已接入 `session`、`tools`、`controller`、`agent-loop`、`workflow`、`application`;本轮新增 application/controller Rust reference traces,但 agent-core 没有与 Rust `ApplicationRuntime` 等价的 Python runtime,因此不能伪造 Python parity 结论。
-> 当前执行顺序以本文件为准;能力明细必须同时区分 implementation、workspace/runtime integration、production verification 和 Python parity。
+> 产品实现、默认测试和 CI 均为 Rust-only。Python differential 脚本不再是 CI 或 P1 验收门禁；agent-core Python 源码仅作为历史行为规格参考。当前 Rust regression reference 覆盖 application/controller traces,不可比较的历史差异单独记录。
+> 当前执行顺序以本文件为准;能力明细区分 implementation、production verification 和历史规格差异。
 
 ## 完成口径
 
@@ -30,7 +30,7 @@ Python parity 标记为 verified。
 | P0-05 | 统一审计数据源 | done(`audit/ledger.json` + `ah-app audit-ledger`) | `audit/ledger.json` 记录每个工作包的状态、实现位置、验证命令、production 和 differential 证据;`audit-ledger` 生成总览、域汇总、状态百分比和未完成清单;CI 检查生成摘要无漂移 |
 | P0-06 | 文档与 CI 事实对齐 | done(current working tree review) | README、testing、审计、能力映射、配置和依赖目录已明确当前 HEAD 与历史快照边界;提交后需保留当前基线 |
 
-首批 Rust contract 范围:`session`、`tools`、`controller`、`agent-loop`、`workflow`、`application`;Python differential 仍保留这些领域作为可选行为审计范围。
+首批 Rust contract 范围:`session`、`tools`、`controller`、`agent-loop`、`workflow`、`application`;验收不依赖 Python。
 
 ## P1 核心 Agent 主链与插件生命周期
 
@@ -78,7 +78,7 @@ Python parity 标记为 verified。
 | M3 日常工作负载可替代 | P2 全部 | coding agent、subagent、团队、检索记忆具备生产实用性 |
 | M4 完整迁移 | P3 全部 | 演进、RSI、外部基础设施和厂商能力进入最终验收 |
 
-当前执行顺序:`P0-01(Rust-only contract runner 已接入 session/tools/controller/agent-loop/workflow/application;Python differential 仍为辅助)-> P0-02(静态组合+runtime 接线)-> P0-03(done,真实 Redis/OpenAI opt-in boot smoke)-> P0-04(done,失败原子性已测)-> P0-05(done,结构化审计账本已接入)-> P1-01(实现已完成,宿主已 seam 化)`。
+当前执行顺序:`P0-01(Rust-only contract runner 已接入 session/tools/controller/agent-loop/workflow/application)-> P0-02(静态组合+runtime 接线)-> P0-03(done,真实 Redis/OpenAI opt-in boot smoke)-> P0-04(done,失败原子性已测)-> P0-05(done,结构化审计账本已接入)-> P1 主链与插件生命周期`。
 
 ## 近期工作包(按优先级,2026-09 当前复核)
 
@@ -87,15 +87,15 @@ Python parity 标记为 verified。
 
 | 优先级 | 工作包 | 说明与证据 |
 | ---: | --- | --- |
-| 1 | P0-01 Python/Rust differential runner(MVP) | ✅ 已落地(`8f735a4`):`differential/`(run_python.py/compare.py/run.sh/README)+ CI job;stop_condition 4/4、messager_inprocess 2/2 一致,1 个已知差异已记录;首批六 seam 待接入 |
+| 1 | P0-01 Rust-only contract runner | ✅ 已落地:`ah-app/tests/rust_contract.rs` + versioned fixtures;不依赖 Python,作为默认回归门禁 |
 | 2 | P0-02 production 静态组合验证 → CI | ✅ 已落地:`ah-app/tests/static_composition.rs`(catalog 解析 + 无重复/缺失 provider + 无环),dev/prod 双 profile 通过;修复 prod 缺 `ah-plugins-model-backup` 的真实 bug |
 | 3 | P1-08 插件依赖隔离 CI | ✅ 已落地(`6960700`):`ah-app/tests/plugin_isolation.rs`(生产依赖禁引插件 + 插件只依赖 hub/contracts),全 workspace 零违规 |
 | 4 | P1-02/03 agent-loop 结构化错误与执行中取消 | ✅ 已落地:`AgentLoopRuntime` 返回结构化 `AgentResult`(state/failure/iterations/tool_calls,application 不再解析错误字符串);`race_control` 中止在途模型/工具调用 + run 级截止时间约束 backup 链;4 个新聚焦测试(timeout/interrupt 中止在途调用、精确统计) |
 | 5 | P2-01 确定性工具补齐 | ✅ 主体已落地:edit/glob/grep(ah-plugins-sysop)+ todo/cron(新 crate ah-plugins-common-tools,含 cron 五字段解析与 next_run);memory 既有;差分验证待 P0-01 六 seam 接入 |
 | 6 | P1-07 workflow 流式执行 | ✅ Rust stream 主链与组件能力已落地:`WorkflowStreamSink`、`WorkflowEngine::stream`、`stream_checkpointed`、`WorkflowComponentRegistry`、`NodeKind::Component`;LLM 增量、节点/恢复/最终 chunk 按序发送,producer/consumer 可并发且不持有 receiver 锁,取消时关闭 sink,组件 invoke/stream/collect/transform 端到端测试通过;`ah-plugins-workflow` 17/17、`ah-plugins-stream` 9/9、`ah-app` workflow contract fixture 通过;Python ActorManager 多 producer/source-group 语义、节点级中断恢复、workflow differential 仍为 partial |
-| 7 | P1-05/06 application/controller LLM 意图与行为 references | ✅ Rust reference traces 已落地(`ah-app/tests/differential.rs`,`references/{application,controller}.json`);Python differential 仍仅对现有两个可同层 seam 执行,ApplicationRuntime 缺少 Python 等价实现 |
+| 7 | P1-05/06 application/controller references | ✅ Rust reference traces、stream、scheduler 和 checkpoint 版本已落地;Python 仅为历史规格,不进入 Rust-only 验收 |
 | 8 | P0-05 | ✅ 已落地:`audit/ledger.json` + `ah-app audit-ledger`;生成整体/域状态汇总、状态百分比、未完成工作包和逐包证据;CI freshness gate 已接入 |
-| 9 | P0-01 Rust-only contract fixture 扩展 | ✅ 已落地:`ah-app/tests/rust_contract.rs` + `fixtures/session.json`/`tools.json`/`controller.json`/`agent_loop.json`/`workflow.json`/`application.json`;Python differential 保留为可选辅助审计 |
+| 9 | P0-01 Rust-only contract fixture 扩展 | ✅ 已落地:`ah-app/tests/rust_contract.rs` + versioned fixtures;默认 CI 不调用 Python |
 | 10 | P2-02 rails 长尾 | planning/completion/retry/memory/skills/interrupt/context_engineer 等 LLM 型 rail |
 | 11 | P2-03 context round/dialogue 压缩 | round/dialogue 压缩、会话记忆管理器、prompt attachment window mutator |
 | 12 | P2-04/05/06 | subagents browser/mobile、messager pyzmq 跨进程 + handoff、retrieval embedding/vector store 生产后端 |

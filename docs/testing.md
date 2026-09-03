@@ -11,9 +11,10 @@
 | Golden fixture | Rust seam 对固定语言中立样例的契约稳定性 | `fixtures/` + `ah-app/tests/golden.rs` | 已有 9 个 seam |
 | Rust contract fixture | Rust-only 规范化输入、状态轨迹、错误分类和恢复结果 | `fixtures/` + `ah-app/tests/rust_contract.rs` | 已接入 session、tools、controller、agent-loop、workflow、application;fixture schema version=1 |
 | Rust regression reference | Rust 当前完整可观测输出不发生非预期变化 | `references/` + `ah-app/tests/differential.rs` | 已覆盖 session、security、retrieval、teams、evolving、messager 以及 application/controller traces |
-| Python/Rust differential | 同一输入下 Python 与 Rust 的公开行为一致 | 外部 Python runner + 语言中立 fixture + Rust runner | 辅助证据:仅 `stop_condition`、`messager_inprocess` 两 seam 的 6 个 case 一致,另有 1 个 known divergence;application/controller 无同层 Python runtime,不强行比较;不作为 Rust 运行时依赖 |
-| Production composition | prod profile 可解析、依赖闭合且无 mock | profile/catalog/依赖图测试 | mock exclusion/static composition 已有;10 个新增插件已进入 workspace、catalog 和 dev/prod Profile;`stage2_plugins` + `static_composition`/`mock_gate` 共 8 个测试通过 |
-| Production boot/E2E | 无 mock 的真实组合可启动并执行 | 本地 HTTP fixture、服务容器或真实凭据 | **partial:dev Profile 无云凭据 boot + demo E2E 通过;prod Profile 缺少 OpenAI key 时显式失败,完整 prod boot + `ApplicationRuntime::invoke` 仍待真实依赖** |
+| Rust-only contract | Rust 输入、状态、错误、恢复和序列化行为符合已登记规格 | `fixtures/` + `ah-app/tests/rust_contract.rs` | 主验收门禁;不加载 Python |
+| Historical Python audit | 与历史 agent-core 行为的辅助比较 | `differential/` | 非 CI、非产品依赖;没有同层 Rust 实现时不得强行比较 |
+| Production composition | prod profile 可解析、依赖闭合且无 mock | profile/catalog/依赖图测试 | mock exclusion/static composition 已有;10 个新增插件已进入 workspace、catalog 和 dev/prod Profile |
+| Production boot/E2E | 无 mock 的真实组合可启动并执行 | 本地 HTTP fixture、服务容器或真实凭据 | dev Profile boot + demo E2E 已验证;prod 需要真实 Redis/OpenAI 等依赖 |
 | 覆盖率 | Rust 测试执行到的代码比例 | `cargo llvm-cov --workspace --fail-under-lines 80` | CI 有门禁;当前 HEAD 数字须以完整实测为准,不得引用历史数字 |
 
 ## Golden fixture
@@ -62,26 +63,25 @@ call ID 的工具允许自动补执行;非幂等或未声明工具写入 `ToolRe
 `AgentFailure::ToolRecoveryRequired`,并验证后续恢复不会重复执行。
 ## Rust regression reference
 
-`ah-app/tests/differential.rs` 当前读取 `references/{seam}.json`,比较 Rust 实现的完整可观测
+`ah-app/tests/differential.rs` 读取 `references/{seam}.json`,比较 Rust 实现的完整可观测
 输出。设置 `AH_REFGEN=1` 时,reference 由 Rust 自己重写。
 
-因此当前 reference 的准确名称是 **Rust regression reference**。它可以防止 Rust 行为意外变化,
-但不是独立的 Python 参考结果。提交 reference 变化时必须解释行为变化,禁止仅为通过测试而重生成。
+reference 防止 Rust 行为意外变化,但不构成外部实现的对等证明。提交 reference 变化时必须
+解释行为变化,禁止仅为通过测试而重生成。
 
-## Python/Rust differential
+## Historical Python audit
 
-严格对等需要独立参考运行,但它是辅助验证而不是 Rust runtime prerequisite:
+`differential/run_python.py` 和 `differential/compare.py` 不是 Rust 产品代码,不参与默认 CI、
+Rust 构建或生产运行。它们仅保留给需要审计历史 agent-core 行为的开发者；当两边不处于同一
+抽象层时,结果必须记录为 `not-comparable`,不能用复制 Rust 逻辑的方式制造 Python outcome。
 
-1. 定义语言中立 fixture 和规范化输出 schema;
-2. 在 agent-core 环境运行 Python reference runner;
-3. 在 agent-harness 运行 Rust runner;
-4. 比较输出、错误类型、状态迁移、事件顺序、持久化、取消、超时和恢复;
-5. 将差异作为语义审计结果,不能为了通过而削弱 Rust contract。
+Rust-only 验收流程:
 
-无法处于同一抽象层的 Python/Rust 行为标记为 `not-comparable`,不强行比较。
-
-首批范围为 application、agent-loop、session、controller、workflow、tools。Python runner 必须独立于
-Rust reference 生成流程;`AH_REFGEN=1` 不能生成或覆盖 Python reference。
+1. 定义版本化 Rust fixture 和规范化输出 schema;
+2. 用 Rust contract runner 执行真实 Rust seam;
+3. 用 Rust regression reference 固化完整可观测输出;
+4. 对成功、失败、取消、超时、恢复和持久化路径执行 Rust 测试;
+5. 通过 production smoke 和适用的真实协议 E2E。
 
 ## Production 验证
 

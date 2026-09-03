@@ -2,7 +2,7 @@
 
 agent-harness 是一个使用 Rust 构建的插件化 agent harness，目标是覆盖 openJiuwen agent-core 的公开行为，并以低耦合的契约、事件、服务注册和 Profile 组合能力支持可扩展的 agent 应用。
 
-项目参考 DeepSeek Harness 与 Cordis 的设计理念，但 Rust runtime 是独立实现。Python 源码仅作为行为规格参考，不是运行时依赖；本项目不提供 `openjiuwen.*` Python import 路径或 Python 对象模型兼容。
+项目完全以 Rust 实现和运行。agent-core 的 Python 源码仅作为历史行为规格参考，不是构建、测试或运行时依赖；本项目不提供 `openjiuwen.*` Python import 路径或 Python 对象模型兼容。
 
 ## 能力概览
 
@@ -25,7 +25,7 @@ cargo test --workspace
 cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml
 ```
 
-开发 Profile 使用确定性的 mock provider，适合本地启动和协议冒烟，不代表生产可用性或 Python 行为对等。生产 Profile 需要按 [docs/development.md](docs/development.md) 准备 OpenAI 凭据、Redis 和其他外部依赖：
+开发 Profile 使用确定性的 mock provider，适合本地启动和 Rust 协议冒烟，不代表生产可用性。生产 Profile 需要按 [docs/development.md](docs/development.md) 准备 OpenAI 凭据、Redis 和其他外部依赖：
 
 ```sh
 cargo run --offline -p ah-app --bin ah-app -- profiles/prod.toml
@@ -37,10 +37,10 @@ cargo run --offline -p ah-app --bin ah-app -- profiles/prod.toml
 - [架构约束](docs/architecture.md)：依赖方向、Seam、Effect、事件和 Profile 规则。
 - [使用指南](docs/usage.md)：启动、编写插件和定义 Seam。
 - [开发流程](docs/development.md)：测试、CI 和 Definition of Done。
-- [能力地图](docs/capability-map.md)：Python 能力到 Rust 插件的映射和当前状态。
-- [测试规范](docs/testing.md)：回归、fixture、差分和覆盖率口径。
+- [能力地图](docs/capability-map.md)：历史 Python 能力到 Rust 插件的映射和当前状态。
+- [测试规范](docs/testing.md)：Rust 回归、contract fixture、生产验证和覆盖率口径。
 
-文档中的 `implementation`、`production verification` 和 `Python parity` 是三个独立状态。历史测试数字不作为当前结论；当前结论以当前 HEAD 的实测证据为准。
+产品实现、默认测试和 CI 均不调用 Python。`differential/` 下的 Python 脚本仅保留为非门禁历史审计工具，不参与 Rust 构建或运行。
 
 ## 贡献
 

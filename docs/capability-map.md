@@ -164,8 +164,8 @@
 1. **契约**(contracts):seam trait + 纯类型 + 单元测试;
 2. **测试 provider**(mock/test):可 boot 的确定性替身,不得进入生产;
 3. **生产实现**(plugin-prod):真实协议、持久化或子进程实现;
-4. **Rust 回归**:Golden fixture + Rust regression reference,证明 Rust 行为稳定;
-5. **Python 对等**:独立 Python/Rust differential + production E2E,证明公开行为一致。
+4. **Rust 回归**:Golden fixture + Rust-only contract + Rust regression reference;
+5. **生产验证**:production smoke/E2E 和适用的真实外部协议测试。
 
-验收铁律:**本地/mock/Golden/Rust reference 通过不等于 Python parity done**。状态必须区分
-implementation、production verification 和 parity,并附实现位置、测试名与审计 commit。
+验收铁律:**本地/mock/Golden/Rust reference 通过不等于 production done**。状态必须区分
+implementation、production verification 和历史规格差异,并附实现位置、测试名与审计 commit。

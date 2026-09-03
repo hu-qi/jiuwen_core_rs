@@ -1,18 +1,19 @@
 # agent-harness 文档集
 
 agent-harness 的目标是以 Rust 独立实现 agent-core(Python)的公开行为,并将能力组织为
-Seam 契约、普通插件、类型化事件和 Profile 组合。Python 源码是规格参考,不是生产运行时依赖。
+Seam 契约、普通插件、类型化事件和 Profile 组合。Python 源码仅作为历史规格参考,不是
+构建、测试或生产运行时依赖。
 
-项目不提供 `openjiuwen.*` Python import 路径或 Python 对象模型兼容。"Rust 中已有实现"、
-"生产组合可运行"和"与 Python 行为对等"是三个不同结论,不得混用。
+项目不提供 `openjiuwen.*` Python import 路径或 Python 对象模型兼容。产品实现、默认测试
+和 CI 均为 Rust-only。
 
 ## 当前基线
 
 - agent-harness 当前代码 HEAD:`7404142`。代码审查基线和历史审计快照仍可能引用更早 commit,不能视为当前状态。
 - `cargo metadata --no-deps` 当前发现 **112 个 workspace package**;仓库中有 112 个 Cargo manifest。阶段一已将 10 个新增插件加入 workspace members,阶段二已接入 `ah-app::plugin_catalog` 与 dev/prod Profile。
 - 阶段二接入插件:`ah-plugins-agentbuilder`、`ah-plugins-a2a`、`ah-plugins-data-loader`、`ah-plugins-dataset-curator`、`ah-plugins-model-allocator`、`ah-plugins-prompt-attachment`、`ah-plugins-interaction-router`、`ah-plugins-inbound-render`、`ah-plugins-external-format`、`ah-plugins-bridge-compose`。
-- 阶段二集成测试 `ah-app/tests/stage2_plugins.rs` 已覆盖目录解析、依赖挂载、服务解析、代表性调用和 Effect drop 卸载;`static_composition`/`mock_gate` 另有 7 个 Profile 与门禁测试通过;`dev.toml` 无云凭据 boot + demo E2E 已通过,prod boot 仍受真实 Redis/OpenAI 等外部依赖门控。
-- 当前 Python/Rust differential 仍仅验证 `stop_condition` 和 `messager_inprocess` 两个 seam,共 6 个 case,另有 1 个已知差异;Rust-only contract runner 已接入 `session`、`tools`、`controller`,不依赖 Python。阶段一新增 10 个插件的单元测试共 **117 个 case 全部通过**;全 workspace 测试和覆盖率不得引用历史数字作为当前结果。
+- 当前 Rust-only contract runner 已接入 `session`、`tools`、`controller`、`agent-loop`、`workflow`、`application`,不依赖 Python。默认 CI 只执行 Rust build/test/lint/coverage 和 production composition；Python differential 不属于项目验收门禁。
+- Python differential 脚本仅保留在 `differential/` 作为历史审计资产,不在 CI 或 Rust-only 验收中执行。历史结果不作为当前实现结论。
 
 本页只记录当前可复核的结构事实;工作包状态、域汇总和状态百分比由
 [audit/ledger.json](../audit/ledger.json) 生成,见 [生成审计摘要](generated/audit-summary.md)。
@@ -21,14 +22,13 @@ Seam 契约、普通插件、类型化事件和 Profile 组合。Python 源码�
 ## 状态口径
 
 | 维度 | 含义 | 当前结论 |
-| --- | --- | --- |
-| 插件架构 | hub、Seam、Effect、事件、Profile 和依赖装配 | 已形成;阶段二 catalog/Profile、targeted mount/invoke/unmount 与 `mount_all` 失败回滚测试已通过,仍需补 production boot 与完整差分 |
+| 插件架构 | hub、Seam、Effect、事件、Profile 和依赖装配 | 已形成;阶段二 catalog/Profile、targeted mount/invoke/unmount 与 `mount_all` 失败回滚测试已通过,仍需补 production boot 与完整 Rust contract 覆盖 |
 | Rust 功能覆盖 | Python 能力是否在 Rust 中有可调用实现 | 广泛覆盖,多数子模块仍为 partial |
-| 严格行为对等 | 同一 fixture 驱动 Python 与 Rust 后行为一致 | Rust-only contract 已接入 session、tools、controller;Python differential 仅对可同层比较的两个 seam 提供辅助证据 |
+| 行为规格一致性 | Rust contract fixture 与历史 agent-core 行为规格一致 | 以 Rust-only fixture、regression reference、生产 smoke 为验收依据;不可由 Rust 直接验证的历史差异单独记录 |
 | Python 迁移/切流 | Python agent-core 是否调用或切换到 Rust runtime | 非项目目标,当前没有切流 |
 
-`done` 只表示对应审计口径下满足完成定义。Golden fixture 或 Rust 自生成 reference 不能单独证明
-Python 对等。
+`done` 只表示对应 Rust implementation 和 production 证据满足审计口径；Rust 自生成
+reference 只能证明 Rust 行为稳定，不能证明外部 Python 对等。
 
 ## 阅读顺序
 
