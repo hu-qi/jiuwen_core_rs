@@ -9,7 +9,7 @@ Seam 契约、普通插件、类型化事件和 Profile 组合。Python 源码�
 
 ## 当前基线
 
-- agent-harness 当前代码 HEAD:`b44e236`。代码审查基线和历史审计快照仍可能引用更早 commit,不能视为当前状态。
+- agent-harness 当前实现代码 revision:`38ed1a5`;后续审计与文档提交不改变该实现基线。代码审查基线和历史审计快照仍可能引用更早 commit,不能视为当前状态。
 - `cargo metadata --no-deps` 当前发现 **112 个 workspace package**;仓库中有 112 个 Cargo manifest。阶段一已将 10 个新增插件加入 workspace members,阶段二已接入 `ah-app::plugin_catalog` 与 dev/prod Profile。
 - 阶段二接入插件:`ah-plugins-agentbuilder`、`ah-plugins-a2a`、`ah-plugins-data-loader`、`ah-plugins-dataset-curator`、`ah-plugins-model-allocator`、`ah-plugins-prompt-attachment`、`ah-plugins-interaction-router`、`ah-plugins-inbound-render`、`ah-plugins-external-format`、`ah-plugins-bridge-compose`。
 - 当前 Rust-only contract runner 已接入 `session`、`tools`、`controller`、`agent-loop`、`workflow`、`application`,不依赖 Python。默认 CI 只执行 Rust build/test/lint/coverage 和 production composition；Python differential 不属于项目验收门禁。

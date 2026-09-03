@@ -1,6 +1,6 @@
 # 当前路线图
 
-> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前代码 HEAD:`b44e236`。
+> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前实现代码 revision:`38ed1a5`;后续审计与文档提交不改变该实现基线。
 > `audit/ledger.json` 是工作包状态、域汇总和状态百分比的唯一结构化来源;`docs/generated/audit-summary.md` 由 `audit-ledger` 生成。本文保留验收标准和执行顺序,不再手工累计状态数字。
 > HEAD 在旧快照之后新增了多个插件 crate;阶段一已将 10 个新增插件加入 Cargo workspace members,阶段二已将它们接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并完成 targeted mount/resolve/invoke/unmount 验证;源码和 targeted 集成测试通过不等于 production 能力完成。
 > 产品实现、默认测试和 CI 均为 Rust-only。Python differential 脚本不再是 CI 或 P1 验收门禁；agent-core Python 源码仅作为历史行为规格参考。当前 Rust regression reference 覆盖 application/controller traces,不可比较的历史差异单独记录。
