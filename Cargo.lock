@@ -117,6 +117,7 @@ dependencies = [
  "ah-plugins-workflow",
  "ah-plugins-workspace",
  "ah-plugins-worktree",
+ "async-trait",
  "serde",
  "serde_json",
  "tokio",

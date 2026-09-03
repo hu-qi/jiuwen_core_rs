@@ -2,7 +2,8 @@
 //!
 //! 客户端(JsonRpcTransport)与本地 HTTP 服务端(插件侧 AgentHttpServer)
 //! 走真实协议路径:agent/getCard 与 message/send 两个 JSON-RPC 方法。
-//! 完整 A2A 规范(SSE/流式/加密传输)留待后续,文档注明。
+//! 外部 envelope 固定为 JSON-RPC 2.0;客户端校验响应版本和 id,服务端拒绝
+//! 其他版本。该协议没有旧版迁移路径,未知版本统一返回显式 invalid request。
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

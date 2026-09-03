@@ -22,6 +22,7 @@ use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 use serde_json::{Value, json};
+const JSONRPC_VERSION: &str = "2.0";
 
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
@@ -43,9 +44,20 @@ impl JsonRpcTransport {
 
     /// 构造 JSON-RPC 2.0 请求并 POST,返回 result 或显式错误。
     fn call(&self, url: &str, method: &str, params: Value) -> Result<Value, TransportError> {
+        self.call_with_version(url, method, params, JSONRPC_VERSION)
+    }
+
+    fn call_with_version(
+        &self,
+        url: &str,
+        method: &str,
+        params: Value,
+        version: &str,
+    ) -> Result<Value, TransportError> {
+        let request_id = now_ms();
         let request = json!({
-            "jsonrpc": "2.0",
-            "id": now_ms(),
+            "jsonrpc": version,
+            "id": request_id,
             "method": method,
             "params": params,
         });
@@ -63,6 +75,14 @@ impl JsonRpcTransport {
             .map_err(|e| TransportError(format!("read rpc body failed: {e}")))?
             .parse()
             .map_err(|e| TransportError(format!("parse rpc body failed: {e}")))?;
+        if body.get("jsonrpc").and_then(Value::as_str) != Some(JSONRPC_VERSION) {
+            return Err(TransportError(
+                "unsupported JSON-RPC version in response".to_string(),
+            ));
+        }
+        if body.get("id") != Some(&json!(request_id)) {
+            return Err(TransportError("JSON-RPC response id mismatch".to_string()));
+        }
         if let Some(error) = body.get("error") {
             let message = error
                 .as_object()
@@ -346,6 +366,14 @@ fn dispatch(body: &str, card: &AgentCard, handler: &Arc<dyn AgentHandler>) -> St
         }
     };
     let id = parsed.get("id").cloned().unwrap_or(Value::Null);
+    if parsed.get("jsonrpc").and_then(Value::as_str) != Some(JSONRPC_VERSION) {
+        return json!({
+            "jsonrpc": JSONRPC_VERSION,
+            "id": id,
+            "error": { "code": -32600, "message": "unsupported JSON-RPC version" }
+        })
+        .to_string();
+    }
     let method = parsed
         .get("method")
         .and_then(Value::as_str)
@@ -526,6 +554,38 @@ mod tests {
         assert!(err.0.contains("method not found"));
 
         drop(effects);
+    }
+
+    #[test]
+    fn rejects_unsupported_jsonrpc_protocol_version() {
+        let server = AgentHttpServer::serve(card(), StdArc::new(EchoHandler)).expect("serve");
+        let raw = JsonRpcTransport::new(card());
+        let error = raw
+            .call_with_version(&server.url(), "agent/getCard", json!({}), "1.0")
+            .expect_err("unsupported JSON-RPC version");
+        assert!(error.0.contains("unsupported JSON-RPC version"));
+    }
+
+    #[test]
+    fn rejects_unsupported_jsonrpc_response_version() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind response fixture");
+        let address = listener.local_addr().expect("response fixture address");
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept response fixture");
+            let mut request = [0_u8; 4096];
+            let _ = std::io::Read::read(&mut stream, &mut request);
+            let body = r#"{"jsonrpc":"1.0","id":0,"result":{}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            std::io::Write::write_all(&mut stream, response.as_bytes()).expect("write response");
+        });
+        let raw = JsonRpcTransport::new(card());
+        let error = raw
+            .call(&format!("http://{address}"), "agent/getCard", json!({}))
+            .expect_err("unsupported response version");
+        assert!(error.0.contains("unsupported JSON-RPC version in response"));
     }
 
     #[test]

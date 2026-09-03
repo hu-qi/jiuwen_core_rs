@@ -39,3 +39,24 @@ jobs:
       - name: Coverage gate (workspace line coverage >= 80%)
         run: cargo llvm-cov --workspace --fail-under-lines 80
 
+  production-p1:
+    name: production-p1-smoke
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      REDIS_URL: redis://127.0.0.1:6379/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Production P1 composition and E2E
+        run: cargo test -p ah-app --test production_boot -- --ignored --nocapture
+

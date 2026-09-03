@@ -129,7 +129,11 @@ impl ApplicationRuntime for LocalApplicationRuntime {
                 .or_else(|_| self.sessions.create(&request.session_id))
                 .map_err(|e| AgentControlError(format!("session open failed: {e}")))?
         };
-        if let Some(controller) = &self.controller {
+        let controller = self
+            .controller
+            .clone()
+            .or_else(|| self.ctx.service::<dyn Controller>(&CONTROLLER));
+        if let Some(controller) = controller {
             let intent = if let Some(command) = request.command.as_ref() {
                 intent_from_command(command)?
             } else if let Some(llm) = self.ctx.service::<dyn ModelProvider>(&LLM) {
@@ -526,12 +530,11 @@ impl Plugin for ApplicationPlugin {
                 plugin: self.name(),
                 message: "session-manager seam not registered".to_string(),
             })?;
-        let controller = ctx.service::<dyn Controller>(&CONTROLLER);
         let runtime: Arc<dyn ApplicationRuntime> = Arc::new(LocalApplicationRuntime {
             agent,
             workflow,
             sessions,
-            controller,
+            controller: None,
             ctx: ctx.clone(),
         });
         Ok(vec![ctx.register(APPLICATION, runtime)])

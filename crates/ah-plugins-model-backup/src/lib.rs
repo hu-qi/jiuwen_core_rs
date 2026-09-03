@@ -432,7 +432,7 @@ mod tests {
             Arc::new(Catalog) as Arc<dyn ModelProviderCatalog>,
         );
         let effects = plugin.apply(&ctx).expect("catalog resolution");
-        assert_eq!(effects.len(), 1);
+        assert_eq!(effects.len(), 2);
     }
 
     #[tokio::test]

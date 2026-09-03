@@ -109,13 +109,17 @@ cargo llvm-cov --workspace --fail-under-lines 80
 4. `cargo test --workspace`;
 5. `cargo llvm-cov --workspace --fail-under-lines 80`。
 
+当前 CI 另有 `production-p1` job:
 
-当前 CI 尚未执行:
+1. 使用 Redis 7 service;
+2. 启动 Rust 本地确定性 OpenAI-compatible HTTP fixture;
+3. 执行 `prod.toml` 的真实插件组合;
+4. 运行 Application invoke、Controller 调度/恢复和 Workflow stream;
+5. 默认 CI 不执行 Python。
+
+以下仍不是当前 CI 门禁:
 
 - `cargo test --workspace --all-features`;
-- production profile static composition;
-- production `boot()` smoke 的统一门禁;
-- 插件生产依赖隔离扫描;
 - 文档路径、数字和状态自动一致性检查;
 - Linux/Windows/macOS 跨平台矩阵。
 
