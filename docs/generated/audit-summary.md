@@ -1,6 +1,6 @@
 # Generated capability audit summary
 
-> Generated from `audit/ledger.json`; recorded at 2026-09-03; code revision `14b0c16`; reference revision `aeb88cd8`.
+> Generated from `audit/ledger.json`; recorded at 2026-09-03; code revision `934e38d`; reference revision `aeb88cd8`.
 
 Percentages below are status shares, not weighted capability completion.
 
