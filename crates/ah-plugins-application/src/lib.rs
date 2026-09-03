@@ -1088,6 +1088,31 @@ mod tests {
         assert!(err.0.contains("must not be empty"));
     }
 
+    #[test]
+    fn parses_structured_controller_command() {
+        let intent = intent_from_command(&serde_json::json!({
+            "type": "create_task",
+            "task_id": "task-42",
+            "description": "inspect workspace",
+            "confidence": 0.99
+        }))
+        .expect("command should parse");
+        assert_eq!(intent.intent_type, IntentType::CreateTask);
+        assert_eq!(intent.task_id.as_deref(), Some("task-42"));
+        assert_eq!(intent.task_text.as_deref(), Some("inspect workspace"));
+        assert_eq!(intent.confidence, 0.99);
+    }
+
+    #[test]
+    fn rejects_invalid_structured_command_confidence() {
+        let error = intent_from_command(&serde_json::json!({
+            "intent_type": "cancel_task",
+            "confidence": 2.0
+        }))
+        .unwrap_err();
+        assert!(error.0.contains("between 0 and 1"));
+    }
+
     struct CommandController {
         fail: bool,
         runs: std::sync::atomic::AtomicUsize,
