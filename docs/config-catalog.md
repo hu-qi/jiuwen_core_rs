@@ -65,19 +65,15 @@ Controller 使用 versioned JSON envelope;未知版本和 malformed envelope 显
 
 ### OpenAI-compatible
 
-`ah-plugins-openai` 通过 credentials seam 优先解析:
+`ah-app::boot` 先读取 `AH_ENV_FILE` 或自动发现的 `.env`;env 文件是 provider 配置的唯一权威来源,
+并覆盖同名进程变量。`ah-plugins-openai` 通过 credentials seam 读取:
 
-- `openai.api_key`;
-- `openai.base_url`;
-- `openai.model`。
+- `openai.api_key` ← `OPENAI_API_KEY`;
+- `openai.base_url` ← `OPENAI_BASE_URL`;
+- `openai.model` ← `OPENAI_MODEL`。
 
-环境变量兜底:
-
-- `OPENAI_API_KEY`;
-- `OPENAI_BASE_URL`;
-- `OPENAI_MODEL`。
-
-缺少 key 时插件挂载显式失败。默认 base URL、model 和 timeout 以插件代码为准。
+`boot()` 找不到 env 文件或缺少 key 时显式失败,不会回退到 shell/CI 中未由 env 文件声明的 provider 配置。
+默认 base URL、model 和 timeout 仅在对应可选项未由 env 文件配置时使用。
 
 ### Anthropic
 
@@ -101,7 +97,8 @@ Controller 使用 versioned JSON envelope;未知版本和 malformed envelope 显
 - Redis store/queue URL;
 - PostgreSQL URL;
 - transport AgentCard;
-- MCP command/args;
+- MCP command/args/cwd/capabilities;`PLAYWRIGHT_MCP_COMMAND`/`PLAYWRIGHT_MCP_ARGS`、`PLAYWRIGHT_RUNTIME_MCP_CWD` 或 `BROWSER_RUNTIME_MCP_CWD` 覆盖 BrowserMcpPlugin 默认 `npx -y @playwright/mcp --headless`;未显式设置 `--caps` 时启用 pdf/vision/devtools/config/network/storage/testing;
+- Android ADB command/device;`ANDROID_ADB_COMMAND`/`DEVICE_SERIAL` 覆盖 MobileAdbPlugin 默认值;每次移动工具调用可用 `device_serial` 选择目标设备;
 - external CLI 完成标记;
 - agent-loop max iterations;
 - 部分 telemetry、team、RSI 和外部插件目录参数。

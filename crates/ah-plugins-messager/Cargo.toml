@@ -1,0 +1,15 @@
+[package]
+name = "ah-plugins-messager"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Cross-process ZMQ ROUTER/DEALER and PUB/SUB messager transport"
+
+[dependencies]
+ah-contracts = { workspace = true }
+ah-hub = { workspace = true }
+zmq = "0.10"
+serde_json = "1"
+
+[dev-dependencies]
+

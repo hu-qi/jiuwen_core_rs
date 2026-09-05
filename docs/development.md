@@ -14,10 +14,9 @@
 
 `ah-app::boot` 会在启动前读取凭据文件:优先使用 `AH_ENV_FILE` 指定的路径;
 未设置时依次尝试当前工作目录 `.env` 和 profile 所在项目根目录的 `.env`。
-自动发现的 `.env` 只补充尚未存在于进程环境的变量,因此 shell/CI 环境变量优先;
-显式设置 `AH_ENV_FILE` 时,该文件是权威配置,会覆盖同名进程变量,避免旧的 `OPENAI_*`
-变量静默选择错误的 provider 或凭据。支持 `KEY=VALUE`、`export KEY=VALUE` 以及单/双引号值;
-解析失败会显式阻止启动。
+自动发现的 `.env` 与显式 `AH_ENV_FILE` 都是启动配置的权威来源,会覆盖同名进程变量;
+未找到 env 文件时 `boot()` 显式失败,不会退回使用 shell/CI 中的配置。支持 `KEY=VALUE`、
+`export KEY=VALUE` 以及单/双引号值;解析失败会显式阻止启动。
 `.env` 与 `.env.*` 已加入 `.gitignore`,禁止提交真实密钥。
 
 OpenAI 最小配置:

@@ -2,9 +2,36 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
+use serde_json::Value;
+
 use crate::effect::Effect;
 use crate::seam::Seam;
-use serde_json::Value;
+
+/// 交互式工具权限审批请求。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PermissionApprovalRequest {
+    pub tool_name: String,
+    pub arguments: Value,
+    pub matched_rule: String,
+}
+
+/// 审批结果；`AllowAlways` 的持久化由宿主 provider 负责。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PermissionApprovalDecision {
+    AllowOnce,
+    AllowAlways,
+    Deny,
+}
+
+/// HITL 权限审批 Seam。
+#[async_trait]
+pub trait PermissionApprovalProvider: Seam {
+    async fn request(
+        &self,
+        request: PermissionApprovalRequest,
+    ) -> Result<PermissionApprovalDecision, SecurityError>;
+}
 
 /// 风险级别。
 #[derive(

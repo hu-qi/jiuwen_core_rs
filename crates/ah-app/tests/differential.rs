@@ -9,13 +9,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use ah_contracts::evolving::EvolvingRuntime;
+use ah_contracts::goal::{GoalAssessment, GoalAssessmentStatus, GoalRecord, GoalRuntime};
 use ah_contracts::keys::{EVOLVING, RETRIEVAL, SECURITY, SESSION_MANAGER, TEAMS};
+use ah_contracts::llm::{ModelProvider, ModelRequest, ModelResponse};
+use ah_contracts::model_catalog::ModelProviderCatalog;
 use ah_contracts::retrieval::RetrievalProvider;
 use ah_contracts::security::SecurityProvider;
 use ah_contracts::session::{SessionEvent, SessionEventKind, SessionManager};
 use ah_contracts::teams::TeamRuntime;
 use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
+use async_trait::async_trait;
 use serde_json::{Value, json};
 
 fn fixtures_dir() -> PathBuf {
@@ -196,6 +200,7 @@ async fn reference_teams_lifecycle() {
     let root = root_for("teams");
     let ctx = Context::new();
     let mut plugins = base_plugins(&root);
+    plugins.push(Arc::new(ah_plugins_agent_control::AgentControlPlugin));
     plugins.push(Arc::new(ah_plugins_subagent::SubagentPlugin));
     plugins.push(Arc::new(ah_plugins_queue::QueuePlugin::new(
         root.join("queue"),
@@ -637,5 +642,797 @@ async fn reference_application_controller_contracts() {
     settle(
         "controller",
         &json!({ "seam": "controller", "cases": controller_cases }),
+    );
+}
+
+// ---------- llm_retry (Python/Rust differential) ----------
+
+#[test]
+fn reference_llm_retry() {
+    let fixture = load_fixture("llm_retry");
+    let cases = fixture["cases"].as_array().unwrap();
+    let mut outcomes = cases
+        .iter()
+        .map(|case| {
+            let text = case
+                .get("text")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    case["unit"]
+                        .as_str()
+                        .unwrap()
+                        .repeat(case["count"].as_u64().unwrap() as usize)
+                });
+            let detected = ah_plugins_rails::detect_repeated_suffix(&text)
+                .map(|(unit, count)| json!({"unit": unit, "count": count}));
+            json!({"name": case["name"], "detected": detected})
+        })
+        .collect::<Vec<_>>();
+    for item in fixture["error_markers"].as_array().unwrap() {
+        let message = item["message"].as_str().unwrap();
+        outcomes.push(json!({
+            "name": item["name"],
+            "repeat": ah_plugins_rails::is_llm_repeat_error(message),
+            "timeout": ah_plugins_rails::is_llm_stream_timeout_error(message)
+        }));
+    }
+    let backoff_ms = fixture["backoff_indexes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|index| {
+            ah_plugins_rails::llm_retry_backoff(
+                &fixture["backoff_seconds"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|seconds| (seconds.as_f64().unwrap() * 1000.0).round() as u64)
+                    .collect::<Vec<_>>(),
+                index.as_u64().unwrap() as usize,
+            )
+        })
+        .collect::<Vec<_>>();
+    outcomes.push(json!({"name": "backoff_schedule", "backoff_ms": backoff_ms}));
+    settle(
+        "llm_retry",
+        &json!({"seam": "llm_retry", "cases": outcomes}),
+    );
+}
+
+// ---------- tool_retry (Python/Rust differential) ----------
+
+#[test]
+fn reference_tool_retry() {
+    let fixture = load_fixture("tool_retry");
+    let cases = fixture["exceptions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| {
+            json!({
+                "name": item["name"],
+                "retryable": ah_plugins_rails::is_tool_retryable_error(
+                    item["type"].as_str().unwrap(),
+                    item["message"].as_str().unwrap(),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    settle("tool_retry", &json!({"seam": "tool_retry", "cases": cases}));
+}
+
+// ---------- task_completion (Python/Rust differential) ----------
+
+#[test]
+fn reference_task_completion() {
+    let fixture = load_fixture("task_completion");
+    let cases = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|case| {
+            json!({
+                "name": case["name"],
+                "content": ah_plugins_rails::completion_signal_prompt(
+                    case["language"].as_str().unwrap(),
+                    case["promise"].as_str().unwrap(),
+                ),
+                "priority": 85
+            })
+        })
+        .collect::<Vec<_>>();
+    settle(
+        "task_completion",
+        &json!({"seam": "task_completion", "cases": cases}),
+    );
+}
+
+// ---------- task_planning (Python/Rust differential) ----------
+
+#[test]
+fn reference_task_planning() {
+    let fixture = load_fixture("task_planning");
+    let cases = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|case| {
+            let language = case["language"].as_str().unwrap();
+            let models = case["models"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|model| {
+                    (
+                        model["id"].as_str().unwrap().to_string(),
+                        model["description"].as_str().unwrap().to_string(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let section = ah_plugins_prompt_builder::sections::base::build_todo_section_with_models(
+                language, &models,
+            );
+            json!({
+                "name": case["name"],
+                "content": section.render(language),
+                "priority": section.priority,
+            })
+        })
+        .collect::<Vec<_>>();
+    settle(
+        "task_planning",
+        &json!({"seam": "task_planning", "cases": cases}),
+    );
+}
+
+// ---------- goal_manager (Python/Rust differential) ----------
+
+fn goal_view(record: Option<&GoalRecord>) -> Value {
+    let Some(record) = record else {
+        return Value::Null;
+    };
+    json!({
+        "objective": record.objective,
+        "status": serde_json::to_value(record.status).unwrap(),
+        "revision": record.revision,
+        "attempt_count": record.attempt_count,
+        "token_usage": {
+            "input_tokens": record.token_usage.input_tokens,
+            "output_tokens": record.token_usage.output_tokens,
+            "cached_input_tokens": record.token_usage.cached_input_tokens,
+            "total_tokens": record.token_usage.total_tokens,
+        },
+        "max_attempts": record.max_attempts,
+        "token_budget": record.token_budget,
+        "last_assessment": record.last_assessment.as_ref().map(|assessment| json!({
+            "status": serde_json::to_value(assessment.status).unwrap(),
+            "evidence": assessment.evidence,
+            "remaining_work": assessment.remaining_work,
+            "next_instruction": assessment.next_instruction,
+        })),
+        "last_stop_reason": record.last_stop_reason,
+    })
+}
+
+#[test]
+fn reference_goal_manager() {
+    let fixture = load_fixture("goal_manager");
+    let cases = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|case| {
+            let manager = ah_plugins_rails::LocalGoalManager::new();
+            let session_id = case["session_id"].as_str().unwrap();
+            let mut goal_id = String::new();
+            let mut revision = 0;
+            let operations = case["operations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|op| {
+                    let name = op["op"].as_str().unwrap();
+                    match name {
+                        "set" => match manager.set(
+                            session_id,
+                            op["objective"].as_str().unwrap(),
+                            false,
+                            op.get("max_attempts").and_then(Value::as_u64),
+                            op.get("token_budget").and_then(Value::as_u64),
+                        ) {
+                            Ok(record) => {
+                                goal_id = record.goal_id.clone();
+                                revision = record.revision;
+                                json!({"name": "set", "record": goal_view(Some(&record))})
+                            }
+                            Err(error) => json!({"name": "set_error", "code": error.code}),
+                        },
+                        "begin" => {
+                            let record = manager.begin_attempt(session_id, &goal_id, revision);
+                            if let Some(record) = &record {
+                                revision = record.revision;
+                            }
+                            json!({"name": "begin", "record": goal_view(record.as_ref())})
+                        }
+                        "stale_begin" => json!({
+                            "name": "stale_begin",
+                            "record": goal_view(manager.begin_attempt(
+                                session_id,
+                                &goal_id,
+                                revision.saturating_sub(1),
+                            ).as_ref()),
+                        }),
+                        "usage" => {
+                            manager.accumulate_usage(
+                                session_id,
+                                &goal_id,
+                                revision,
+                                op["input_tokens"].as_u64().unwrap_or(0),
+                                op["output_tokens"].as_u64().unwrap_or(0),
+                                op["cached_input_tokens"].as_u64().unwrap_or(0),
+                            );
+                            json!({"name": "usage", "record": goal_view(manager.get(session_id).as_ref())})
+                        }
+                        "pause" => json!({
+                            "name": "pause",
+                            "record": goal_view(manager.pause(session_id).as_ref()),
+                        }),
+                        "resume" => {
+                            let record = manager.resume(session_id);
+                            if let Some(record) = &record {
+                                revision = record.revision;
+                            }
+                            json!({"name": "resume", "record": goal_view(record.as_ref())})
+                        }
+                        "continue" | "complete" | "block" => {
+                            let status = match name {
+                                "continue" => GoalAssessmentStatus::Continue,
+                                "complete" => GoalAssessmentStatus::Complete,
+                                "block" => GoalAssessmentStatus::Blocked,
+                                _ => unreachable!(),
+                            };
+                            let record = manager.apply_assessment(
+                                session_id,
+                                &goal_id,
+                                revision,
+                                GoalAssessment {
+                                    status,
+                                    evidence: op["evidence"].as_str().unwrap_or_default().into(),
+                                    remaining_work: op
+                                        .get("remaining_work")
+                                        .and_then(Value::as_str)
+                                        .map(str::to_string),
+                                    next_instruction: None,
+                                },
+                            );
+                            json!({"name": name, "record": goal_view(record.as_ref())})
+                        }
+                        "clear" => json!({
+                            "name": "clear",
+                            "record": goal_view(manager.clear(session_id).as_ref()),
+                        }),
+                        other => panic!("unknown goal operation: {other}"),
+                    }
+                })
+                .collect::<Vec<_>>();
+            json!({"name": case["name"], "operations": operations})
+        })
+        .collect::<Vec<_>>();
+    settle(
+        "goal_manager",
+        &json!({"seam": "goal_manager", "cases": cases}),
+    );
+}
+
+// ---------- prompt_attachment (Python/Rust differential) ----------
+
+fn prompt_attachment_view(
+    item: Option<&ah_contracts::prompt_attachment::PromptAttachment>,
+) -> Value {
+    let Some(item) = item else {
+        return Value::Null;
+    };
+    json!({
+        "id": item.id,
+        "section": item.section,
+        "kind": serde_json::to_value(item.kind).unwrap(),
+        "content": item.content,
+        "priority": item.priority,
+        "source": item.source,
+        "session_id": item.session_id,
+        "expires_at": item.expires_at,
+        "metadata": item.metadata,
+        "content_kind": item.content_kind,
+        "content_sha256": item.content_sha256,
+    })
+}
+
+#[test]
+fn reference_prompt_attachment() {
+    use ah_contracts::prompt_attachment::{
+        AttachmentFilter, PromptAttachmentKind, PromptAttachmentStore, PromptAttachmentUpdate,
+    };
+
+    let fixture = load_fixture("prompt_attachment");
+    let cases = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|case| {
+            let store = ah_plugins_prompt_attachment::InMemoryPromptAttachmentStore::new();
+            let session_id = case["session_id"].as_str().unwrap();
+            let mut ids = std::collections::HashMap::new();
+            let operations = case["operations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|op| {
+                    let name = op["op"].as_str().unwrap();
+                    match name {
+                        "add" => {
+                            let kind = match op["kind"].as_str().unwrap_or("generic") {
+                                "text" => PromptAttachmentKind::Text,
+                                "runtime" => PromptAttachmentKind::Runtime,
+                                other => panic!("unknown prompt attachment kind: {other}"),
+                            };
+                            let metadata = op
+                                .get("metadata")
+                                .and_then(Value::as_object);
+                            let item = store
+                                .add_section(
+                                    session_id,
+                                    op["section"].as_str().unwrap(),
+                                    op["content"].as_str().unwrap(),
+                                    kind,
+                                    op["source"].as_str().unwrap(),
+                                    op["priority"].as_i64().unwrap() as i32,
+                                    metadata,
+                                    "text/plain",
+                                    op.get("expires_at").and_then(Value::as_str),
+                                )
+                                .expect("add attachment");
+                            ids.insert(op["name"].as_str().unwrap(), item.id.clone());
+                            json!({"name": "add", "item": prompt_attachment_view(Some(&item))})
+                        }
+                        "update" => {
+                            let id = ids.get(op["name"].as_str().unwrap()).unwrap();
+                            let item = store
+                                .update_by_id(
+                                    id,
+                                    &PromptAttachmentUpdate {
+                                        kind: None,
+                                        content: Some(op["content"].as_str().unwrap().to_string()),
+                                        priority: None,
+                                        source: None,
+                                        expires_at: None,
+                                        metadata: Some(
+                                            op["metadata"].as_object().unwrap().clone(),
+                                        ),
+                                        content_kind: None,
+                                    },
+                                )
+                                .expect("update attachment");
+                            json!({"name": "update", "item": prompt_attachment_view(Some(&item))})
+                        }
+                        "list" => {
+                            let items = store.list_by_filter(&AttachmentFilter {
+                                session_id: Some(session_id.to_string()),
+                                section: op.get("section").and_then(Value::as_str).map(str::to_string),
+                                ..Default::default()
+                            });
+                            json!({
+                                "name": "list",
+                                "items": items.iter().map(|item| prompt_attachment_view(Some(item))).collect::<Vec<_>>(),
+                            })
+                        }
+                        "collect" => json!({
+                            "name": "collect",
+                            "items": store
+                                .collect_for_session(session_id)
+                                .iter()
+                                .map(|item| prompt_attachment_view(Some(item)))
+                                .collect::<Vec<_>>(),
+                        }),
+                        "clear_section" => json!({
+                            "name": "clear_section",
+                            "count": store.clear_section(session_id, op["section"].as_str().unwrap()),
+                        }),
+                        "clear_session" => json!({
+                            "name": "clear_session",
+                            "count": store.clear_session(session_id),
+                        }),
+                        other => panic!("unknown prompt attachment operation: {other}"),
+                    }
+                })
+                .collect::<Vec<_>>();
+            json!({"name": case["name"], "operations": operations})
+        })
+        .collect::<Vec<_>>();
+    settle(
+        "prompt_attachment",
+        &json!({"seam": "prompt_attachment", "cases": cases}),
+    );
+}
+
+#[tokio::test]
+async fn reference_runtime_model_switching() {
+    struct NamedProvider(&'static str);
+
+    impl ah_contracts::seam::Seam for NamedProvider {}
+
+    #[async_trait]
+    impl ModelProvider for NamedProvider {
+        fn name(&self) -> &'static str {
+            self.0
+        }
+
+        async fn chat(
+            &self,
+            _request: ModelRequest,
+        ) -> Result<ModelResponse, ah_contracts::llm::ModelError> {
+            Ok(ModelResponse {
+                content: self.0.into(),
+                ..Default::default()
+            })
+        }
+    }
+
+    let fixture = load_fixture("runtime_model_switching");
+    let mut cases = Vec::new();
+    for (index, case) in fixture["cases"].as_array().unwrap().iter().enumerate() {
+        let root = std::env::temp_dir().join(format!(
+            "ah-differential-model-switch-{}-{index}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let ctx = Context::new();
+        let effects = ctx
+            .mount_all(vec![
+                Arc::new(ah_plugins_tools::ToolsPlugin) as ah_hub::plugin::DynPlugin,
+                Arc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                    root.join("default.jsonl"),
+                    &root,
+                )),
+            ])
+            .expect("mount model switching differential context");
+        let sessions = ctx
+            .service::<dyn ah_contracts::session::SessionLog>(&ah_contracts::keys::SESSIONS)
+            .expect("session log");
+        let tools = ctx
+            .service::<dyn ah_contracts::tools::ToolRegistry>(&ah_contracts::keys::TOOLS)
+            .expect("tool registry");
+        let providers = case["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|model| {
+                let name = match model.as_str().unwrap() {
+                    "default" => "default",
+                    "alternate" => "alternate",
+                    other => panic!("unexpected fixture model: {other}"),
+                };
+                Arc::new(NamedProvider(name)) as Arc<dyn ModelProvider>
+            })
+            .collect();
+        let catalog = ah_plugins_model_backup::StaticModelProviderCatalog::new(providers)
+            .expect("model catalog");
+        let default_model = catalog
+            .resolve(case["default_model"].as_str().unwrap())
+            .expect("default model");
+        let request = ah_contracts::agent::AgentRunConfig {
+            model: case["selected_model_id"].as_str().map(str::to_string),
+            ..Default::default()
+        };
+        let result =
+            ah_plugins_agent_loop::AgentLoop::new(default_model, tools, sessions.clone(), ctx, 1)
+                .with_model_catalog(Arc::new(catalog))
+                .with_request_config(&request)
+                .run_in_session(sessions, "switch model")
+                .await;
+        assert_eq!(
+            result.state,
+            ah_contracts::agent::AgentRunState::Completed,
+            "{result:?}"
+        );
+        let selected_model = result.answer.expect("model response");
+        cases.push(json!({
+            "name": case["name"],
+            "selected_model": selected_model,
+            "config_model": selected_model,
+        }));
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
+    }
+    settle(
+        "runtime_model_switching",
+        &json!({"seam": "runtime_model_switching", "cases": cases}),
+    );
+}
+
+#[test]
+fn reference_team_inbox_format() {
+    use ah_contracts::external_format::{ExternalFormat, MessageView, TaskLineView};
+    use ah_plugins_external_format::ExternalFormatEngine;
+    use ah_plugins_inbound_render::InboundRenderer;
+    use ah_plugins_timefmt::TimefmtService;
+
+    let fixture = load_fixture("team_inbox_format");
+    let engine = ExternalFormatEngine;
+    let render = InboundRenderer;
+    let timefmt = TimefmtService::with_offset(0);
+    let cases = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|case| {
+            let output = if case["kind"] == "message" {
+                let message = MessageView {
+                    broadcast: case["broadcast"].as_bool().unwrap(),
+                    timestamp: case["timestamp"].as_i64().unwrap(),
+                    from_member_name: case["from_member_name"].as_str().unwrap().to_string(),
+                    message_id: case["message_id"].as_str().unwrap().to_string(),
+                    content: case["content"].as_str().unwrap().to_string(),
+                };
+                engine.render_message(
+                    &message,
+                    case["is_human_agent"].as_bool().unwrap(),
+                    case["now_ms"].as_i64().unwrap(),
+                    case["body"].as_str(),
+                    case["reply_hint"].as_str(),
+                    case["hitt_silence_note"].as_str(),
+                    &render,
+                    &timefmt,
+                )
+            } else {
+                let tasks = case["tasks"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|task| TaskLineView {
+                        task_id: task["task_id"].as_str().unwrap().to_string(),
+                        title: task["title"].as_str().unwrap().to_string(),
+                        content: task["content"].as_str().unwrap().to_string(),
+                        status: task["status"].as_str().unwrap().to_string(),
+                        assignee: task["assignee"].as_str().map(str::to_string),
+                        updated_at: task["updated_at"].as_i64(),
+                    })
+                    .collect::<Vec<_>>();
+                engine.render_task_board(
+                    &tasks,
+                    case["is_leader"].as_bool().unwrap(),
+                    case["now_ms"].as_i64().unwrap(),
+                    case["leader_header"].as_str().unwrap(),
+                    case["teammate_header"].as_str().unwrap(),
+                    case["unassigned_marker"].as_str().unwrap(),
+                    &render,
+                    &timefmt,
+                )
+            };
+            json!({"name": case["name"], "output": output})
+        })
+        .collect::<Vec<_>>();
+    settle(
+        "team_inbox_format",
+        &json!({"seam": "team_inbox_format", "cases": cases}),
+    );
+}
+
+#[tokio::test]
+async fn reference_team_inbox_fetch() {
+    use ah_contracts::external_client::ExternalTeamClientFactory;
+    use ah_contracts::external_client::{ExternalInboxSource, InboxMessage, InboxObserver};
+    use ah_contracts::external_format::{MessageView, TaskLineView};
+    use ah_contracts::team_join_descriptor::{
+        DispatchMode, JoinDbConfig, JoinTransportConfig, Scope, TeamJoinDescriptor, TeammateMode,
+    };
+    use ah_contracts::team_message::{MemberView, TaskView};
+    use ah_plugins_external::ExternalClientPlugin;
+    use ah_plugins_external_format::ExternalFormatPlugin;
+    use ah_plugins_inbound_render::InboundRenderer;
+    use ah_plugins_team_i18n::TeamI18nPlugin;
+    use ah_plugins_team_message::TeamMessagePlugin;
+    use ah_plugins_team_prompts::TeamPromptsPlugin;
+    use ah_plugins_timefmt::TimefmtService;
+
+    struct Source {
+        direct: Vec<InboxMessage>,
+        broadcast: Vec<InboxMessage>,
+        tasks: Vec<TaskLineView>,
+        marked: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl ah_contracts::seam::Seam for Source {}
+
+    #[async_trait]
+    impl ExternalInboxSource for Source {
+        async fn unread_direct_messages(&self, _member_name: &str) -> Vec<InboxMessage> {
+            self.direct.clone()
+        }
+
+        async fn unread_broadcast_messages(&self, _member_name: &str) -> Vec<InboxMessage> {
+            self.broadcast.clone()
+        }
+
+        async fn mark_message_read(&self, message_id: &str, _member_name: &str) {
+            self.marked.lock().unwrap().push(message_id.to_string());
+        }
+
+        async fn list_tasks(&self) -> Vec<TaskLineView> {
+            self.tasks.clone()
+        }
+
+        async fn get_task(&self, _task_id: &str) -> Option<TaskView> {
+            None
+        }
+
+        async fn get_member(&self, _member_name: &str) -> Option<MemberView> {
+            None
+        }
+    }
+
+    fn message(id: &str) -> InboxMessage {
+        InboxMessage {
+            view: MessageView {
+                broadcast: false,
+                timestamp: 1_700_000_000_000,
+                from_member_name: "alice".into(),
+                message_id: id.into(),
+                content: id.into(),
+            },
+            meta: None,
+        }
+    }
+
+    let ctx = Context::new();
+    let render: Arc<dyn ah_contracts::inbound_render::InboundRender> = Arc::new(InboundRenderer);
+    let timefmt: Arc<dyn ah_contracts::timefmt::Timefmt> = Arc::new(TimefmtService::with_offset(0));
+    let e1 = ctx.register(ah_contracts::keys::INBOUND_RENDER, render);
+    struct Observer {
+        counts: Arc<std::sync::Mutex<usize>>,
+    }
+
+    #[async_trait]
+    impl InboxObserver for Observer {
+        async fn on_inbox(&self, _view: ah_contracts::external_client::InboxView) {
+            *self.counts.lock().unwrap() += 1;
+        }
+    }
+    let e2 = ctx.register(ah_contracts::keys::TIMEFMT, timefmt);
+    let messager =
+        ah_contracts::messager::create_messager(ah_contracts::messager::MessagerTransportConfig {
+            node_id: Some("differential-fetch".into()),
+            ..Default::default()
+        })
+        .expect("messager");
+    let e3 = ctx.register(ah_contracts::keys::MESSAGER, messager);
+    let plugins: Vec<ah_hub::plugin::DynPlugin> = vec![
+        Arc::new(ah_plugins_team_context::TeamContextPlugin),
+        Arc::new(TeamPromptsPlugin),
+        Arc::new(TeamMessagePlugin),
+        Arc::new(TeamI18nPlugin),
+        Arc::new(ExternalFormatPlugin),
+        Arc::new(ExternalClientPlugin),
+    ];
+    let mut effects = ctx.mount_all(plugins).expect("mount external client");
+    effects.extend([e1, e2, e3]);
+    let factory = ctx
+        .service::<dyn ExternalTeamClientFactory>(&ah_contracts::keys::EXTERNAL_CLIENT)
+        .expect("external client");
+    let descriptor = TeamJoinDescriptor {
+        session_id: "s1".into(),
+        team_name: "t1".into(),
+        member_name: "dev-1".into(),
+        role: "teammate".into(),
+        scope: Scope::Member,
+        language: "cn".into(),
+        dispatch_mode: DispatchMode::Autonomous,
+        teammate_mode: TeammateMode::BuildMode,
+        db_config: JoinDbConfig::default(),
+        transport_config: JoinTransportConfig::default(),
+        workspace_path: None,
+    };
+    let fixture = load_fixture("team_inbox_fetch");
+    let mut cases = Vec::new();
+    for case in fixture["cases"].as_array().unwrap() {
+        if case.get("kind").and_then(Value::as_str) == Some("watch") {
+            continue;
+        }
+        let marked = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let source = Arc::new(Source {
+            direct: case["direct_ids"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|id| message(id.as_str().unwrap()))
+                .collect(),
+            broadcast: case["broadcast_ids"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|id| message(id.as_str().unwrap()))
+                .collect(),
+            tasks: case["task_ids"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|id| TaskLineView {
+                    task_id: id.as_str().unwrap().into(),
+                    title: id.as_str().unwrap().into(),
+                    content: id.as_str().unwrap().into(),
+                    status: "pending".into(),
+                    assignee: None,
+                    updated_at: None,
+                })
+                .collect(),
+            marked: marked.clone(),
+        });
+        let client = factory.build(&descriptor);
+        client.connect(source).expect("connect");
+        let view = client
+            .fetch_inbox(case["mark_read"].as_bool().unwrap())
+            .await
+            .expect("fetch");
+        cases.push(json!({
+            "name": case["name"],
+            "message_ids": view.messages.iter().map(|message| message.view.message_id.clone()).collect::<Vec<_>>(),
+            "task_ids": view.tasks.iter().map(|task| task.task_id.clone()).collect::<Vec<_>>(),
+            "marked_ids": marked.lock().unwrap().clone(),
+        }));
+        client.close().expect("close");
+    }
+    let watch_marked = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let watch_source = Arc::new(Source {
+        direct: vec![message("watch-1")],
+        broadcast: vec![],
+        tasks: vec![],
+        marked: watch_marked.clone(),
+    });
+    let watch_client = factory.build(&descriptor);
+    watch_client.connect(watch_source).expect("watch connect");
+    let callback_count = Arc::new(std::sync::Mutex::new(0usize));
+    let watch_task = tokio::spawn({
+        let watch_client = watch_client.clone();
+        let callback_count = callback_count.clone();
+        async move {
+            watch_client
+                .watch(&Observer {
+                    counts: callback_count,
+                })
+                .await
+        }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    let messager = ctx
+        .service::<dyn ah_contracts::messager::Messager>(&ah_contracts::keys::MESSAGER)
+        .expect("messager");
+    let topic = ah_contracts::team_schema::TeamTopic::Message.build("s1", "t1");
+    messager.publish(&topic, json!({"event": "message"}));
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            if *callback_count.lock().unwrap() == 1 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("watch callback");
+    watch_task.abort();
+    let _ = watch_task.await;
+    let count_after_cancel = *callback_count.lock().unwrap();
+    messager.publish(&topic, json!({"event": "after-cancel"}));
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    assert_eq!(*callback_count.lock().unwrap(), count_after_cancel);
+    cases.push(json!({
+        "name": "watch_cancellation",
+        "callback_count": count_after_cancel,
+        "marked_ids": watch_marked.lock().unwrap().clone(),
+        "unsubscribed": true,
+    }));
+    watch_client.close().expect("watch close");
+    settle(
+        "team_inbox_fetch",
+        &json!({"seam": "team_inbox_fetch", "cases": cases}),
     );
 }

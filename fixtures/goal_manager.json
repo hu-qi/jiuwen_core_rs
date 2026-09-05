@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "name": "create_duplicate_complete",
+      "session_id": "s1",
+      "operations": [
+        {"op": "set", "objective": "  ship it  ", "max_attempts": 2, "token_budget": 100},
+        {"op": "set", "objective": "replace"},
+        {"op": "begin"},
+        {"op": "usage", "input_tokens": 3, "output_tokens": 4, "cached_input_tokens": 1},
+        {"op": "complete", "evidence": "verified"},
+        {"op": "stale_begin"},
+        {"op": "clear"}
+      ]
+    },
+    {
+      "name": "pause_resume_generation",
+      "session_id": "s2",
+      "operations": [
+        {"op": "set", "objective": "write report"},
+        {"op": "pause"},
+        {"op": "resume"},
+        {"op": "stale_begin"},
+        {"op": "begin"},
+        {"op": "continue", "evidence": "more work"},
+        {"op": "block", "evidence": "needs input", "remaining_work": "clarify scope"},
+        {"op": "clear"}
+      ]
+    }
+  ]
+}

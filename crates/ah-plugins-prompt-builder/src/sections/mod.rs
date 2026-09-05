@@ -99,8 +99,24 @@ mod tests {
         let s = base::build_todo_section();
         assert!(s.render("cn").contains("todo_create"));
         assert!(s.render("en").contains("todo_create"));
+        assert_eq!(s.priority, 90);
+        assert!(s.render("cn").contains("不要使用 selected_model_id 字段"));
+        assert!(
+            s.render("en")
+                .contains("do NOT use the selected_model_id field")
+        );
     }
 
+    #[test]
+    fn todo_model_selection_prompt_is_rendered() {
+        let section = base::build_todo_section_with_models(
+            "en",
+            &[("fast".to_string(), "fast and cheap".to_string())],
+        );
+        assert_eq!(section.priority, 90);
+        assert!(section.render("en").contains("fast and cheap"));
+        assert!(section.render("en").contains("selected_model_id: fast"));
+    }
     #[test]
     fn heartbeat_mentions_heartbeat_ok() {
         let s = runtime::build_heartbeat_section();

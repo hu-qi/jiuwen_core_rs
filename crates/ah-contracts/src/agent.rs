@@ -121,6 +121,18 @@ pub struct AgentCallbackContext {
 #[async_trait]
 pub trait AgentCallbackManager: Seam {
     async fn notify(&self, callback: AgentCallbackContext) -> Result<(), AgentControlError>;
+
+    /// Notify a before/after model or tool checkpoint and optionally stop the run.
+    async fn notify_checkpoint(
+        &self,
+        callback: AgentCallbackContext,
+    ) -> Result<AgentControl, AgentControlError> {
+        self.notify(callback).await?;
+        Ok(AgentControl::Continue)
+    }
+
+    /// Clear a checkpoint control request after terminal cleanup.
+    fn clear_checkpoint_control(&self, _session_id: &str) {}
 }
 
 /// Agent loop per-request overrides passed by ApplicationRuntime.

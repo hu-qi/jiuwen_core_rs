@@ -1,0 +1,43 @@
+{
+  "seam": "llm_retry",
+  "description": "Deterministic LLMRetryRail stream detection, retry marker classification, and backoff",
+  "backoff_seconds": [0.5, 1.0, 2.0],
+  "backoff_indexes": [0, 1, 2, 3],
+  "error_markers": [
+    {"name": "repeated_marker", "message": "LLM repeated stream output detected: field=content"},
+    {"name": "llm_timeout_marker", "message": "LLM stream timeout"},
+    {"name": "frame_timeout_marker", "message": "stream frame timeout"},
+    {"name": "ordinary_error", "message": "business failure"}
+  ],
+  "cases": [
+    {
+      "name": "repeated_pair_meets_total_threshold",
+      "kind": "repeated_suffix",
+      "unit": "xy",
+      "count": 80
+    },
+    {
+      "name": "repeated_pair_below_total_threshold",
+      "kind": "repeated_suffix",
+      "unit": "xy",
+      "count": 79
+    },
+    {
+      "name": "single_character_threshold",
+      "kind": "repeated_suffix",
+      "unit": "z",
+      "count": 100
+    },
+    {
+      "name": "single_character_below_threshold",
+      "kind": "repeated_suffix",
+      "unit": "z",
+      "count": 99
+    },
+    {
+      "name": "normal_output",
+      "kind": "repeated_suffix",
+      "text": "normal output"
+    }
+  ]
+}

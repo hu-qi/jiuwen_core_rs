@@ -204,6 +204,48 @@ pub trait PromptAttachmentStore: Seam {
 
     /// 收集会话可见附件(剔除过期;返回稳定排序)(对齐 `collect_for_session`)。
     fn collect_for_session(&self, session_id: &str) -> Vec<PromptAttachment>;
+
+    /// 更新正文,允许显式清空内容并重算哈希。
+    fn update_content_by_id(
+        &self,
+        prompt_attachment_id: &str,
+        content: Option<&str>,
+        session_id: Option<&str>,
+        content_kind: Option<&str>,
+    ) -> Result<PromptAttachment, AttachmentError>;
+
+    /// 更新元数据;merge=true 保留既有键,否则整体替换。
+    fn update_metadata_by_id(
+        &self,
+        prompt_attachment_id: &str,
+        metadata: &serde_json::Map<String, serde_json::Value>,
+        session_id: Option<&str>,
+        merge: bool,
+    ) -> Result<PromptAttachment, AttachmentError>;
+
+    /// 替换指定来源的附件,按 section id 幂等写入。
+    fn replace_source(
+        &self,
+        source: &str,
+        attachments: &[PromptAttachment],
+        session_id: Option<&str>,
+    ) -> Result<Vec<PromptAttachment>, AttachmentError>;
+
+    /// 删除指定来源的附件。
+    fn clear_source(&self, source: &str, session_id: Option<&str>) -> usize;
+
+    /// 添加文件引用附件,不读取文件内容。
+    #[allow(clippy::too_many_arguments)]
+    fn add_file_reference(
+        &self,
+        file_path: &str,
+        summary: Option<&str>,
+        session_id: &str,
+        section: Option<&str>,
+        source: Option<&str>,
+        priority: i32,
+        metadata: Option<&serde_json::Map<String, serde_json::Value>>,
+    ) -> Result<PromptAttachment, AttachmentError>;
 }
 
 /// prompt 附件域错误(纯数据,供实现/消费方显式报错)。

@@ -1,22 +1,72 @@
 {
   "schema_version": 1,
   "seam": "tools",
-  "description": "tools seam golden fixtures (real registry + sysop tools)",
-  "categories": ["success", "illegal"],
+  "description": "Rust-only contracts for real coding-agent tools, persistence, errors and policy denial",
+  "categories": ["success", "persistence", "validation", "security"],
   "cases": [
     {
       "name": "invoke_real_read_file",
       "category": "success",
       "input": { "tool": "read_file", "file": "probe.txt", "content": "probe content" },
-      "expect": {
-        "ok": true,
-        "tool": "read_file",
-        "contains_expected": true
-      }
+      "expect": { "ok": true, "tool": "read_file", "contains_expected": true }
+    },
+    {
+      "name": "edit_replaces_once_and_preserves_unmatched",
+      "category": "success",
+      "input": { "file": "edit.txt", "content": "alpha alpha", "old": "alpha", "new": "beta" },
+      "expect": { "ok": true, "replaced": 1, "content": "beta alpha", "missing_error": "edit_not_found", "unchanged_after_error": true }
+    },
+    {
+      "name": "glob_recurses_with_sorted_paths",
+      "category": "success",
+      "input": { "pattern": "*.rs" },
+      "expect": { "matches": ["src/a.rs", "src/nested/b.rs"] }
+    },
+    {
+      "name": "grep_supports_regex_literal_and_invalid_pattern",
+      "category": "validation",
+      "input": { "regex": "p2alpha [0-9]", "literal": "p2alpha [", "invalid": "(" },
+      "expect": { "regex_count": 2, "literal_count": 1, "invalid_error": "invalid_regex" }
+    },
+    {
+      "name": "todo_is_session_isolated_and_persistent",
+      "category": "persistence",
+      "input": { "slash_session": "team/a", "underscore_session": "team_a" },
+      "expect": { "slash_count": 1, "slash_content": "slash", "slash_status": "done", "underscore_count": 1, "underscore_content": "underscore", "reopened_slash_count": 1 }
+    },
+    {
+      "name": "todo_rejects_invalid_status",
+      "category": "validation",
+      "input": { "status": "blocked" },
+      "expect": { "add_error": "invalid_todo_status", "update_error": "invalid_todo_status" }
+    },
+    {
+      "name": "cron_persists_toggle_and_rejects_invalid_schedule",
+      "category": "persistence",
+      "input": { "schedule": "*/5 * * * *", "invalid_range": "0 0 0 0 0", "invalid_shape": "* * *" },
+      "expect": { "count": 1, "enabled": false, "persisted": true, "next_epoch_present": true, "invalid_range_error": "invalid_schedule", "invalid_shape_error": "invalid_schedule" }
+    },
+    {
+      "name": "memory_key_is_contained_and_persistent",
+      "category": "security",
+      "input": { "key": "../escape", "content": "persistent secret" },
+      "expect": { "stored": true, "recall_count": 1, "persisted_count": 1, "escaped_file_exists": false, "after_forget_count": 0 }
+    },
+    {
+      "name": "workspace_escape_is_rejected",
+      "category": "security",
+      "input": {},
+      "expect": { "ok": false, "error_class": "workspace_escape", "outside_created": false }
+    },
+    {
+      "name": "rail_denial_prevents_write",
+      "category": "security",
+      "input": { "file": "denied.txt" },
+      "expect": { "ok": false, "error_class": "rail_denied", "file_created": false }
     },
     {
       "name": "unknown_tool_rejected",
-      "category": "illegal",
+      "category": "validation",
       "input": { "tool": "no_such_tool", "arguments": {} },
       "expect": { "ok": false, "error_class": "tool_not_found" }
     }

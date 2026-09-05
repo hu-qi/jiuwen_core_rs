@@ -6,6 +6,8 @@
 //! - 真实关闭:`shutdown` 请求 -> `notifications/exit` -> 关闭 stdin(子进程读到
 //!   EOF 自行退出)-> 有界等待子进程退出(超时 kill)。
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -31,14 +33,24 @@ struct ClientTransport {
 }
 
 impl ClientTransport {
-    /// 真实 spawn 子进程并取得 stdin/stdout 管道。
-    fn spawn(command: &str, args: &[String]) -> Result<Self, McpError> {
-        let mut child = Command::new(command)
+    fn spawn(
+        command: &str,
+        args: &[String],
+        cwd: Option<&PathBuf>,
+        env: &HashMap<String, String>,
+    ) -> Result<Self, McpError> {
+        let mut command_builder = Command::new(command);
+        command_builder
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
-            .kill_on_drop(true)
+            .kill_on_drop(true);
+        if let Some(cwd) = cwd {
+            command_builder.current_dir(cwd);
+        }
+        command_builder.envs(env);
+        let mut child = command_builder
             .spawn()
             .map_err(|e| McpError(format!("spawn mcp server '{command}' failed: {e}")))?;
         let stdin = child
@@ -179,15 +191,29 @@ impl ClientTransport {
 pub struct StdioMcpClient {
     command: String,
     args: Vec<String>,
+    cwd: Option<PathBuf>,
+    env: HashMap<String, String>,
     transport: tokio::sync::Mutex<Option<Arc<ClientTransport>>>,
 }
 
 impl StdioMcpClient {
     /// 以服务器命令与参数构造客户端(懒 spawn)。
     pub fn new(command: impl Into<String>, args: Vec<String>) -> Self {
+        Self::new_with_options(command, args, None, HashMap::new())
+    }
+
+    /// 构造带工作目录和环境覆盖的 MCP 客户端。
+    pub fn new_with_options(
+        command: impl Into<String>,
+        args: Vec<String>,
+        cwd: Option<PathBuf>,
+        env: HashMap<String, String>,
+    ) -> Self {
         Self {
             command: command.into(),
             args,
+            cwd,
+            env,
             transport: tokio::sync::Mutex::new(None),
         }
     }
@@ -195,7 +221,12 @@ impl StdioMcpClient {
     async fn transport(&self) -> Result<Arc<ClientTransport>, McpError> {
         let mut slot = self.transport.lock().await;
         if slot.is_none() {
-            *slot = Some(Arc::new(ClientTransport::spawn(&self.command, &self.args)?));
+            *slot = Some(Arc::new(ClientTransport::spawn(
+                &self.command,
+                &self.args,
+                self.cwd.as_ref(),
+                &self.env,
+            )?));
         }
         Ok(slot.as_ref().expect("just spawned").clone())
     }

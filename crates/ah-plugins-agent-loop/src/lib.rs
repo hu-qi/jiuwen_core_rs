@@ -18,14 +18,16 @@ use ah_contracts::agent::{
 use ah_contracts::context::ContextEngine;
 use ah_contracts::keys::{
     AGENT_CALLBACKS, AGENT_LOOP, CONTEXT, INTERRUPT, LLM, MODEL_BACKUP, MODEL_BACKUP_POLICY,
-    PROMPT, SESSIONS, TOOLS,
+    MODEL_PROVIDER_CATALOG, PROMPT, RAILS, SESSIONS, TOOLS,
 };
 use ah_contracts::llm::{
     ChatMessage, ChatRole, ModelProvider, ModelRequest, ModelResponse, ToolCall, ToolSchema,
 };
 use ah_contracts::model_backup::{ModelBackup, ModelBackupPolicy, ModelBackupPolicyProvider};
+use ah_contracts::model_catalog::ModelProviderCatalog;
 use ah_contracts::prelude::Effect;
 use ah_contracts::prompt::PromptRegistry;
+use ah_contracts::rails::{RailAction, RailInput, RailPhase, RailRuntime};
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::session::{SessionEventKind, SessionLog};
@@ -72,6 +74,7 @@ pub use ah_contracts::agent::AgentStep;
 #[derive(Clone)]
 pub struct AgentLoop {
     llm: Arc<dyn ModelProvider>,
+    model_catalog: Option<Arc<dyn ModelProviderCatalog>>,
     tools: Arc<dyn ToolRegistry>,
     sessions: Arc<dyn SessionLog>,
     ctx: Context,
@@ -86,6 +89,7 @@ pub struct AgentLoop {
     prompt_name: String,
     interrupt: Option<Arc<dyn InterruptRuntime>>,
     callbacks: Option<Arc<dyn AgentCallbackManager>>,
+    rails: Option<Arc<dyn RailRuntime>>,
     timeout_ms: Option<u64>,
     request_model: Option<String>,
     request_temperature: Option<f32>,
@@ -104,6 +108,7 @@ impl AgentLoop {
     ) -> Self {
         Self {
             llm,
+            model_catalog: None,
             tools,
             sessions,
             ctx,
@@ -114,6 +119,7 @@ impl AgentLoop {
             prompt_name: "agent".to_string(),
             interrupt: None,
             callbacks: None,
+            rails: None,
             timeout_ms: None,
             request_model: None,
             request_temperature: None,
@@ -138,6 +144,39 @@ impl AgentLoop {
         self
     }
 
+    /// Attach a named provider catalog for request-scoped model switching.
+    pub fn with_model_catalog(mut self, catalog: Arc<dyn ModelProviderCatalog>) -> Self {
+        self.model_catalog = Some(catalog);
+        self
+    }
+
+    fn resolve_request_model(&self) -> Result<Arc<dyn ModelProvider>, AgentLoopError> {
+        let Some(model_name) = self.request_model.as_deref() else {
+            return Ok(self.llm.clone());
+        };
+        if model_name.trim().is_empty() {
+            return Err(AgentLoopError::new(
+                AgentLoopFailure::Model,
+                "requested model name must not be empty",
+            ));
+        }
+        if model_name == self.llm.name() {
+            return Ok(self.llm.clone());
+        }
+        let Some(catalog) = &self.model_catalog else {
+            return Err(AgentLoopError::new(
+                AgentLoopFailure::Model,
+                format!("model switching requires a provider catalog: {model_name}"),
+            ));
+        };
+        catalog.resolve(model_name).map_err(|error| {
+            AgentLoopError::new(
+                AgentLoopFailure::Model,
+                format!("model switch failed: {error}"),
+            )
+        })
+    }
+
     /// Attach cooperative controls and an optional per-run deadline.
     /// Configure cooperative controls and an optional deadline for this loop.
     pub fn with_controls(
@@ -149,6 +188,11 @@ impl AgentLoop {
         self.interrupt = interrupt;
         self.callbacks = callbacks;
         self.timeout_ms = timeout_ms;
+        self
+    }
+
+    pub fn with_rails(mut self, rails: Option<Arc<dyn RailRuntime>>) -> Self {
+        self.rails = rails;
         self
     }
 
@@ -173,6 +217,47 @@ impl AgentLoop {
                 })?;
         }
         Ok(())
+    }
+
+    async fn notify_checkpoint(
+        &self,
+        session_id: &str,
+        iteration: usize,
+        phase: &str,
+        payload: Value,
+    ) -> Result<(), AgentLoopError> {
+        let Some(callbacks) = &self.callbacks else {
+            return Ok(());
+        };
+        let mut payload = payload;
+        if let Some(object) = payload.as_object_mut() {
+            object.insert("phase".into(), Value::String(phase.into()));
+        }
+        let control = callbacks
+            .notify_checkpoint(AgentCallbackContext {
+                session_id: session_id.into(),
+                state: AgentRunState::Running,
+                iteration,
+                payload,
+            })
+            .await
+            .map_err(|error| {
+                AgentLoopError::new(
+                    AgentLoopFailure::Context,
+                    format!("callback failed: {error}"),
+                )
+            })?;
+        match control {
+            AgentControl::Continue => Ok(()),
+            AgentControl::Interrupt => Err(AgentLoopError::new(
+                AgentLoopFailure::Interrupted,
+                "agent run interrupted by callback",
+            )),
+            AgentControl::Cancel => Err(AgentLoopError::new(
+                AgentLoopFailure::Cancelled,
+                "agent run cancelled by callback",
+            )),
+        }
     }
 
     fn control(&self, session_id: &str) -> AgentControl {
@@ -360,6 +445,9 @@ impl AgentLoop {
         let _ = self.notify(session_id, state, iteration, Value::Null).await;
         if let Some(runtime) = &self.interrupt {
             runtime.clear(session_id);
+        }
+        if let Some(callbacks) = &self.callbacks {
+            callbacks.clear_checkpoint_control(session_id);
         }
         Self::result_for(
             session_id,
@@ -572,12 +660,17 @@ impl AgentLoop {
         }
         Ok(recovered)
     }
+    // The stream path carries request/session/attempt state together so every
+    // delta can be persisted and raced against the same deadline.
+    #[allow(clippy::too_many_arguments)]
     async fn stream_response(
         &self,
+        llm: Arc<dyn ModelProvider>,
         request: ModelRequest,
         session: &Arc<dyn SessionLog>,
         session_id: &str,
         iteration: usize,
+        attempt: u32,
         deadline: Option<tokio::time::Instant>,
     ) -> Result<ModelResponse, AgentLoopError> {
         struct PartialCall {
@@ -587,10 +680,9 @@ impl AgentLoop {
         }
 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(64);
-        let llm = self.llm.clone();
         let backup = self.backup.clone();
         let policy = self.backup_policy;
-        let producer = tokio::spawn(async move {
+        let mut producer = tokio::spawn(async move {
             if let Some(backup) = backup {
                 backup
                     .stream_chat_with_policy(llm.as_ref(), request, sender, policy)
@@ -602,12 +694,12 @@ impl AgentLoop {
                     .map_err(|error| format!("model error: {error}"))
             }
         });
-        tokio::pin!(producer);
 
         let mut producer_result: Option<Result<(), String>> = None;
         let mut receiver_closed = false;
         let mut content = String::new();
         let mut reasoning = String::new();
+        let rails = self.rails.clone();
         let mut calls: Vec<PartialCall> = Vec::new();
         let stream_id = format!(
             "{}:{}:{}",
@@ -651,6 +743,33 @@ impl AgentLoop {
                     })?;
             }
             content.push_str(&chunk.content_delta);
+            if let Some(rails) = rails.as_ref() {
+                for (field, delta) in [
+                    ("content", chunk.content_delta.as_str()),
+                    ("reasoning_content", chunk.reasoning_delta.as_str()),
+                ] {
+                    if delta.is_empty() {
+                        continue;
+                    }
+                    let mut rail_input = RailInput::new(session_id, RailPhase::ModelChunk);
+                    rail_input.iteration = iteration;
+                    rail_input.attempt = attempt;
+                    rail_input.stream_field = Some(field.to_string());
+                    rail_input.stream_delta = Some(delta.to_string());
+                    let decision = rails.evaluate(rail_input);
+                    if matches!(
+                        decision.action,
+                        RailAction::Retry | RailAction::Deny | RailAction::Stop
+                    ) {
+                        return Err(AgentLoopError::new(
+                            AgentLoopFailure::Model,
+                            decision
+                                .reason
+                                .unwrap_or_else(|| "model stream rail rejected output".to_string()),
+                        ));
+                    }
+                }
+            }
             reasoning.push_str(&chunk.reasoning_delta);
             for delta in chunk.tool_call_deltas {
                 while calls.len() <= delta.index {
@@ -679,7 +798,12 @@ impl AgentLoop {
                     return Err(AgentLoopError::new(AgentLoopFailure::Model, error.clone()));
                 }
                 match receiver.recv().await {
-                    Some(chunk) => consume_chunk(chunk)?,
+                    Some(chunk) => {
+                        if let Err(error) = consume_chunk(chunk) {
+                            producer.abort();
+                            return Err(error);
+                        }
+                    }
                     None => break,
                 }
                 continue;
@@ -714,7 +838,12 @@ impl AgentLoop {
                 }
                 chunk = receiver.recv(), if !receiver_closed => {
                     match chunk {
-                        Some(chunk) => consume_chunk(chunk)?,
+                        Some(chunk) => {
+                            if let Err(error) = consume_chunk(chunk) {
+                                producer.abort();
+                                return Err(error);
+                            }
+                        },
                         None => receiver_closed = true,
                     }
                 }
@@ -776,6 +905,9 @@ impl AgentLoop {
                 0,
                 total_tool_calls,
             );
+        }
+        if let Some(rails) = &self.rails {
+            rails.reset(&session_id);
         }
         if self
             .notify(
@@ -867,6 +999,22 @@ impl AgentLoop {
                 }
                 AgentControl::Continue => {}
             }
+            if let Some(rails) = &self.rails {
+                let mut rail_input = RailInput::new(&session_id, RailPhase::BeforeIteration);
+                rail_input.iteration = iteration;
+                let decision = rails.evaluate(rail_input);
+                if matches!(decision.action, RailAction::Stop | RailAction::Deny) {
+                    return Self::result_for(
+                        &session_id,
+                        AgentRunState::Failed,
+                        Some(AgentFailure::IterationLimit),
+                        decision.reason,
+                        None,
+                        iteration,
+                        total_tool_calls,
+                    );
+                }
+            }
             // 2) 模型可见消息:优先经 context seam 按预算组装(压缩时注入摘要),
             //    未挂载时用日志投影直通(日志即真相:完整历史始终在日志)。
             let mut messages = if let Some(context) = &self.context {
@@ -897,61 +1045,158 @@ impl AgentLoop {
             {
                 messages.insert(0, ChatMessage::new(ChatRole::System, rendered.content));
             }
+            if let Some(rails) = &self.rails
+                && let Some(planning_prompt) = rails.config().planning_prompt
+            {
+                messages.insert(0, ChatMessage::new(ChatRole::System, planning_prompt));
+            }
             let request = ModelRequest {
                 messages,
                 tools: self.tool_schemas(),
                 model: self.request_model.clone(),
                 temperature: self.request_temperature,
             };
-            // 3) 模型调用:以流式接口为统一路径,增量 tool call 先写入日志。
-            let response = match self
-                .stream_response(request, &session, &session_id, iteration, deadline)
-                .await
-            {
-                Ok(response) => response,
-                Err(error)
-                    if matches!(
-                        error.kind,
-                        AgentLoopFailure::TimedOut
-                            | AgentLoopFailure::Interrupted
-                            | AgentLoopFailure::Cancelled
-                    ) =>
-                {
+            let active_llm = match self.resolve_request_model() {
+                Ok(provider) => provider,
+                Err(error) => {
                     return self
                         .race_finish(&session, &session_id, iteration, error, total_tool_calls)
                         .await;
                 }
-                Err(error) => {
-                    let failure = match error.kind {
-                        AgentLoopFailure::Session => AgentFailure::Session,
-                        AgentLoopFailure::Context => AgentFailure::Context,
-                        AgentLoopFailure::ToolRecoveryRequired => {
-                            AgentFailure::ToolRecoveryRequired
+            };
+            let mut model_attempt = 0_u32;
+            let response = loop {
+                if let Some(rails) = &self.rails {
+                    let mut rail_input = RailInput::new(&session_id, RailPhase::BeforeModelCall);
+                    rail_input.iteration = iteration;
+                    rail_input.attempt = model_attempt;
+                    let decision = rails.evaluate(rail_input);
+                    if decision.action == RailAction::Retry {
+                        if let Some(delay) = decision.retry_after_ms {
+                            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
                         }
-                        _ => AgentFailure::Model,
-                    };
-                    let message = error.message;
-                    let _ = session.append(
-                        SessionEventKind::System,
-                        json!({
-                            "event": "agent_error",
-                            "failure": format!("{failure:?}"),
-                            "message": message,
-                        }),
-                    );
-                    return Self::result_for(
+                        continue;
+                    }
+                    if matches!(decision.action, RailAction::Stop | RailAction::Deny) {
+                        let error = AgentLoopError::new(
+                            AgentLoopFailure::Model,
+                            decision
+                                .reason
+                                .unwrap_or_else(|| "model rail rejected call".to_string()),
+                        );
+                        return self
+                            .race_finish(&session, &session_id, iteration, error, total_tool_calls)
+                            .await;
+                    }
+                }
+                match self
+                    .stream_response(
+                        active_llm.clone(),
+                        request.clone(),
+                        &session,
                         &session_id,
-                        AgentRunState::Failed,
-                        Some(failure),
-                        Some(message),
-                        None,
                         iteration,
-                        total_tool_calls,
-                    );
+                        model_attempt,
+                        deadline,
+                    )
+                    .await
+                {
+                    Ok(response) => {
+                        match self
+                            .notify_checkpoint(
+                                &session_id,
+                                iteration,
+                                "after_model_call",
+                                serde_json::json!({
+                                    "model": active_llm.name(),
+                                    "content": response.content.clone(),
+                                    "tool_calls": response.tool_calls.len(),
+                                }),
+                            )
+                            .await
+                        {
+                            Ok(()) => break response,
+                            Err(error) => {
+                                return self
+                                    .race_finish(
+                                        &session,
+                                        &session_id,
+                                        iteration,
+                                        error,
+                                        total_tool_calls,
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(error)
+                        if matches!(
+                            error.kind,
+                            AgentLoopFailure::TimedOut
+                                | AgentLoopFailure::Interrupted
+                                | AgentLoopFailure::Cancelled
+                        ) =>
+                    {
+                        return self
+                            .race_finish(&session, &session_id, iteration, error, total_tool_calls)
+                            .await;
+                    }
+                    Err(error) => {
+                        let decision = if let Some(rails) = &self.rails {
+                            let mut rail_input = RailInput::new(&session_id, RailPhase::ModelError);
+                            rail_input.iteration = iteration;
+                            rail_input.attempt = model_attempt;
+                            rail_input.error = Some(error.message.clone());
+                            rails.evaluate(rail_input)
+                        } else {
+                            ah_contracts::rails::RailDecision::deny(error.message.clone())
+                        };
+                        if decision.action == RailAction::Retry {
+                            model_attempt += 1;
+                            if let Some(delay) = decision.retry_after_ms {
+                                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                            }
+                            continue;
+                        }
+                        let failure = match error.kind {
+                            AgentLoopFailure::Session => AgentFailure::Session,
+                            AgentLoopFailure::Context => AgentFailure::Context,
+                            AgentLoopFailure::ToolRecoveryRequired => {
+                                AgentFailure::ToolRecoveryRequired
+                            }
+                            _ => AgentFailure::Model,
+                        };
+                        let message = error.message;
+                        let _ = session.append(
+                            SessionEventKind::System,
+                            json!({
+                                "event": "agent_error",
+                                "failure": format!("{failure:?}"),
+                                "message": message,
+                            }),
+                        );
+                        return Self::result_for(
+                            &session_id,
+                            AgentRunState::Failed,
+                            Some(failure),
+                            Some(message),
+                            None,
+                            iteration,
+                            total_tool_calls,
+                        );
+                    }
                 }
             };
 
             if response.tool_calls.is_empty() {
+                let completion_decision = if let Some(rails) = &self.rails {
+                    let mut rail_input = RailInput::new(&session_id, RailPhase::ModelOutput);
+                    rail_input.iteration = iteration;
+                    rail_input.output = Some(response.content.clone());
+                    rails.evaluate(rail_input)
+                } else {
+                    ah_contracts::rails::RailDecision::continue_()
+                };
                 let mut assistant_payload = json!({ "content": response.content });
                 if let Some(reasoning) = response.reasoning_content.clone() {
                     assistant_payload["reasoning_content"] = Value::String(reasoning);
@@ -970,6 +1215,30 @@ impl AgentLoop {
                         total_tool_calls,
                     );
                 }
+                if completion_decision.action == RailAction::Deny {
+                    return Self::result_for(
+                        &session_id,
+                        AgentRunState::Failed,
+                        Some(AgentFailure::IterationLimit),
+                        completion_decision.reason,
+                        None,
+                        iteration,
+                        total_tool_calls,
+                    );
+                }
+                if self
+                    .rails
+                    .as_ref()
+                    .is_some_and(|rails| rails.config().completion_promise.is_some())
+                    && completion_decision.action != RailAction::Stop
+                {
+                    self.ctx.emit(AgentStep {
+                        iteration,
+                        tool_calls: 0,
+                        done: false,
+                    });
+                    continue;
+                }
                 self.ctx.emit(AgentStep {
                     iteration,
                     tool_calls: 0,
@@ -985,6 +1254,9 @@ impl AgentLoop {
                     .await;
                 if let Some(runtime) = &self.interrupt {
                     runtime.clear(&session_id);
+                }
+                if let Some(callbacks) = &self.callbacks {
+                    callbacks.clear_checkpoint_control(&session_id);
                 }
                 return Self::result_for(
                     &session_id,
@@ -1031,23 +1303,72 @@ impl AgentLoop {
             // 6) 真实执行工具。工具失败/被拒**不中断循环**,错误作为工具结果回喂模型
             //    (模型据此换方案),符合真实 agent 语义;执行中取消/超时则中止循环。
             for call in &response.tool_calls {
-                let invoke =
-                    self.tools
-                        .invoke_with_id(&call.name, &call.id, call.arguments.clone());
-                let (status, output) = match self.race_control(&session_id, deadline, invoke).await
+                if let Err(error) = self
+                    .notify_checkpoint(
+                        &session_id,
+                        iteration,
+                        "before_tool_call",
+                        serde_json::json!({
+                            "tool_name": call.name,
+                            "tool_call_id": call.id,
+                        }),
+                    )
+                    .await
                 {
-                    Ok(Ok(value)) => {
-                        total_tool_calls += 1;
-                        ("completed", value.to_string())
-                    }
-                    Ok(Err(error)) => {
-                        total_tool_calls += 1;
-                        ("error", format!("tool error: {error}"))
-                    }
-                    Err(error) => {
-                        return self
-                            .race_finish(&session, &session_id, iteration, error, total_tool_calls)
-                            .await;
+                    return self
+                        .race_finish(&session, &session_id, iteration, error, total_tool_calls)
+                        .await;
+                }
+                let tool_idempotent = self
+                    .tools
+                    .get(&call.name)
+                    .is_some_and(|tool| tool.idempotent());
+                let mut tool_attempt = 0_u32;
+                let (status, output) = loop {
+                    let invoke =
+                        self.tools
+                            .invoke_with_id(&call.name, &call.id, call.arguments.clone());
+                    match self.race_control(&session_id, deadline, invoke).await {
+                        Ok(Ok(value)) => {
+                            total_tool_calls += 1;
+                            break ("completed", value.to_string());
+                        }
+                        Ok(Err(error)) => {
+                            total_tool_calls += 1;
+                            let message = format!("tool error: {error}");
+                            let decision = if let Some(rails) = &self.rails {
+                                let mut rail_input =
+                                    RailInput::new(&session_id, RailPhase::ToolError);
+                                rail_input.iteration = iteration;
+                                rail_input.attempt = tool_attempt;
+                                rail_input.error = Some(message.clone());
+                                rail_input.tool_name = Some(call.name.clone());
+                                rail_input.tool_idempotent = tool_idempotent;
+                                rails.evaluate(rail_input)
+                            } else {
+                                ah_contracts::rails::RailDecision::deny(message.clone())
+                            };
+                            if decision.action == RailAction::Retry {
+                                tool_attempt += 1;
+                                if let Some(delay) = decision.retry_after_ms {
+                                    tokio::time::sleep(std::time::Duration::from_millis(delay))
+                                        .await;
+                                }
+                                continue;
+                            }
+                            break ("error", message);
+                        }
+                        Err(error) => {
+                            return self
+                                .race_finish(
+                                    &session,
+                                    &session_id,
+                                    iteration,
+                                    error,
+                                    total_tool_calls,
+                                )
+                                .await;
+                        }
                     }
                 };
                 if session
@@ -1087,6 +1408,9 @@ impl AgentLoop {
                 Value::Null,
             )
             .await;
+        if let Some(callbacks) = &self.callbacks {
+            callbacks.clear_checkpoint_control(&session_id);
+        }
         Self::result_for(
             &session_id,
             AgentRunState::Failed,
@@ -1228,6 +1552,7 @@ impl Plugin for AgentLoopPlugin {
         let context = ctx.service::<dyn ContextEngine>(&CONTEXT);
         let interrupt = ctx.service::<dyn InterruptRuntime>(&INTERRUPT);
         let callbacks = ctx.service::<dyn AgentCallbackManager>(&AGENT_CALLBACKS);
+        let rails = ctx.service::<dyn RailRuntime>(&RAILS);
         let backup = ctx.service::<dyn ModelBackup>(&MODEL_BACKUP);
         let backup_policy = ctx
             .service::<dyn ModelBackupPolicyProvider>(&MODEL_BACKUP_POLICY)
@@ -1235,6 +1560,7 @@ impl Plugin for AgentLoopPlugin {
             .unwrap_or_default();
         // prompt seam 可选:注册 "agent" 模板时注入系统提示。
         let prompt = ctx.service::<dyn PromptRegistry>(&PROMPT);
+        let model_catalog = ctx.service::<dyn ModelProviderCatalog>(&MODEL_PROVIDER_CATALOG);
         let mut agent = AgentLoop::new(llm, tools, sessions, ctx.clone(), self.max_iterations);
         if let Some(context) = context {
             agent = agent.with_context(context, 8192);
@@ -1242,10 +1568,14 @@ impl Plugin for AgentLoopPlugin {
         if let Some(prompt) = prompt {
             agent = agent.with_prompt(prompt, "agent");
         }
+        if let Some(model_catalog) = model_catalog {
+            agent = agent.with_model_catalog(model_catalog);
+        }
         agent = agent
             .with_controls(interrupt, callbacks, None)
             .with_timeout(self.timeout_ms)
             .with_model_backup(backup)
+            .with_rails(rails)
             .with_model_backup_policy(backup_policy);
         let agent: Arc<dyn ah_contracts::agent::AgentLoopRuntime> = Arc::new(agent);
         Ok(vec![ctx.register(AGENT_LOOP, agent)])
@@ -1411,6 +1741,124 @@ mod tests {
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_file(&session_path);
+    }
+
+    #[tokio::test]
+    async fn idempotent_tool_error_is_retried_and_loop_completes() {
+        use ah_contracts::tools::{Tool, ToolError};
+
+        struct FlakyTool {
+            calls: StdArc<AtomicUsize>,
+        }
+
+        #[async_trait]
+        impl Tool for FlakyTool {
+            fn name(&self) -> &'static str {
+                "flaky_tool"
+            }
+
+            fn description(&self) -> &'static str {
+                "fails once, then succeeds"
+            }
+
+            fn idempotent(&self) -> bool {
+                true
+            }
+
+            async fn invoke(&self, _arguments: Value) -> Result<Value, ToolError> {
+                if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Err(ToolError("connection reset by peer".into()))
+                } else {
+                    Ok(json!({"ok": true}))
+                }
+            }
+        }
+
+        struct ToolRetryProvider {
+            calls: AtomicUsize,
+        }
+
+        impl Seam for ToolRetryProvider {}
+
+        #[async_trait]
+        impl ModelProvider for ToolRetryProvider {
+            fn name(&self) -> &'static str {
+                "tool-retry-test"
+            }
+
+            async fn chat(&self, _request: ModelRequest) -> Result<ModelResponse, ModelError> {
+                if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Ok(ModelResponse {
+                        tool_calls: vec![ToolCall {
+                            id: "flaky-call".into(),
+                            name: "flaky_tool".into(),
+                            arguments: json!({}),
+                        }],
+                        ..Default::default()
+                    })
+                } else {
+                    Ok(ModelResponse {
+                        content: "tool recovered".into(),
+                        ..Default::default()
+                    })
+                }
+            }
+        }
+
+        let root = std::env::temp_dir().join(format!("ah-loop-tool-retry-{}", std::process::id()));
+        let session_dir = root.join("sessions");
+        let _ = std::fs::remove_dir_all(&root);
+        let ctx = Context::new();
+        let effects = ctx
+            .mount_all(vec![
+                StdArc::new(ah_plugins_tools::ToolsPlugin),
+                StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                    session_dir.join("default.jsonl"),
+                    &session_dir,
+                )),
+            ])
+            .expect("mount tool retry context");
+        let calls = StdArc::new(AtomicUsize::new(0));
+        let tools = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let tool_effect = tools.register(StdArc::new(FlakyTool {
+            calls: calls.clone(),
+        }));
+        let session = ctx.service::<dyn SessionLog>(&SESSIONS).expect("session");
+        let rails: StdArc<dyn RailRuntime> = StdArc::new(
+            ah_plugins_rails::LocalRailRuntime::new(ah_contracts::rails::RailConfig {
+                max_tool_retries: 1,
+                retry_backoff_ms: vec![0],
+                ..Default::default()
+            })
+            .expect("rails"),
+        );
+        let agent = AgentLoop::new(
+            StdArc::new(ToolRetryProvider {
+                calls: AtomicUsize::new(0),
+            }),
+            tools,
+            session.clone(),
+            ctx,
+            2,
+        )
+        .with_rails(Some(rails));
+        let result = agent
+            .run_in_session(session.clone(), "retry flaky tool")
+            .await;
+        assert_eq!(result.state, AgentRunState::Completed, "{result:?}");
+        assert_eq!(result.answer.as_deref(), Some("tool recovered"));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(result.tool_calls, 2);
+        let tool_results: Vec<_> = session
+            .events()
+            .into_iter()
+            .filter(|event| event.kind == SessionEventKind::ToolResult)
+            .collect();
+        assert_eq!(tool_results.len(), 1);
+        assert_eq!(tool_results[0].payload["status"], "completed");
+        drop(tool_effect);
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -1714,6 +2162,190 @@ mod tests {
         drop(effects);
         let _ = std::fs::remove_dir_all(root);
         let _ = std::fs::remove_dir_all(session_dir);
+    }
+
+    #[tokio::test]
+    async fn repeated_model_stream_is_retried_by_rails() {
+        struct RepeatingProvider {
+            calls: AtomicUsize,
+        }
+
+        impl Seam for RepeatingProvider {}
+
+        #[async_trait]
+        impl ModelProvider for RepeatingProvider {
+            fn name(&self) -> &'static str {
+                "repeating-stream"
+            }
+
+            async fn chat(&self, _request: ModelRequest) -> Result<ModelResponse, ModelError> {
+                Ok(ModelResponse {
+                    content: "fallback".into(),
+                    ..Default::default()
+                })
+            }
+
+            async fn stream_chat(
+                &self,
+                _request: ModelRequest,
+                sink: tokio::sync::mpsc::Sender<ModelChunk>,
+            ) -> Result<(), ModelError> {
+                let content = if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    "xy".repeat(80)
+                } else {
+                    "final answer".to_string()
+                };
+                sink.send(ModelChunk {
+                    content_delta: content,
+                    ..Default::default()
+                })
+                .await
+                .map_err(|_| ModelError("stream receiver closed".into()))?;
+                Ok(())
+            }
+        }
+
+        let root = std::env::temp_dir().join(format!("ah-loop-llm-retry-{}", std::process::id()));
+        let session_dir = root.join("sessions");
+        let _ = std::fs::remove_dir_all(&root);
+        let ctx = Context::new();
+        let effects = ctx
+            .mount_all(vec![
+                StdArc::new(ah_plugins_tools::ToolsPlugin),
+                StdArc::new(ah_plugins_sysop::SysopPlugin::new(&root)),
+                StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                    session_dir.join("default.jsonl"),
+                    &session_dir,
+                )),
+            ])
+            .expect("mount stream retry context");
+        let session = ctx.service::<dyn SessionLog>(&SESSIONS).expect("session");
+        let tools = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let rails: StdArc<dyn RailRuntime> = StdArc::new(
+            ah_plugins_rails::LocalRailRuntime::new(ah_contracts::rails::RailConfig {
+                max_model_retries: 1,
+                retry_backoff_ms: vec![0],
+                ..Default::default()
+            })
+            .expect("rails"),
+        );
+        let agent = AgentLoop::new(
+            StdArc::new(RepeatingProvider {
+                calls: AtomicUsize::new(0),
+            }),
+            tools,
+            session.clone(),
+            ctx,
+            2,
+        )
+        .with_rails(Some(rails));
+        let result = agent.run_in_session(session, "retry repeated stream").await;
+        assert_eq!(result.state, AgentRunState::Completed, "{result:?}");
+        assert_eq!(result.answer.as_deref(), Some("final answer"));
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn request_model_switch_resolves_catalog_provider() {
+        struct NamedProvider(&'static str);
+
+        impl Seam for NamedProvider {}
+
+        #[async_trait]
+        impl ModelProvider for NamedProvider {
+            fn name(&self) -> &'static str {
+                self.0
+            }
+
+            async fn chat(&self, _request: ModelRequest) -> Result<ModelResponse, ModelError> {
+                Ok(ModelResponse {
+                    content: self.0.into(),
+                    ..Default::default()
+                })
+            }
+        }
+
+        let root =
+            std::env::temp_dir().join(format!("ah-loop-model-switch-{}", std::process::id()));
+        let session_dir = root.join("sessions");
+        let _ = std::fs::remove_dir_all(&root);
+        let ctx = Context::new();
+        let effects = ctx
+            .mount_all(vec![
+                StdArc::new(ah_plugins_tools::ToolsPlugin),
+                StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                    session_dir.join("default.jsonl"),
+                    &session_dir,
+                )),
+            ])
+            .expect("mount model switch context");
+        let sessions = ctx.service::<dyn SessionLog>(&SESSIONS).expect("session");
+        let tools = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let default = StdArc::new(NamedProvider("default"));
+        let alternate = StdArc::new(NamedProvider("alternate"));
+        let catalog = ah_plugins_model_backup::StaticModelProviderCatalog::new(vec![
+            default.clone(),
+            alternate,
+        ])
+        .expect("catalog");
+        let agent = AgentLoop::new(default, tools, sessions.clone(), ctx, 1)
+            .with_model_catalog(StdArc::new(catalog))
+            .with_request_config(&ah_contracts::agent::AgentRunConfig {
+                model: Some("alternate".into()),
+                ..Default::default()
+            });
+        let result = agent.run_in_session(sessions, "switch model").await;
+        assert_eq!(result.state, AgentRunState::Completed, "{result:?}");
+        assert_eq!(result.answer.as_deref(), Some("alternate"));
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn cancellation_callback_stops_after_model_checkpoint() {
+        let root =
+            std::env::temp_dir().join(format!("ah-loop-callback-cancel-{}", std::process::id()));
+        let session_dir = root.join("sessions");
+        let _ = std::fs::remove_dir_all(&root);
+        let ctx = Context::new();
+        let effects = ctx
+            .mount_all(vec![
+                StdArc::new(ah_plugins_tools::ToolsPlugin),
+                StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                    session_dir.join("default.jsonl"),
+                    &session_dir,
+                )),
+            ])
+            .expect("mount callback context");
+        let sessions = ctx.service::<dyn SessionLog>(&SESSIONS).expect("session");
+        let tools = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let callbacks = StdArc::new(ah_plugins_agent_control::LocalAgentCallbackManager::default());
+        callbacks
+            .request_control("default", AgentControl::Cancel)
+            .expect("request callback cancel");
+        let agent = AgentLoop::new(
+            StdArc::new(ah_plugins_mock::MockModelProvider::default()),
+            tools,
+            sessions.clone(),
+            ctx,
+            1,
+        )
+        .with_controls(None, Some(callbacks.clone()), None);
+        let result = agent
+            .run_in_session(sessions, "cancel at callback checkpoint")
+            .await;
+        assert_eq!(result.state, AgentRunState::Cancelled, "{result:?}");
+        let records = callbacks.callbacks();
+        assert!(records.iter().any(|record| {
+            record.payload["phase"] == "after_model_call" && record.state == AgentRunState::Running
+        }));
+        assert_eq!(
+            records.last().map(|record| record.state),
+            Some(AgentRunState::Cancelled)
+        );
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
     }
     #[tokio::test]
     async fn interruption_and_cancellation_are_logged() {

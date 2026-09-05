@@ -7,15 +7,18 @@
 //!   注册时尝试 LLM 总结,失败显式回退摘录;
 //! - offload:压缩出的早期消息持久化为 JSONL(完整历史始终在会话日志)。
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use ah_contracts::context::{
     AssembledContext, ContextEngine, ContextError, ContextSummary, SummarySource,
 };
-use ah_contracts::keys::{CONTEXT, LLM, TOKENIZER};
+use ah_contracts::keys::{CONTEXT, LLM, PROMPT_ATTACHMENT_STORE, TOKENIZER};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::prelude::Effect;
+use ah_contracts::prompt_attachment::{PromptAttachmentStore, render};
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::session::SessionLog;
@@ -25,12 +28,73 @@ use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 use serde_json::json;
 
-/// 真实上下文引擎。
+/// 每个 session 的压缩摘要缓存;完整消息仍由 SessionLog 持有,这里仅缓存可复用摘要。
+#[derive(Default)]
+struct SessionMemoryManager {
+    summaries: Mutex<HashMap<(String, u64, usize), ContextSummary>>,
+}
+
+impl SessionMemoryManager {
+    fn get(
+        &self,
+        session_id: &str,
+        messages: &[ChatMessage],
+        compressed_tokens: usize,
+    ) -> Option<ContextSummary> {
+        let key = (
+            session_id.to_string(),
+            message_fingerprint(messages),
+            compressed_tokens,
+        );
+        self.summaries.lock().unwrap().get(&key).cloned()
+    }
+
+    fn put(
+        &self,
+        session_id: &str,
+        messages: &[ChatMessage],
+        compressed_tokens: usize,
+        summary: ContextSummary,
+    ) {
+        let key = (
+            session_id.to_string(),
+            message_fingerprint(messages),
+            compressed_tokens,
+        );
+        self.summaries.lock().unwrap().insert(key, summary);
+    }
+}
+
+fn message_fingerprint(messages: &[ChatMessage]) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for message in messages {
+        (message.role as u8).hash(&mut hasher);
+        message.content.hash(&mut hasher);
+        message.tool_call_id.hash(&mut hasher);
+        for image in &message.images {
+            image.mime_type.hash(&mut hasher);
+            image.data.hash(&mut hasher);
+        }
+        if let Some(calls) = &message.tool_calls {
+            for call in calls {
+                call.id.hash(&mut hasher);
+                call.name.hash(&mut hasher);
+                call.arguments.to_string().hash(&mut hasher);
+            }
+        }
+    }
+    hasher.finish()
+}
+
 pub struct ContextEngineImpl {
     /// 可选 LLM(真实 provider 用于总结;mock 桩被排除,文档策略)。
     llm: Option<Arc<dyn ModelProvider>>,
     /// 可选精确 tokenizer(注册时用于 estimate_tokens,否则启发式)。
     tokenizer: Option<Arc<dyn Tokenizer>>,
+    /// 可选 prompt attachment 窗口注入器;附件只进入本次模型窗口,不写入 session。
+    prompt_attachments: Option<Arc<dyn PromptAttachmentStore>>,
+    /// 会话记忆摘要缓存。
+    session_memory: SessionMemoryManager,
     /// offload 文件目录。
     offload_dir: PathBuf,
 }
@@ -41,6 +105,8 @@ impl ContextEngineImpl {
         Self {
             llm,
             tokenizer: None,
+            prompt_attachments: None,
+            session_memory: SessionMemoryManager::default(),
             offload_dir: offload_dir.into(),
         }
     }
@@ -51,8 +117,16 @@ impl ContextEngineImpl {
         self
     }
 
+    /// 挂载 prompt attachment 窗口注入器。
+    pub fn with_prompt_attachments(mut self, store: Arc<dyn PromptAttachmentStore>) -> Self {
+        self.prompt_attachments = Some(store);
+        self
+    }
+
     fn message_tokens(&self, message: &ChatMessage) -> usize {
         let mut tokens = self.estimate_tokens(&message.content);
+        // 图像 token 由 provider/分辨率决定;固定保守预算避免图像消息逃逸窗口上限。
+        tokens += message.images.len() * 256;
         if let Some(calls) = &message.tool_calls {
             for call in calls {
                 tokens += self.estimate_tokens(&call.name);
@@ -66,10 +140,21 @@ impl ContextEngineImpl {
         messages.iter().map(|m| self.message_tokens(m)).sum()
     }
 
-    /// 压缩最早 messages 为摘要:确定性摘录为基底;真实 LLM 可用时尝试总结。
-    async fn compress(&self, older: &[ChatMessage], compressed_tokens: usize) -> ContextSummary {
+    /// 压缩最早 messages 为摘要,并通过 session memory manager 复用相同前缀结果。
+    async fn compress(
+        &self,
+        session_id: &str,
+        older: &[ChatMessage],
+        compressed_tokens: usize,
+    ) -> ContextSummary {
+        if let Some(summary) = self
+            .session_memory
+            .get(session_id, older, compressed_tokens)
+        {
+            return summary;
+        }
         let excerpt = excerpt_text(older);
-        if let Some(llm) = &self.llm
+        let summary = if let Some(llm) = &self.llm
             && llm.name() != "mock"
         {
             let joined = older
@@ -87,23 +172,31 @@ impl ContextEngineImpl {
                 ],
                 ..Default::default()
             };
-            if let Ok(resp) = llm.chat(request).await
-                && !resp.content.trim().is_empty()
-            {
-                return ContextSummary {
+            match llm.chat(request).await {
+                Ok(resp) if !resp.content.trim().is_empty() => ContextSummary {
                     summary: truncate(&resp.content, 400),
                     source: SummarySource::Llm,
                     compressed_messages: older.len(),
                     compressed_tokens,
-                };
+                },
+                _ => ContextSummary {
+                    summary: truncate(&excerpt, 400),
+                    source: SummarySource::Excerpt,
+                    compressed_messages: older.len(),
+                    compressed_tokens,
+                },
             }
-        }
-        ContextSummary {
-            summary: truncate(&excerpt, 400),
-            source: SummarySource::Excerpt,
-            compressed_messages: older.len(),
-            compressed_tokens,
-        }
+        } else {
+            ContextSummary {
+                summary: truncate(&excerpt, 400),
+                source: SummarySource::Excerpt,
+                compressed_messages: older.len(),
+                compressed_tokens,
+            }
+        };
+        self.session_memory
+            .put(session_id, older, compressed_tokens, summary.clone());
+        summary
     }
 
     /// 压缩并返回 (保留消息, 被压缩消息, 摘要)。
@@ -138,28 +231,58 @@ impl ContextEngineImpl {
                 },
             ));
         }
-        // 保留最近一次用户请求及之后的消息(模型必须看到当前请求);
-        // 再向前扩展,直到预算耗尽。
+
         let last_user = messages
             .iter()
-            .rposition(|m| m.role == ChatRole::User)
+            .rposition(|message| message.role == ChatRole::User)
             .unwrap_or(messages.len() - 1);
-        let mut start = last_user;
-        let mut kept_tokens = 0usize;
-        for idx in (0..=last_user).rev() {
-            let t = self.message_tokens(&messages[idx]);
-            if kept_tokens + t > budget_tokens {
+        let rounds = completed_rounds(&messages);
+        let mut keep_start = last_user;
+        if let Some((latest_start, latest_end)) = rounds.last().copied() {
+            // 保留最近一个完整 dialogue round;若当前轮未结束,同时保留当前 user
+            // 及其后续消息,避免切断 assistant tool-call/tool-result 对。
+            keep_start = if latest_end >= last_user {
+                latest_start
+            } else {
+                latest_start.min(last_user)
+            };
+        }
+
+        let mut kept_tokens = self.messages_tokens(&messages[keep_start..]);
+        // 预算允许时仅按完整 round 向前扩展,绝不从 tool-call block 中间切开。
+        for (round_start, _) in rounds.iter().rev() {
+            if *round_start >= keep_start {
+                continue;
+            }
+            let candidate_tokens = self.messages_tokens(&messages[*round_start..]);
+            if candidate_tokens > budget_tokens {
                 break;
             }
-            kept_tokens += t;
-            start = idx;
+            keep_start = *round_start;
+            kept_tokens = candidate_tokens;
         }
-        let kept = messages[start..].to_vec();
-        let older = messages[..start].to_vec();
-        let older_tokens = total - kept_tokens;
-        let summary = self.compress(&older, older_tokens).await;
+        let kept = messages[keep_start..].to_vec();
+        let older = messages[..keep_start].to_vec();
+        let older_tokens = total.saturating_sub(kept_tokens);
+        let summary = self.compress(session.id(), &older, older_tokens).await;
         Ok((kept, older, summary))
     }
+}
+fn completed_rounds(messages: &[ChatMessage]) -> Vec<(usize, usize)> {
+    let mut rounds = Vec::new();
+    let mut start = None;
+    for (index, message) in messages.iter().enumerate() {
+        if message.role == ChatRole::User && start.is_none() {
+            start = Some(index);
+        }
+        if message.role == ChatRole::Assistant
+            && message.tool_calls.as_ref().is_none_or(Vec::is_empty)
+            && let Some(round_start) = start.take()
+        {
+            rounds.push((round_start, index));
+        }
+    }
+    rounds
 }
 
 impl Seam for ContextEngineImpl {}
@@ -194,12 +317,23 @@ impl ContextEngine for ContextEngineImpl {
                 ),
             );
         }
-        let total_tokens = self.messages_tokens(&messages);
         let summary = if summary.compressed_messages > 0 {
             Some(summary)
         } else {
             None
         };
+        if let Some(store) = &self.prompt_attachments {
+            let attachments = store.collect_for_session(session.id());
+            let rendered = render(
+                &attachments,
+                ah_contracts::prompt_attachment::DEFAULT_MAX_PROMPT_ATTACHMENT_CHARS,
+                ah_contracts::prompt_attachment::DEFAULT_MAX_RENDERED_CHARS,
+            );
+            if !rendered.is_empty() {
+                messages.push(ChatMessage::new(ChatRole::User, rendered));
+            }
+        }
+        let total_tokens = self.messages_tokens(&messages);
         Ok(AssembledContext {
             messages,
             summary,
@@ -302,6 +436,10 @@ impl Plugin for ContextPlugin {
         // 精确 tokenizer 可选:注册时用于更精确的预算估计。
         if let Some(tokenizer) = ctx.service::<dyn Tokenizer>(&TOKENIZER) {
             engine = engine.with_tokenizer(tokenizer);
+        }
+        // prompt attachment 为最终窗口 mutator:只进入当前请求,不写 session 日志。
+        if let Some(store) = ctx.service::<dyn PromptAttachmentStore>(&PROMPT_ATTACHMENT_STORE) {
+            engine = engine.with_prompt_attachments(store);
         }
         Ok(vec![ctx.register(
             CONTEXT,
@@ -494,6 +632,144 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(line).expect("valid json line");
         }
 
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn image_attachments_consume_context_budget() {
+        let engine = ContextEngineImpl::new(None, std::env::temp_dir());
+        let plain = ChatMessage::new(ChatRole::User, "screen");
+        let image = ChatMessage::user_with_image(
+            "screen",
+            ah_contracts::llm::ChatImage::new("image/png", "AAAA"),
+        );
+        assert_eq!(
+            engine.message_tokens(&image),
+            engine.message_tokens(&plain) + 256
+        );
+    }
+    #[tokio::test]
+    async fn assemble_never_splits_a_completed_tool_round() {
+        let root = std::env::temp_dir().join(format!("ah-ctx-round-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let manager = ctx
+            .service::<dyn SessionManager>(&SESSION_MANAGER)
+            .expect("manager");
+        let log = manager.create("round").expect("create");
+        for (label, suffix) in [("old", "history"), ("recent", "keep")] {
+            log.append(
+                SessionEventKind::User,
+                json!({"content": format!("{label} request {}", "word ".repeat(20))}),
+            )
+            .expect("user");
+            log.append(
+                SessionEventKind::Assistant,
+                json!({"tool_calls": [{"id": format!("{label}-call"), "name": "list_dir", "arguments": {"path": "."}}]}),
+            )
+            .expect("assistant tool call");
+            log.append(
+                SessionEventKind::ToolResult,
+                json!({"tool_call_id": format!("{label}-call"), "output": format!("{suffix} tool output {}", "word ".repeat(20))}),
+            )
+            .expect("tool result");
+            log.append(
+                SessionEventKind::Assistant,
+                json!({"content": format!("{label} final {}", "word ".repeat(20))}),
+            )
+            .expect("assistant final");
+        }
+        let engine = ctx.service::<dyn ContextEngine>(&CONTEXT).expect("context");
+        let assembled = engine.assemble(log.as_ref(), 230).await.expect("assemble");
+        assert!(assembled.summary.is_some(), "old dialogue should compress");
+        let visible = assembled
+            .messages
+            .iter()
+            .filter(|message| message.role != ChatRole::System)
+            .collect::<Vec<_>>();
+        assert_eq!(visible.len(), 4, "the recent round remains whole");
+        assert_eq!(
+            visible
+                .iter()
+                .map(|message| message.role)
+                .collect::<Vec<_>>(),
+            vec![
+                ChatRole::User,
+                ChatRole::Assistant,
+                ChatRole::Tool,
+                ChatRole::Assistant
+            ],
+        );
+        assert!(visible[0].content.contains("recent"));
+        assert!(visible[2].content.contains("keep"));
+        assert!(visible.iter().all(|message| {
+            message.tool_call_id.as_deref() != Some("old-call")
+                && message
+                    .tool_calls
+                    .as_ref()
+                    .is_none_or(|calls| calls.iter().all(|call| call.id != "old-call"))
+        }));
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn assemble_appends_prompt_attachments_after_context_window() {
+        let root = std::env::temp_dir().join(format!("ah-ctx-attachment-{}", std::process::id()));
+        let ctx = Context::new();
+        let session_dir = root.join("sessions");
+        let default_path = session_dir.join("default.jsonl");
+        let effects = ctx
+            .mount_all(vec![
+                StdArc::new(ah_plugins_mock::MockPlugin),
+                StdArc::new(ah_plugins_tools::ToolsPlugin),
+                StdArc::new(ah_plugins_sysop::SysopPlugin::new(&root)),
+                StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                    &default_path,
+                    &session_dir,
+                )),
+                StdArc::new(ah_plugins_prompt_attachment::PromptAttachmentPlugin),
+                StdArc::new(ContextPlugin::new(root.join("offload"))),
+            ])
+            .expect("mount");
+        let manager = ctx
+            .service::<dyn SessionManager>(&SESSION_MANAGER)
+            .expect("manager");
+        let log = manager.create("attachment").expect("create");
+        log.append(SessionEventKind::User, json!({"content": "request"}))
+            .expect("user");
+        let store = ctx
+            .service::<dyn ah_contracts::prompt_attachment::PromptAttachmentStore>(
+                &ah_contracts::keys::PROMPT_ATTACHMENT_STORE,
+            )
+            .expect("attachment store");
+        store
+            .add_section(
+                "attachment",
+                "runtime",
+                "only for this model call",
+                ah_contracts::prompt_attachment::PromptAttachmentKind::Runtime,
+                "test",
+                1,
+                None,
+                "text/plain",
+                None,
+            )
+            .expect("attachment");
+        let engine = ctx.service::<dyn ContextEngine>(&CONTEXT).expect("context");
+        let assembled = engine.assemble(log.as_ref(), 1000).await.expect("assemble");
+        assert_eq!(
+            assembled.messages.last().expect("attachment").role,
+            ChatRole::User
+        );
+        assert!(
+            assembled
+                .messages
+                .last()
+                .expect("attachment")
+                .content
+                .contains("<system-reminder>")
+        );
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
     }

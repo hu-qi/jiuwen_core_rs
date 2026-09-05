@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "name": "ordinary_direct_message",
+      "kind": "message",
+      "broadcast": false,
+      "is_human_agent": false,
+      "body": null,
+      "reply_hint": "please reply",
+      "hitt_silence_note": "stay silent",
+      "from_member_name": "alice",
+      "message_id": "m1",
+      "content": "hello <world> & friends",
+      "timestamp": 1700000000000,
+      "now_ms": 1700000000100
+    },
+    {
+      "name": "template_message_drops_hint",
+      "kind": "message",
+      "broadcast": false,
+      "is_human_agent": false,
+      "body": "framework <body>",
+      "reply_hint": "please reply",
+      "hitt_silence_note": "stay silent",
+      "from_member_name": "leader",
+      "message_id": "m2",
+      "content": "stale content",
+      "timestamp": 1700000000000,
+      "now_ms": 1700000000100
+    },
+    {
+      "name": "human_broadcast_message",
+      "kind": "message",
+      "broadcast": true,
+      "is_human_agent": true,
+      "body": null,
+      "reply_hint": "please reply",
+      "hitt_silence_note": "stay silent",
+      "from_member_name": "human_agent",
+      "message_id": "m3",
+      "content": "for controller",
+      "timestamp": 1700000000000,
+      "now_ms": 1700000000100
+    },
+    {
+      "name": "task_board_filters_terminal",
+      "kind": "task_board",
+      "is_leader": false,
+      "leader_header": "LEADER-BOARD",
+      "teammate_header": "TEAMMATE-LIST",
+      "unassigned_marker": " (unassigned)",
+      "now_ms": 1700000000100,
+      "tasks": [
+        {"task_id": "t1", "title": "Title t1", "content": "body", "status": "pending", "assignee": null, "updated_at": 1700000000000},
+        {"task_id": "t2", "title": "Title t2", "content": "done", "status": "completed", "assignee": "alice", "updated_at": 1700000000000},
+        {"task_id": "t3", "title": "Title t3", "content": "cancelled", "status": "cancelled", "assignee": "bob", "updated_at": 1700000000000}
+      ]
+    }
+  ]
+}

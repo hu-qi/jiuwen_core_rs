@@ -55,11 +55,35 @@ impl InterruptRuntime for LocalInterruptRuntime {
 #[derive(Default)]
 pub struct LocalAgentCallbackManager {
     callbacks: Mutex<Vec<AgentCallbackContext>>,
+    controls: Mutex<HashMap<String, AgentControl>>,
 }
 
 impl LocalAgentCallbackManager {
     pub fn callbacks(&self) -> Vec<AgentCallbackContext> {
         self.callbacks.lock().unwrap().clone()
+    }
+
+    pub fn request_control(
+        &self,
+        session_id: &str,
+        control: AgentControl,
+    ) -> Result<(), AgentControlError> {
+        if session_id.trim().is_empty() {
+            return Err(AgentControlError(
+                "session id must not be empty".to_string(),
+            ));
+        }
+        let mut controls = self.controls.lock().unwrap();
+        if control == AgentControl::Continue {
+            controls.remove(session_id);
+        } else {
+            controls.insert(session_id.to_string(), control);
+        }
+        Ok(())
+    }
+
+    pub fn clear_control(&self, session_id: &str) {
+        self.controls.lock().unwrap().remove(session_id);
     }
 }
 
@@ -70,6 +94,25 @@ impl AgentCallbackManager for LocalAgentCallbackManager {
     async fn notify(&self, callback: AgentCallbackContext) -> Result<(), AgentControlError> {
         self.callbacks.lock().unwrap().push(callback);
         Ok(())
+    }
+
+    async fn notify_checkpoint(
+        &self,
+        callback: AgentCallbackContext,
+    ) -> Result<AgentControl, AgentControlError> {
+        let session_id = callback.session_id.clone();
+        self.notify(callback).await?;
+        Ok(self
+            .controls
+            .lock()
+            .unwrap()
+            .get(&session_id)
+            .copied()
+            .unwrap_or(AgentControl::Continue))
+    }
+
+    fn clear_checkpoint_control(&self, session_id: &str) {
+        self.clear_control(session_id);
     }
 }
 
@@ -133,6 +176,36 @@ mod tests {
             ah_contracts::agent::AgentRunState::Completed
         );
         assert_eq!(callbacks[1].payload["phase"], "done");
+    }
+
+    #[tokio::test]
+    async fn callback_checkpoint_can_request_cancellation() {
+        let manager = LocalAgentCallbackManager::default();
+        manager.request_control("s1", AgentControl::Cancel).unwrap();
+        let control = manager
+            .notify_checkpoint(AgentCallbackContext {
+                session_id: "s1".into(),
+                state: ah_contracts::agent::AgentRunState::Running,
+                iteration: 2,
+                payload: serde_json::json!({"phase": "after_model_call"}),
+            })
+            .await
+            .unwrap();
+        assert_eq!(control, AgentControl::Cancel);
+        assert_eq!(manager.callbacks().len(), 1);
+        manager.clear_control("s1");
+        assert_eq!(
+            manager
+                .notify_checkpoint(AgentCallbackContext {
+                    session_id: "s1".into(),
+                    state: ah_contracts::agent::AgentRunState::Running,
+                    iteration: 3,
+                    payload: serde_json::json!({"phase": "before_tool_call"}),
+                })
+                .await
+                .unwrap(),
+            AgentControl::Continue
+        );
     }
 
     #[tokio::test]

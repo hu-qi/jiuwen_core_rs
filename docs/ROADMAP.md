@@ -3,8 +3,7 @@
 > 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前实现代码 revision:`38ed1a5`;后续审计与文档提交不改变该实现基线。
 > `audit/ledger.json` 是工作包状态、域汇总和状态百分比的唯一结构化来源;`docs/generated/audit-summary.md` 由 `audit-ledger` 生成。本文保留验收标准和执行顺序,不再手工累计状态数字。
 > HEAD 在旧快照之后新增了多个插件 crate;阶段一已将 10 个新增插件加入 Cargo workspace members,阶段二已将它们接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并完成 targeted mount/resolve/invoke/unmount 验证;源码和 targeted 集成测试通过不等于 production 能力完成。
-> 产品实现、默认测试和 CI 均为 Rust-only。Python differential 脚本不再是 CI 或 P1 验收门禁；agent-core Python 源码仅作为历史行为规格参考。当前 Rust regression reference 覆盖 application/controller traces,不可比较的历史差异单独记录。
-> 当前执行顺序以本文件为准;能力明细区分 implementation、production verification 和历史规格差异。
+> 产品实现、默认 Rust 回归和生产 Profile 不依赖 Python。`rails-differential` CI job 仅对固定 agent-core 参考提交执行四个可同层比较的 LLM Rails seam;其余 Python differential 脚本仍是可选历史审计。当前执行顺序以本文件为准;能力明细区分 implementation、production verification 和历史规格差异。
 
 ## 完成口径
 
@@ -53,11 +52,11 @@ Python parity 标记为 verified。
 
 | ID | 任务 | 当前状态 | 完成标准 |
 | --- | --- | --- | --- |
-| P2-01 | 常用工具对等 | partial(5 工具已实现,差分待 P0-01 六 seam 接入) | edit、glob、grep、todo、memory、cron 的权限、错误和结构化输出通过 differential。edit/glob/grep 已入 ah-plugins-sysop(替换/递归匹配/正则搜索,错误显式、输出结构化,写轴走 pre-execute rails);todo(会话隔离 JSON 持久化 add/update/remove/list)与 cron(cron 五字段子集解析 + next_run + add/list/remove/toggle,文件持久化)已入新 crate ah-plugins-common-tools;memory 工具(remember/recall/forget)既有。differential 覆盖待 P0-01 首批六 seam 接入后补 |
-| P2-02 | rails 与安全策略 | partial | planning/completion/retry/approval、tiered policy 和 overrides 完整接线 |
-| P2-03 | context engine | partial | round/dialogue compression、session memory、prompt attachment window mutator 对等 |
-| P2-04 | subagents | partial | Python 具体构建器、白名单、上下文继承、取消和结果聚合通过 E2E |
-| P2-05 | multi-agent/messager | partial | handoff、订阅拓扑、跨进程 transport、inbox/watch 和并发 governor 可运行 |
+| P2-01 | 常用工具对等 | done(`ah-plugins-sysop` + `ah-plugins-common-tools` + `ah-plugins-memory` + `ah-plugins-rails`) | edit、glob、grep、todo、memory、cron 的权限、错误和结构化输出由真实 Rust provider 提供;LocalFsProvider 拒绝 symlink 写入逃逸,PathGuard 覆盖所有带 path 的确定性工具;Rust-only fixture、挂载 golden、生产 profile smoke 均通过;Python 侧 API/宿主依赖不同,按 `not-comparable` 记录,不伪造 parity |
+| P2-02 | Rails 与安全策略 | partial | `ah-plugins-rails` 已实现 planning/completion/retry/approval 与安全 rail; `ah-plugins-security/src/tiered_policy.rs` 已实现参数规则、`approval_overrides`、整工具/默认优先级和 shell AST 安全下限; `PermissionApprovalProvider` 已提供 AllowOnce/AllowAlways/Deny HITL seam,production `security-policy` bundle 已接入 `prod.toml`; Python/Rust differential 对 agent-core@aeb88cd8 已验证 Rails 四类共 26 matched、GoalManager lifecycle 2 matched、PromptAttachment CRUD/filter/expiry 1 matched、runtime model switching 2 matched,总计 31 matched、0 known divergence、0 mismatch; Rust cancellation callback checkpoint 已有 focused test,但 agent-core Python 无等价 callback-control seam,不伪造 differential |
+| P2-03 | context engine | done(`ah-plugins-context` + focused tests) | round/dialogue compression 按完整 tool round 保留、session memory 摘要缓存、prompt attachment window mutator;dev boot、static composition 与 workspace regression 通过 |
+| P2-04 | subagents | partial(`ah-plugins-subagent` + `ah-plugins-subagents` + `ah-plugins-mcp`) | Rust-only browser/mobile path now includes Playwright MCP stdio cwd/env/capabilities, standard MCP image forwarding, Android ADB request-scoped device selection, dynamic scroll resolution, key events, health and screenshots, plus OpenAI/Anthropic image messages and session-log projection; live Android device smoke is unavailable, and high-level Python browser/mobile rails/probes remain unclaimed as fully differential-verified |
+| P2-05 | multi-agent/messager | partial(`ah-plugins-messager` + `ah-plugins-teams` + `ah-plugins-external`) | `ah-plugins-messager` 已实现 libzmq ROUTER/DEALER P2P(known peer 路由、recipient 标识、ACK、超时与显式错误)、PUB/SUB 广播(绑定 proxy、订阅/取消订阅、sender_id 盖章、停止清理);InMemoryTeamRuntime 与 SqliteTeamRuntime 在 messager seam 注册时使用 team message topic,任务状态同时发布 legacy task topic,无 messager 时保留 queue 持久化路径;任务完成现在要求 `in_progress` 状态并保留 result payload;ExternalTeamClient watch 已订阅 session-scoped MESSAGE/TASK 与 legacy message/task topics,事件触发 inbox 重取,空 inbox 不回调,取消时自动取消订阅;external-format 与 external-client fetch 对 agent-core@aeb88cd8 的消息渲染、任务看板、mark-read、watch callback/cancellation differential 已 7 matched、0 known divergence、0 mismatch;Python full team handoff/task mutation lifecycle 留待后续 |
 | P2-06 | retrieval/memory 生产后端 | partial | 至少一套真实 embedding、reranker、vector store 和 external memory 进入 production E2E |
 
 ## P3 演进与外围能力
@@ -91,13 +90,13 @@ Python parity 标记为 verified。
 | 2 | P0-02 production 静态组合验证 → CI | ✅ 已落地:`ah-app/tests/static_composition.rs`(catalog 解析 + 无重复/缺失 provider + 无环),dev/prod 双 profile 通过;修复 prod 缺 `ah-plugins-model-backup` 的真实 bug |
 | 3 | P1-08 插件依赖隔离 CI | ✅ 已落地(`6960700`):`ah-app/tests/plugin_isolation.rs`(生产依赖禁引插件 + 插件只依赖 hub/contracts),全 workspace 零违规 |
 | 4 | P1-02/03 agent-loop 结构化错误与执行中取消 | ✅ 已落地:`AgentLoopRuntime` 返回结构化 `AgentResult`(state/failure/iterations/tool_calls,application 不再解析错误字符串);`race_control` 中止在途模型/工具调用 + run 级截止时间约束 backup 链;4 个新聚焦测试(timeout/interrupt 中止在途调用、精确统计) |
-| 5 | P2-01 确定性工具补齐 | ✅ 主体已落地:edit/glob/grep(ah-plugins-sysop)+ todo/cron(新 crate ah-plugins-common-tools,含 cron 五字段解析与 next_run);memory 既有;差分验证待 P0-01 六 seam 接入 |
+| 5 | P2-01 确定性工具补齐 | ✅ 已完成:`ah-plugins-sysop` 的 edit/glob/grep + `ah-plugins-common-tools` 的 todo/cron + `ah-plugins-memory` 的 remember/recall/forget;`fixtures/tools.json` 由 Rust contract runner 执行,覆盖结构化输出、权限拒绝、正则/替换校验、session 隔离持久化、cron schedule、memory 恢复与错误分类;`tools_golden` 与 focused tests 通过 |
 | 6 | P1-07 workflow 流式执行 | ✅ Rust stream 主链与组件能力已落地:`WorkflowStreamSink`、`WorkflowEngine::stream`、`stream_checkpointed`、`WorkflowComponentRegistry`、`NodeKind::Component`;LLM 增量、节点/恢复/最终 chunk 按序发送,producer/consumer 可并发且不持有 receiver 锁,取消时关闭 sink,组件 invoke/stream/collect/transform 端到端测试通过;`ah-plugins-workflow` 17/17、`ah-plugins-stream` 9/9、`ah-app` workflow contract fixture 通过;Python ActorManager 多 producer/source-group 语义、节点级中断恢复、workflow differential 仍为 partial |
 | 7 | P1-05/06 application/controller references | ✅ Rust reference traces、stream、scheduler 和 checkpoint 版本已落地;Python 仅为历史规格,不进入 Rust-only 验收 |
 | 8 | P0-05 | ✅ 已落地:`audit/ledger.json` + `ah-app audit-ledger`;生成整体/域状态汇总、状态百分比、未完成工作包和逐包证据;CI freshness gate 已接入 |
 | 9 | P0-01 Rust-only contract fixture 扩展 | ✅ 已落地:`ah-app/tests/rust_contract.rs` + versioned fixtures;默认 CI 不调用 Python |
-| 10 | P2-02 rails 长尾 | planning/completion/retry/memory/skills/interrupt/context_engineer 等 LLM 型 rail |
-| 11 | P2-03 context round/dialogue 压缩 | round/dialogue 压缩、会话记忆管理器、prompt attachment window mutator |
+| 10 | P2-02 rails 长尾 | partial: `ah-plugins-rails` planning/completion/retry/approval 与安全 rail 已落地; `ah-plugins-security` tiered policy/overrides、HITL `PermissionApprovalProvider` 和 fail-closed pre-execute 已接线; GoalManager 生命周期与状态约束、Prompt Attachment 增删改查/过滤/过期/生命周期、runtime model switching、cancellation callback checkpoints 已实现并完成 focused tests(`ah-plugins-rails`、`ah-plugins-prompt-attachment`、`ah-plugins-agent-loop`、`ah-plugins-agent-control`);修复 `ah-plugins-workflow::run_llm` 先 await producer 再消费有界 channel 导致的死锁,新增 65 chunk 回归测试;使用 `.env` 的 `prod.toml` 已实际完成真实模型 chat/stream、agent、workflow、telemetry 和 symphony 全 demo(249.23s);Python differential 仍未验证 |
+| 11 | P2-03 context round/dialogue 压缩 | ✅ 已落地:`ah-plugins-context` 按完整 user→assistant final round 保留窗口,不切断 tool-call/tool-result;SessionMemoryManager 缓存相同 session 前缀摘要;ContextEngine 消费 prompt attachment window mutator;context 7/7、AgentLoop 21/21、app contract 15/15、workspace 1376 通过 |
 | 12 | P2-04/05/06 | subagents browser/mobile、messager pyzmq 跨进程 + handoff、retrieval embedding/vector store 生产后端 |
 | 13 | P3-01/02 | evolving LLM 闭环(judge/experience/optimizer/updater);RSI 主编排(updater missing、orchestrator、dataset generator) |
 | 14 | P3-03/04 | 外部基础设施(Pulsar/ES/GaussDB/Milvus/远程沙箱/OTel SDK);vendor-specific provider(missing) |

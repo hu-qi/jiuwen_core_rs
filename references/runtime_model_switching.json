@@ -1,0 +1,15 @@
+{
+  "cases": [
+    {
+      "config_model": "alternate",
+      "name": "select_alternate",
+      "selected_model": "alternate"
+    },
+    {
+      "config_model": "default",
+      "name": "empty_selection_uses_default",
+      "selected_model": "default"
+    }
+  ],
+  "seam": "runtime_model_switching"
+}

@@ -1,0 +1,9 @@
+{
+  "seam": "task_planning",
+  "cases": [
+    {"name": "todo_prompt_cn", "language": "cn", "models": []},
+    {"name": "todo_prompt_en", "language": "en", "models": []},
+    {"name": "todo_prompt_unknown_language", "language": "ja", "models": []},
+    {"name": "todo_prompt_with_models_en", "language": "en", "models": [{"id": "fast", "description": "fast and cheap"}, {"id": "smart", "description": "strong reasoning"}]}
+  ]
+}

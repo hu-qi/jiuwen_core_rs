@@ -12,7 +12,7 @@
 | Rust contract fixture | Rust-only 规范化输入、状态轨迹、错误分类和恢复结果 | `fixtures/` + `ah-app/tests/rust_contract.rs` | 已接入 session、tools、controller、agent-loop、workflow、application;fixture schema version=1 |
 | Rust regression reference | Rust 当前完整可观测输出不发生非预期变化 | `references/` + `ah-app/tests/differential.rs` | 已覆盖 session、security、retrieval、teams、evolving、messager 以及 application/controller traces |
 | Rust-only contract | Rust 输入、状态、错误、恢复和序列化行为符合已登记规格 | `fixtures/` + `ah-app/tests/rust_contract.rs` | 主验收门禁;不加载 Python |
-| Historical Python audit | 与历史 agent-core 行为的辅助比较 | `differential/` | 非 CI、非产品依赖;没有同层 Rust 实现时不得强行比较 |
+| Historical Python audit | 与 agent-core(Python) 行为一致性比较 | `differential/` | LLM Rails 四个 seam 由 CI 固定参考 commit 执行;其他不可同层比较的历史 seam 仍为本地辅助审计 |
 | Production composition | prod profile 可解析、依赖闭合且无 mock | profile/catalog/依赖图测试 | mock exclusion/static composition 已有;10 个新增插件已进入 workspace、catalog 和 dev/prod Profile |
 | Production boot/E2E | 无 mock 的真实组合可启动并执行 | 本地 HTTP fixture、服务容器或真实凭据 | dev Profile boot + demo E2E 已验证;prod 需要真实 Redis/OpenAI 等依赖 |
 | 覆盖率 | Rust 测试执行到的代码比例 | `cargo llvm-cov --workspace --fail-under-lines 80` | CI 有门禁;当前 HEAD 数字须以完整实测为准,不得引用历史数字 |
@@ -71,9 +71,11 @@ reference 防止 Rust 行为意外变化,但不构成外部实现的对等证明
 
 ## Historical Python audit
 
-`differential/run_python.py` 和 `differential/compare.py` 不是 Rust 产品代码,不参与默认 CI、
-Rust 构建或生产运行。它们仅保留给需要审计历史 agent-core 行为的开发者；当两边不处于同一
-抽象层时,结果必须记录为 `not-comparable`,不能用复制 Rust 逻辑的方式制造 Python outcome。
+`differential/run_python.py` 和 `differential/compare.py` 不属于 Rust 产品代码,也不进入
+Rust 构建或生产运行。`.github/workflows/ci.yml` 的 `rails-differential` job 固定
+agent-core commit,运行 `llm_retry`、`tool_retry`、`task_completion` 和 `task_planning`;
+这些 seam 必须逐 case normalized output 一致。其他历史 seam 仅在可同层比较时本地审计,
+不可比较行为仍必须标记为 `not-comparable`。
 
 Rust-only 验收流程:
 
@@ -89,10 +91,10 @@ Rust-only 验收流程:
 
 1. **Mock exclusion**:prod profile 不包含 `ah-plugins-mock`;当前已有测试;
 2. **Static composition**:所有插件名可从 catalog 解析,provides/inject 依赖闭合且无重复/环;已由 `ah-app/tests/static_composition.rs` 覆盖(dev/prod 双 profile,镜像 `mount_all` 语义、不触发 apply;曾抓出 prod 缺 `ah-plugins-model-backup` 的组合 bug);
-3. **Boot smoke/E2E**:无 mock 完成 `boot()`、Application invoke、Controller 调度/恢复和 Workflow stream;`production-p1` CI job 已用 Redis service + 本地确定性 HTTP model fixture 执行。
+3. **Boot smoke/E2E**:无 mock 完成 `boot()`、Application invoke、Controller 调度/恢复和 Workflow stream;`production-p1` CI job 已用 Redis service + 本地确定性 HTTP model fixture 执行,并调用 `edit/glob/grep/todo/cron/remember/recall/forget` 全部确定性工具路径。
 
-真实 provider E2E 仍可使用本地 HTTP fixture、服务容器或真实凭据。因缺凭据跳过时必须输出明确原因,
-不得以 mock 替代后仍标记 production verified。
+生产 smoke 不能证明 browser、LSP、MCP、外部 CLI 等需要额外进程或凭据的能力可用;这些能力必须分别
+提供依赖服务和专用 E2E,不能借用 P2-01 的本地工具结果标记为生产完成。
 
 ## 覆盖率
 

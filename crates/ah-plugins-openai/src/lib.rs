@@ -103,7 +103,7 @@ struct WireRequest {
 struct WireMessage {
     role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
+    content: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -198,10 +198,19 @@ fn responses_input(request: &ModelRequest) -> Vec<serde_json::Value> {
         .iter()
         .flat_map(|message| match message.role {
             ChatRole::System => Vec::new(),
-            ChatRole::User => vec![json!({
-                "role": "user",
-                "content": [{"type": "input_text", "text": message.content}]
-            })],
+            ChatRole::User => {
+                let mut content = Vec::new();
+                if !message.content.is_empty() || message.images.is_empty() {
+                    content.push(json!({"type": "input_text", "text": message.content}));
+                }
+                content.extend(
+                    message
+                        .images
+                        .iter()
+                        .map(|image| json!({"type": "input_image", "image_url": image.data_url()})),
+                );
+                vec![json!({"role": "user", "content": content})]
+            }
             ChatRole::Assistant => {
                 let mut items = Vec::new();
                 if !message.content.is_empty() {
@@ -322,12 +331,25 @@ fn wire_role(role: ChatRole) -> &'static str {
         ChatRole::Tool => "tool",
     }
 }
-fn wire_content(message: &ChatMessage) -> Option<String> {
+
+fn wire_content(message: &ChatMessage) -> Option<serde_json::Value> {
     if message.role == ChatRole::Assistant && message.tool_calls.is_some() {
-        None
-    } else {
-        Some(message.content.clone())
+        return None;
     }
+    if message.images.is_empty() {
+        return Some(json!(message.content));
+    }
+    let mut parts = Vec::new();
+    if !message.content.is_empty() {
+        parts.push(json!({"type": "text", "text": message.content}));
+    }
+    parts.extend(message.images.iter().map(|image| {
+        json!({
+            "type": "image_url",
+            "image_url": {"url": image.data_url()}
+        })
+    }));
+    Some(json!(parts))
 }
 
 /// 真实 OpenAI 兼容 provider:通过 HTTP 调用 chat/completions。
@@ -689,8 +711,10 @@ impl ModelProvider for OpenAiModelProvider {
         let message = parsed.choices.into_iter().next().and_then(|c| c.message);
         let content = message
             .as_ref()
-            .and_then(|m| m.content.clone())
-            .unwrap_or_default();
+            .and_then(|m| m.content.as_ref())
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string();
         let tool_calls = message
             .as_ref()
             .and_then(|m| m.tool_calls.clone())
@@ -1254,7 +1278,22 @@ mod tests {
         assert_eq!(wire_content(&message), None);
         assert_eq!(
             wire_content(&ChatMessage::new(ChatRole::User, "hi")),
-            Some("hi".into())
+            Some(json!("hi"))
+        );
+    }
+
+    #[test]
+    fn chat_completion_message_serializes_image_url_parts() {
+        let message = ChatMessage::user_with_image(
+            "inspect",
+            ah_contracts::llm::ChatImage::new("image/png", "data:image/png;base64,AAAA"),
+        );
+        assert_eq!(
+            wire_content(&message),
+            Some(json!([
+                {"type": "text", "text": "inspect"},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}
+            ]))
         );
     }
 
@@ -1331,6 +1370,7 @@ mod tests {
         assert_eq!(body["input"][2]["type"], "function_call");
         assert_eq!(body["input"][2]["id"], "call_1");
         assert_eq!(body["input"][2]["call_id"], "call_1");
+
         assert_eq!(
             body["input"][3],
             json!({
@@ -1345,6 +1385,29 @@ mod tests {
         assert_eq!(body["store"], false);
         assert_eq!(body["include"], json!(["reasoning.encrypted_content"]));
         assert_eq!(body["stream"], false);
+    }
+
+    #[test]
+    fn responses_input_serializes_image_input() {
+        let request = ModelRequest {
+            messages: vec![ChatMessage::user_with_image(
+                "screen",
+                ah_contracts::llm::ChatImage::new("image/png", "data:image/png;base64,AAAA"),
+            )],
+            ..Default::default()
+        };
+        let input = responses_input(&request);
+        assert_eq!(
+            input[0]["content"][0],
+            json!({"type":"input_text","text":"screen"})
+        );
+        assert_eq!(
+            input[0]["content"][1],
+            json!({
+                "type":"input_image",
+                "image_url":"data:image/png;base64,AAAA"
+            })
+        );
     }
 
     // ------------------------------------------------------------------

@@ -39,6 +39,7 @@ ah-plugins-memory = { workspace = true }
 ah-plugins-manifest = { workspace = true }
 ah-plugins-bridge-compose = { workspace = true }
 ah-plugins-mcp = { workspace = true }
+ah-plugins-messager = { workspace = true }
 ah-plugins-lsp = { workspace = true }
 ah-plugins-member-optimizer = { workspace = true }
 ah-plugins-credentials = { workspace = true }

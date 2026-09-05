@@ -24,3 +24,5 @@ agent-harness 是插件化 agent harness(参考 DeepSeek Harness / Cordis 理念
 硬性规则摘要:契约零实现;插件只依赖 ah-hub + ah-contracts;注册必可逆(Effect);
 mock 只进 ah-plugins-mock;生产路径禁止 todo!/unimplemented!/静默 fallback;
 本地/mock 测试通过 ≠ 完成。
+敏感配置硬性规则:运行时只能使用 env 文件声明的配置;env 文件覆盖同名进程变量,缺失 env 文件必须失败;禁止读取/猜测未声明的全局 provider 配置。
+修改 `.env`、`.env.*` 或其他含凭据文件前必须保留原内容,禁止整体覆盖、输出或提交密钥;详细加载规则见 [docs/development.md](docs/development.md)。

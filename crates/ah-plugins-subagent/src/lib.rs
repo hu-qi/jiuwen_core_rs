@@ -4,10 +4,12 @@
 //! 上下文经 system 消息注入(日志投影支持);提供 delegate_task 工具,
 //! 让模型能把子任务委派给新会话。
 
+use std::future::Future;
 use std::sync::Arc;
 
+use ah_contracts::agent::{AgentControl, InterruptRuntime};
 use ah_contracts::context::ContextEngine;
-use ah_contracts::keys::{CONTEXT, LLM, SESSION_MANAGER, SESSIONS, SUBAGENT, TOOLS};
+use ah_contracts::keys::{CONTEXT, INTERRUPT, LLM, SESSION_MANAGER, SESSIONS, SUBAGENT, TOOLS};
 use ah_contracts::llm::{ModelProvider, ModelRequest, ToolSchema};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
@@ -28,6 +30,7 @@ pub struct LocalSubagentRuntime {
     /// 可选上下文引擎(context seam 消费方):组装请求时按预算压缩。
     context: Option<Arc<dyn ContextEngine>>,
     token_budget: usize,
+    interrupt: Option<Arc<dyn InterruptRuntime>>,
 }
 
 impl LocalSubagentRuntime {
@@ -53,6 +56,89 @@ impl LocalSubagentRuntime {
             })
             .collect()
     }
+
+    async fn race_control<R>(
+        &self,
+        session_id: &str,
+        future: impl Future<Output = R>,
+    ) -> Result<R, SubagentError> {
+        let Some(interrupt) = &self.interrupt else {
+            return Ok(future.await);
+        };
+        if interrupt.state(session_id) != AgentControl::Continue {
+            return Err(SubagentError(format!(
+                "subagent {}",
+                control_message(interrupt.state(session_id))
+            )));
+        }
+        tokio::select! {
+            result = future => Ok(result),
+            _ = async {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                    if interrupt.state(session_id) != AgentControl::Continue { break; }
+                }
+            } => Err(SubagentError(format!("subagent {}", control_message(interrupt.state(session_id))))),
+        }
+    }
+}
+
+fn control_message(control: AgentControl) -> &'static str {
+    match control {
+        AgentControl::Interrupt => "interrupted; resume the session to continue",
+        AgentControl::Cancel => "cancelled",
+        AgentControl::Continue => "control raced unexpectedly",
+    }
+}
+
+fn observation_payload(output: &Value, serial: &str) -> Option<Value> {
+    let mime_type = output.get("mime_type").and_then(Value::as_str)?;
+    let data = output.get("data").and_then(Value::as_str)?;
+    if !mime_type.starts_with("image/") || data.is_empty() {
+        return None;
+    }
+    let mut payload = json!({
+        "content": "[current Android screen]",
+        "device_serial": serial,
+        "images": [{"mime_type": mime_type, "data": data}]
+    });
+    if let Some(foreground_app) = output.get("foreground_app").and_then(Value::as_str) {
+        payload["foreground_app"] = json!(foreground_app);
+    }
+    Some(payload)
+}
+
+fn image_attachments(output: &Value) -> Vec<Value> {
+    let mut images = output
+        .get("images")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if images.is_empty()
+        && output
+            .get("mime_type")
+            .and_then(Value::as_str)
+            .is_some_and(|mime| mime.starts_with("image/"))
+        && output.get("data").and_then(Value::as_str).is_some()
+    {
+        images.push(json!({
+            "mime_type": output["mime_type"].clone(),
+            "data": output["data"].clone(),
+        }));
+    }
+    images
+        .into_iter()
+        .filter(|image| {
+            image
+                .get("mime_type")
+                .and_then(Value::as_str)
+                .is_some_and(|mime| mime.starts_with("image/"))
+                && image
+                    .get("data")
+                    .and_then(Value::as_str)
+                    .is_some_and(|data| !data.is_empty())
+        })
+        .collect()
 }
 
 impl Seam for LocalSubagentRuntime {}
@@ -77,6 +163,53 @@ impl SubagentRuntime for LocalSubagentRuntime {
             .append(SessionEventKind::User, json!({ "content": spec.task }))
             .map_err(|e| SubagentError(format!("append user failed: {e}")))?;
 
+        let mobile_observation = spec
+            .allowed_tools
+            .as_ref()
+            .is_some_and(|allowed| allowed.iter().any(|name| name == "screenshot"));
+        if mobile_observation {
+            let serial = spec
+                .context
+                .as_deref()
+                .and_then(|context| context.split("Android device serial: ").nth(1))
+                .map(|value| value.split('.').next().unwrap_or(value).trim())
+                .filter(|value| !value.is_empty())
+                .unwrap_or("emulator-5554");
+            let screenshot = self
+                .race_control(
+                    &spec.id,
+                    self.tools
+                        .invoke("screenshot", json!({"device_serial": serial})),
+                )
+                .await?
+                .map_err(|error| {
+                    SubagentError(format!("initial Android screenshot failed: {error}"))
+                })?;
+            let payload = observation_payload(&screenshot, serial).ok_or_else(|| {
+                SubagentError("initial Android screenshot returned no image payload".into())
+            })?;
+            session
+                .append(SessionEventKind::User, payload)
+                .map_err(|e| SubagentError(format!("append Android screenshot failed: {e}")))?;
+        }
+
+        if let Some(interrupt) = &self.interrupt {
+            let control = interrupt.state(&spec.id);
+            if control != AgentControl::Continue {
+                let _ = session.append(
+                    match control {
+                        AgentControl::Interrupt => SessionEventKind::AgentInterrupted,
+                        AgentControl::Cancel => SessionEventKind::AgentCanceled,
+                        AgentControl::Continue => SessionEventKind::AgentStep,
+                    },
+                    json!({ "error": control_message(control) }),
+                );
+                return Err(SubagentError(format!(
+                    "subagent {}",
+                    control_message(control)
+                )));
+            }
+        }
         for (index, _) in (0..max_iterations).enumerate() {
             let iterations_used = index + 1;
             // 模型可见消息:优先经 context seam 按预算组装;未挂载时日志投影直通。
@@ -90,13 +223,15 @@ impl SubagentRuntime for LocalSubagentRuntime {
                 session.derive_messages()
             };
             let response = self
-                .llm
-                .chat(ModelRequest {
-                    messages,
-                    tools: self.tool_schemas(spec.allowed_tools.as_ref()),
-                    ..Default::default()
-                })
-                .await
+                .race_control(
+                    &spec.id,
+                    self.llm.chat(ModelRequest {
+                        messages,
+                        tools: self.tool_schemas(spec.allowed_tools.as_ref()),
+                        ..Default::default()
+                    }),
+                )
+                .await?
                 .map_err(|e| SubagentError(format!("model error: {e}")))?;
 
             if response.tool_calls.is_empty() {
@@ -140,23 +275,37 @@ impl SubagentRuntime for LocalSubagentRuntime {
                     .as_ref()
                     .map(|allow| allow.contains(&call.name))
                     .unwrap_or(true);
-                let (status, output) = if !allowed {
-                    ("error", format!("tool not allowed: {}", call.name))
+                let (status, output, images) = if !allowed {
+                    (
+                        "error",
+                        format!("tool not allowed: {}", call.name),
+                        Vec::new(),
+                    )
                 } else {
-                    match self.tools.invoke(&call.name, call.arguments.clone()).await {
-                        Ok(value) => ("completed", value.to_string()),
-                        Err(error) => ("error", format!("tool error: {error}")),
+                    match self
+                        .race_control(
+                            &spec.id,
+                            self.tools.invoke(&call.name, call.arguments.clone()),
+                        )
+                        .await?
+                    {
+                        Ok(value) => {
+                            let images = image_attachments(&value);
+                            ("completed", value.to_string(), images)
+                        }
+                        Err(error) => ("error", format!("tool error: {error}"), Vec::new()),
                     }
                 };
+                let mut event = json!({
+                    "tool_call_id": call.id,
+                    "status": status,
+                    "output": output,
+                });
+                if !images.is_empty() {
+                    event["images"] = json!(images);
+                }
                 session
-                    .append(
-                        SessionEventKind::ToolResult,
-                        json!({
-                            "tool_call_id": call.id,
-                            "status": status,
-                            "output": output,
-                        }),
-                    )
+                    .append(SessionEventKind::ToolResult, event)
                     .map_err(|e| SubagentError(format!("append failed: {e}")))?;
             }
             // 日志即真相:记录本轮步进(继续循环)。
@@ -277,6 +426,7 @@ impl Plugin for SubagentPlugin {
                 plugin: self.name(),
                 message: "session-manager seam not registered".to_string(),
             })?;
+        let interrupt = ctx.service::<dyn InterruptRuntime>(&INTERRUPT);
 
         let context = ctx.service::<dyn ContextEngine>(&CONTEXT);
         let mut runtime = LocalSubagentRuntime {
@@ -285,6 +435,7 @@ impl Plugin for SubagentPlugin {
             manager,
             context: None,
             token_budget: 8192,
+            interrupt,
         };
         if let Some(context) = context {
             runtime = runtime.with_context(context, 8192);
@@ -317,6 +468,7 @@ mod tests {
             StdArc::new(ah_plugins_mock::MockPlugin),
             StdArc::new(ah_plugins_tools::ToolsPlugin),
             StdArc::new(ah_plugins_sysop::SysopPlugin::new(root)),
+            StdArc::new(ah_plugins_agent_control::AgentControlPlugin),
             StdArc::new(ah_plugins_session_log::SessionLogPlugin::new(
                 &default_path,
                 &session_dir,
@@ -327,6 +479,17 @@ mod tests {
         (ctx, effects)
     }
 
+    #[test]
+    fn tool_image_outputs_are_extracted_for_session_projection() {
+        let output = json!({
+            "ok": true,
+            "images": [{"mime_type": "image/png", "data": "data:image/png;base64,AAAA"}]
+        });
+        let images = image_attachments(&output);
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0]["mime_type"], "image/png");
+        assert_eq!(images[0]["data"], "data:image/png;base64,AAAA");
+    }
     #[tokio::test]
     async fn subagent_runs_isolated_task_with_real_tools() {
         let root = std::env::temp_dir().join(format!("ah-subagent-{}", std::process::id()));
@@ -398,5 +561,56 @@ mod tests {
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
+    }
+    #[tokio::test]
+    async fn cancellation_is_recorded_and_stops_before_model_call() {
+        let root = std::env::temp_dir().join(format!("ah-subagent-cancel-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let interrupt = ctx
+            .service::<dyn InterruptRuntime>(&INTERRUPT)
+            .expect("interrupt");
+        interrupt
+            .request("cancelled-child", AgentControl::Cancel)
+            .await
+            .unwrap();
+        let runtime = ctx
+            .service::<dyn SubagentRuntime>(&SUBAGENT)
+            .expect("subagent");
+        let error = runtime
+            .run(SubagentSpec {
+                id: "cancelled-child".into(),
+                task: "must not run".into(),
+                context: None,
+                budget: Some(2),
+                allowed_tools: None,
+            })
+            .await
+            .expect_err("cancelled child");
+        assert!(error.0.contains("cancelled"));
+        let manager = ctx
+            .service::<dyn SessionManager>(&SESSION_MANAGER)
+            .expect("manager");
+        assert!(
+            manager
+                .open("cancelled-child")
+                .unwrap()
+                .events()
+                .iter()
+                .any(|event| { event.kind == SessionEventKind::AgentCanceled })
+        );
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn screenshot_tool_output_becomes_model_observation() {
+        let payload = observation_payload(
+            &json!({"mime_type":"image/png","data":"data:image/png;base64,AAAA"}),
+            "emulator-5554",
+        )
+        .expect("image observation");
+        assert_eq!(payload["content"], "[current Android screen]");
+        assert_eq!(payload["images"][0]["mime_type"], "image/png");
+        assert_eq!(payload["device_serial"], "emulator-5554");
     }
 }

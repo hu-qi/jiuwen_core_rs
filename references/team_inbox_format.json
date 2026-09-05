@@ -1,0 +1,21 @@
+{
+  "cases": [
+    {
+      "name": "ordinary_direct_message",
+      "output": "<team-inbound from=\"alice\" message_id=\"m1\" type=\"direct\" time=\"2023-11-14 22:13:20 +00:00 (刚刚)\">\nhello &lt;world&gt; &amp; friends\n<team-note kind=\"reply-hint\">\nplease reply\n</team-note>\n</team-inbound>"
+    },
+    {
+      "name": "template_message_drops_hint",
+      "output": "<team-inbound from=\"leader\" message_id=\"m2\" type=\"direct\" time=\"2023-11-14 22:13:20 +00:00 (刚刚)\">\nframework &lt;body&gt;\n</team-inbound>"
+    },
+    {
+      "name": "human_broadcast_message",
+      "output": "<team-inbound from=\"human_agent\" message_id=\"m3\" type=\"broadcast\" time=\"2023-11-14 22:13:20 +00:00 (刚刚)\" for=\"controller\">\nfor controller\n<team-note kind=\"hitt-silence\">\nstay silent\n</team-note>\n</team-inbound>"
+    },
+    {
+      "name": "task_board_filters_terminal",
+      "output": "<team-event kind=\"task-board\">\nTEAMMATE-LIST\n- [t1] [pending] Title t1: body (unassigned) (2023-11-14 22:13:20 +00:00 (刚刚))\n</team-event>"
+    }
+  ],
+  "seam": "team_inbox_format"
+}

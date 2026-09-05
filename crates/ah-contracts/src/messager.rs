@@ -2,12 +2,14 @@
 //!
 //! 确定性部分:
 //! - `MessagerPeerConfig` / `MessagerTransportConfig`(含 broadcast_topic)/
-//!   `SubscriptionHandle` 纯模型 + `create_messager` 后端分派(inprocess 支持,
-//!   pyzmq 需外部依赖 → 显式报错);
+//!   `SubscriptionHandle` 纯模型;
 //! - `InProcessMessager`:进程内 pub-sub + P2P 总线(subscribe/unsubscribe/
 //!   publish/send/register·unregister_direct_message_handler),handler 直接
 //!   调用,无序列化;与 Python `_Bus` 语义一致(topic → agent_id → handler,
 //!   p2p agent_id → handler)。
+//!
+//! 跨进程 `pyzmq` 实现在 `ah-plugins-messager::PyzmqMessager`,避免让契约
+//! crate 依赖具体网络库。
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

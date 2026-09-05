@@ -3,7 +3,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use ah_contracts::keys::{QUEUE, SUBAGENT, TEAMS};
+use ah_contracts::keys::{MESSAGER, QUEUE, SUBAGENT, TEAMS};
+use ah_contracts::messager::Messager;
 use ah_contracts::prelude::Effect;
 use ah_contracts::queue::{MessageQueue, QueueMessage};
 use ah_contracts::seam::Seam;
@@ -27,12 +28,13 @@ fn status_from_str(s: &str) -> Result<TeamTaskStatus, TeamError> {
     serde_json::from_str(s).map_err(|e| TeamError(format!("bad status {s}: {e}")))
 }
 
-/// 真实 SQLite 团队运行时:连接为 Mutex<Connection>(SQLite 连接非 Sync)。
 pub struct SqliteTeamRuntime {
     conn: Mutex<Connection>,
     subagent: Arc<dyn SubagentRuntime>,
-    /// 消息传输经 queue seam(team:{team}:messages channel)。
+    /// 消息传输默认经 queue;注入 messager 后使用跨进程 topic。
     queue: Arc<dyn MessageQueue>,
+    messager: Option<Arc<dyn Messager>>,
+    messager_messages: Arc<Mutex<std::collections::HashMap<String, Vec<TeamMessage>>>>,
     ctx: Context,
 }
 
@@ -73,8 +75,39 @@ impl SqliteTeamRuntime {
             conn: Mutex::new(conn),
             subagent,
             queue,
+            messager: None,
+            messager_messages: Arc::new(Mutex::new(std::collections::HashMap::new())),
             ctx,
         })
+    }
+
+    pub fn with_messager(mut self, messager: Arc<dyn Messager>) -> Self {
+        messager.start();
+        self.messager = Some(messager);
+        for team in self.list_teams() {
+            self.subscribe_team(&team);
+        }
+        self
+    }
+
+    fn subscribe_team(&self, team: &str) {
+        let Some(messager) = &self.messager else {
+            return;
+        };
+        let topic = Self::channel(team);
+        let cache = self.messager_messages.clone();
+        let team_id = team.to_string();
+        messager.subscribe(
+            &topic,
+            Arc::new(move |payload| {
+                let Ok(message) = serde_json::from_value::<TeamMessage>(payload) else {
+                    return;
+                };
+                let mut messages = cache.lock().unwrap();
+                let bucket = messages.entry(team_id.clone()).or_default();
+                bucket.push(message);
+            }),
+        );
     }
 
     fn emit(&self, team: &str, task_id: &str, status: TeamTaskStatus) {
@@ -83,6 +116,12 @@ impl SqliteTeamRuntime {
             task_id: task_id.to_string(),
             status,
         });
+        if let Some(messager) = &self.messager {
+            messager.publish(
+                &format!("team:{team}:task"),
+                serde_json::json!({"task_id": task_id, "status": status}),
+            );
+        }
     }
 
     /// 读取团队全部任务(按 task_id 排序)。
@@ -165,7 +204,9 @@ impl TeamRuntime for SqliteTeamRuntime {
             .map_err(|e| TeamError(format!("insert member: {e}")))?;
         }
         tx.commit()
-            .map_err(|e| TeamError(format!("commit team: {e}")))
+            .map_err(|e| TeamError(format!("commit team: {e}")))?;
+        self.subscribe_team(&spec.id);
+        Ok(())
     }
 
     fn add_task(&self, team: &str, task: TeamTask) -> Result<(), TeamError> {
@@ -224,19 +265,33 @@ impl TeamRuntime for SqliteTeamRuntime {
 
     fn complete_task(&self, team: &str, task: &str, output: Value) -> Result<(), TeamError> {
         let conn = self.conn.lock().unwrap();
+        let current = self
+            .load_tasks(&conn, team)?
+            .into_iter()
+            .find(|entry| entry.id == task)
+            .ok_or_else(|| TeamError(format!("task not found: {task}")))?;
+        if current.status != TeamTaskStatus::InProgress {
+            return Err(TeamError(format!(
+                "task {task} cannot be completed from status {:?}",
+                current.status
+            )));
+        }
         let updated = conn
             .execute(
-                "UPDATE tasks SET status = ?1, result = ?2 WHERE team_id = ?3 AND task_id = ?4",
+                "UPDATE tasks SET status = ?1, result = ?2 WHERE team_id = ?3 AND task_id = ?4 AND status = ?5",
                 rusqlite::params![
                     status_to_str(TeamTaskStatus::Done),
                     output.to_string(),
                     team,
-                    task
+                    task,
+                    status_to_str(TeamTaskStatus::InProgress),
                 ],
             )
             .map_err(|e| TeamError(format!("complete update: {e}")))?;
         if updated == 0 {
-            return Err(TeamError(format!("task not found: {task}")));
+            return Err(TeamError(format!(
+                "task {task} was changed before completion"
+            )));
         }
         drop(conn);
         self.emit(team, task, TeamTaskStatus::Done);
@@ -369,7 +424,6 @@ impl TeamRuntime for SqliteTeamRuntime {
         to: Option<&str>,
         content: &str,
     ) -> Result<TeamMessage, TeamError> {
-        // 团队必须存在(SQLite 校验)。
         let conn = self.conn.lock().unwrap();
         let exists: Option<bool> = conn
             .query_row("SELECT 1 FROM teams WHERE id = ?1 LIMIT 1", [team], |row| {
@@ -381,20 +435,37 @@ impl TeamRuntime for SqliteTeamRuntime {
             return Err(TeamError(format!("team not found: {team}")));
         }
         drop(conn);
-        self.queue
-            .publish(
-                &Self::channel(team),
-                json!({ "from": from, "to": to, "content": content }),
-            )
-            .map_err(|e| TeamError(format!("publish message: {e}")))?;
-        Ok(TeamMessage {
+        let message = TeamMessage {
             from: from.to_string(),
             to: to.map(str::to_string),
             content: content.to_string(),
-        })
+        };
+        if let Some(messager) = &self.messager {
+            messager.publish(
+                &Self::channel(team),
+                serde_json::to_value(&message).unwrap(),
+            );
+        } else {
+            self.queue
+                .publish(
+                    &Self::channel(team),
+                    serde_json::to_value(&message).unwrap(),
+                )
+                .map_err(|e| TeamError(format!("publish message: {e}")))?;
+        }
+        Ok(message)
     }
 
     fn messages(&self, team: &str) -> Result<Vec<TeamMessage>, TeamError> {
+        if self.messager.is_some() {
+            return Ok(self
+                .messager_messages
+                .lock()
+                .unwrap()
+                .get(team)
+                .cloned()
+                .unwrap_or_default());
+        }
         let mut msgs: Vec<QueueMessage> = self
             .queue
             .backlog(&Self::channel(team))
@@ -402,24 +473,12 @@ impl TeamRuntime for SqliteTeamRuntime {
         msgs.sort_by_key(|m| m.seq);
         Ok(msgs
             .into_iter()
-            .map(|m| TeamMessage {
-                from: m
-                    .payload
-                    .get("from")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                to: m
-                    .payload
-                    .get("to")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                content: m
-                    .payload
-                    .get("content")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
+            .map(|m| {
+                serde_json::from_value(m.payload).unwrap_or(TeamMessage {
+                    from: String::new(),
+                    to: None,
+                    content: String::new(),
+                })
             })
             .collect())
     }
@@ -540,6 +599,11 @@ impl Plugin for SqliteTeamsPlugin {
                 plugin: self.name(),
                 message: e.0,
             })?;
+        let runtime = if let Some(messager) = ctx.service::<dyn Messager>(&MESSAGER) {
+            runtime.with_messager(messager)
+        } else {
+            runtime
+        };
         let runtime: Arc<dyn TeamRuntime> = Arc::new(runtime);
         Ok(vec![ctx.register(TEAMS, runtime)])
     }
@@ -622,6 +686,7 @@ mod tests {
         };
         rt.create_team(spec, members()).expect("create");
         rt.add_task("t1", task("a", vec![])).expect("add");
+        assert!(rt.complete_task("t1", "a", json!({"ok": true})).is_err());
         let claimed = rt.claim_task("t1", "m1").expect("claim");
         assert_eq!(claimed, "a");
         rt.complete_task("t1", "a", json!({"ok": true}))
@@ -777,5 +842,40 @@ mod tests {
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn sqlite_messaging_can_use_inprocess_messager() {
+        let root = std::env::temp_dir().join(format!("ah-sqlite-messager-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let db = root.join("teams.db");
+        let messager = ah_contracts::messager::create_messager(
+            ah_contracts::messager::MessagerTransportConfig {
+                node_id: Some("sqlite-node".into()),
+                ..Default::default()
+            },
+        )
+        .expect("messager");
+        let rt = SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone())
+            .expect("open")
+            .with_messager(messager);
+        rt.create_team(
+            TeamSpec {
+                id: "t1".into(),
+                name: "Alpha".into(),
+            },
+            members(),
+        )
+        .expect("create");
+        rt.send_message("t1", "m1", None, "over messager")
+            .expect("send");
+        rt.send_message("t1", "m1", None, "over messager")
+            .expect("send duplicate");
+        let messages = rt.messages("t1").expect("messages");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].content, "over messager");
+        assert_eq!(messages[1].content, "over messager");
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
     }
 }

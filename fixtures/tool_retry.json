@@ -1,0 +1,15 @@
+{
+  "seam": "tool_retry",
+  "description": "Deterministic ToolCallResilienceRail exception classification",
+  "exceptions": [
+    {"name": "timeout_type", "type": "TimeoutError", "message": ""},
+    {"name": "connection_reset_type", "type": "ConnectionResetError", "message": ""},
+    {"name": "broken_pipe_type", "type": "BrokenPipeError", "message": ""},
+    {"name": "connection_aborted_type", "type": "ConnectionAbortedError", "message": ""},
+    {"name": "stream_closed_marker", "type": "RuntimeError", "message": "stream closed"},
+    {"name": "protocol_marker", "type": "RuntimeError", "message": "remoteprotocolerror"},
+    {"name": "value_error_type", "type": "ValueError", "message": "bad argument"},
+    {"name": "permission_error_type", "type": "PermissionError", "message": "permission denied"},
+    {"name": "ordinary_error", "type": "RuntimeError", "message": "business failure"}
+  ]
+}

@@ -6,14 +6,17 @@
 
 pub mod file_guard;
 pub mod shell_ast;
+pub mod tiered_policy;
+pub use tiered_policy::{evaluate_tiered_policy, rule_tools_category_consistent};
 
 use std::sync::{Arc, Mutex};
 
-use ah_contracts::keys::SECURITY;
+use ah_contracts::keys::{PERMISSION_APPROVAL, SECURITY};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::security::{
-    Guardrail, GuardrailDecision, SecurityProvider, SecurityVerdict, Severity,
+    Guardrail, GuardrailDecision, PermissionApprovalDecision, PermissionApprovalProvider,
+    PermissionApprovalRequest, PermissionLevel, SecurityProvider, SecurityVerdict, Severity,
 };
 use ah_contracts::service::ServiceKey;
 use ah_contracts::tools::{ToolDecision, ToolInvocation};
@@ -219,6 +222,94 @@ impl Plugin for SecurityRailPlugin {
     }
 }
 
+/// 将分层权限策略接入 tools/pre-execute。
+///
+/// `ask` 在未挂载 HITL 审批宿主时 fail closed;需要交互审批的宿主应先完成
+/// 自己的确认流程后再将对应规则写入 `approval_overrides`。
+pub struct TieredPolicyRailPlugin {
+    config: Value,
+    approval: Option<Arc<dyn PermissionApprovalProvider>>,
+}
+
+impl TieredPolicyRailPlugin {
+    pub fn new(config: Value) -> Self {
+        Self {
+            config,
+            approval: None,
+        }
+    }
+
+    /// 注入宿主 HITL provider; provider 负责展示确认 UI 与持久化 AllowAlways。
+    pub fn with_approval_provider(mut self, approval: Arc<dyn PermissionApprovalProvider>) -> Self {
+        self.approval = Some(approval);
+        self
+    }
+}
+
+impl Plugin for TieredPolicyRailPlugin {
+    fn name(&self) -> &'static str {
+        "ah-plugins-security-tiered-policy"
+    }
+
+    fn provides(&self) -> Vec<ServiceKey> {
+        Vec::new()
+    }
+
+    fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
+        let config = self.config.clone();
+        let approval = self
+            .approval
+            .clone()
+            .or_else(|| ctx.service::<dyn PermissionApprovalProvider>(&PERMISSION_APPROVAL));
+        let effect =
+            ctx.on_waterfall::<ToolInvocation, ToolDecision, _, _>(move |event, decision, next| {
+                let config = config.clone();
+                let approval = approval.clone();
+                async move {
+                    let (level, matched_rule) =
+                        evaluate_tiered_policy(&config, &event.name, &decision.arguments);
+                    match level {
+                        PermissionLevel::Allow => next.next(decision).await,
+                        PermissionLevel::Deny => ToolDecision::deny(
+                            decision.arguments,
+                            format!("tiered policy deny for {} ({matched_rule})", event.name),
+                        ),
+                        PermissionLevel::Ask => {
+                            let Some(approval) = approval else {
+                                return ToolDecision::deny(
+                                    decision.arguments,
+                                    format!(
+                                        "tiered policy ask requires approval for {} ({matched_rule})",
+                                        event.name
+                                    ),
+                                );
+                            };
+                            let request = PermissionApprovalRequest {
+                                tool_name: event.name.clone(),
+                                arguments: decision.arguments.clone(),
+                                matched_rule,
+                            };
+                            match approval.request(request).await {
+                                Ok(PermissionApprovalDecision::AllowOnce)
+                                | Ok(PermissionApprovalDecision::AllowAlways) => {
+                                    next.next(decision).await
+                                }
+                                Ok(PermissionApprovalDecision::Deny) => ToolDecision::deny(
+                                    decision.arguments,
+                                    format!("permission denied by user for {}", event.name),
+                                ),
+                                Err(error) => ToolDecision::deny(
+                                    decision.arguments,
+                                    format!("permission approval failed for {}: {error}", event.name),
+                                ),
+                            }
+                        }
+                    }
+                }
+            });
+        Ok(vec![effect])
+    }
+}
 /// 从工具参数提取字符串字段(命令/内容等)做检测。
 fn string_arg(arguments: &Value) -> Option<&str> {
     for key in ["command", "content", "prompt"] {
@@ -262,6 +353,64 @@ mod tests {
         let _e2 = provider.register(Arc::new(RuleGuardrail::new("secrets", SECRET_RULES)));
         let verdict = provider.verdict("Please summarize the codebase");
         assert!(verdict.allow);
+    }
+
+    struct AllowApproval;
+
+    impl Seam for AllowApproval {}
+
+    #[async_trait::async_trait]
+    impl PermissionApprovalProvider for AllowApproval {
+        async fn request(
+            &self,
+            _request: PermissionApprovalRequest,
+        ) -> Result<PermissionApprovalDecision, ah_contracts::security::SecurityError> {
+            Ok(PermissionApprovalDecision::AllowOnce)
+        }
+    }
+
+    #[tokio::test]
+    async fn tiered_policy_rail_delegates_ask_to_hitl_provider() {
+        use std::sync::Arc as StdArc;
+
+        let ctx = Context::new();
+        let effects = ctx
+            .mount_all(vec![
+                StdArc::new(ah_plugins_tools::ToolsPlugin),
+                StdArc::new(
+                    TieredPolicyRailPlugin::new(json!({}))
+                        .with_approval_provider(StdArc::new(AllowApproval)),
+                ),
+            ])
+            .expect("mount");
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let error = registry
+            .invoke("missing", json!({}))
+            .await
+            .expect_err("the fixture tool is intentionally absent");
+        assert!(error.0.contains("tool not found"));
+        drop(effects);
+    }
+    #[tokio::test]
+    async fn tiered_policy_rail_blocks_explicit_tool_deny_before_lookup() {
+        use std::sync::Arc as StdArc;
+
+        let ctx = Context::new();
+        let effects = ctx
+            .mount_all(vec![
+                StdArc::new(ah_plugins_tools::ToolsPlugin),
+                StdArc::new(TieredPolicyRailPlugin::new(
+                    json!({"tools": {"missing": "deny"}}),
+                )),
+            ])
+            .expect("mount");
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let error = registry
+            .invoke("missing", json!({}))
+            .await
+            .expect_err("policy should deny before lookup");
+        assert!(error.0.contains("tiered policy deny"));
+        drop(effects);
     }
 
     #[tokio::test]

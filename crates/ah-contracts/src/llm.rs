@@ -34,6 +34,41 @@ pub struct ToolSchema {
     pub parameters: Value,
 }
 
+/// 一张模型可见图像。
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ChatImage {
+    /// MIME 类型,例如 `image/png`。
+    pub mime_type: String,
+    /// 原始 base64 或完整 data URL。
+    pub data: String,
+}
+
+impl ChatImage {
+    pub fn new(mime_type: impl Into<String>, data: impl Into<String>) -> Self {
+        Self {
+            mime_type: mime_type.into(),
+            data: data.into(),
+        }
+    }
+
+    /// 返回 provider 可直接使用的 data URL。
+    pub fn data_url(&self) -> String {
+        if self.data.starts_with("data:") {
+            self.data.clone()
+        } else {
+            format!("data:{};base64,{}", self.mime_type, self.data)
+        }
+    }
+
+    /// 返回不含 data URL 头部的 base64 数据。
+    pub fn base64_data(&self) -> &str {
+        self.data
+            .split_once(',')
+            .map(|(_, encoded)| encoded)
+            .unwrap_or(&self.data)
+    }
+}
+
 /// 一条对话消息。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChatMessage {
@@ -45,6 +80,8 @@ pub struct ChatMessage {
     pub tool_calls: Option<Vec<ToolCall>>,
     /// Thinking-mode provider 要求回传的推理内容。
     pub reasoning_content: Option<String>,
+    /// 模型可见的图像附件。
+    pub images: Vec<ChatImage>,
 }
 
 impl ChatMessage {
@@ -56,7 +93,15 @@ impl ChatMessage {
             tool_call_id: None,
             tool_calls: None,
             reasoning_content: None,
+            images: Vec::new(),
         }
+    }
+
+    /// 构造带一张图像的用户消息。
+    pub fn user_with_image(content: impl Into<String>, image: ChatImage) -> Self {
+        let mut message = Self::new(ChatRole::User, content);
+        message.images.push(image);
+        message
     }
 
     /// 构造带工具调用的助手消息。
@@ -67,6 +112,7 @@ impl ChatMessage {
             tool_call_id: None,
             tool_calls: Some(tool_calls),
             reasoning_content: None,
+            images: Vec::new(),
         }
     }
 
@@ -78,6 +124,7 @@ impl ChatMessage {
             tool_call_id: Some(tool_call_id.into()),
             tool_calls: None,
             reasoning_content: None,
+            images: Vec::new(),
         }
     }
 }
@@ -173,5 +220,27 @@ pub trait ModelProvider: Seam {
         };
         let _ = sink.send(chunk).await;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_image_message_keeps_mime_and_data_url() {
+        let message = ChatMessage::user_with_image(
+            "inspect this screen",
+            ChatImage::new("image/png", "data:image/png;base64,AAAA"),
+        );
+        assert_eq!(message.images.len(), 1);
+        assert_eq!(message.images[0].mime_type, "image/png");
+        assert_eq!(message.images[0].data_url(), "data:image/png;base64,AAAA");
+    }
+
+    #[test]
+    fn image_message_normalizes_raw_base64() {
+        let image = ChatImage::new("image/jpeg", "BBBB");
+        assert_eq!(image.data_url(), "data:image/jpeg;base64,BBBB");
     }
 }

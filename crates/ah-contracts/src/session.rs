@@ -33,7 +33,8 @@ pub enum SessionEventKind {
 /// - User / Assistant(无 tool_calls):{"content": string}
 /// - Assistant 工具调用:{"tool_calls": [{id, name, arguments}]};该事件在工具执行前落盘,
 ///   恢复时仅对声明可幂等重试且消费 call_id 的工具自动补执行,其他工具进入未知结果。
-/// - ToolResult:{"tool_call_id": string, "output": string}
+/// - ToolResult:{"tool_call_id": string, "output": string};截图结果可附
+///   {"mime_type": "image/*", "data": data_url/base64},投影为 ChatMessage 图像附件。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SessionEvent {
     /// 单调递增序号(append-only)。

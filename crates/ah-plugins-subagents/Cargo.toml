@@ -10,11 +10,13 @@ ah-contracts = { workspace = true }
 ah-hub = { workspace = true }
 async-trait = "0.1"
 serde_json = "1"
-
+tokio = { version = "1", features = ["rt", "macros", "process", "time"] }
 [dev-dependencies]
 ah-plugins-mock = { workspace = true }
 ah-plugins-tools = { workspace = true }
 ah-plugins-sysop = { workspace = true }
 ah-plugins-session-log = { workspace = true }
 ah-plugins-subagent = { workspace = true }
+ah-plugins-agent-control = { workspace = true }
+ah-plugins-mcp = { workspace = true }
 tokio = { version = "1", features = ["rt", "macros"] }

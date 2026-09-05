@@ -13,6 +13,8 @@
 #      same language-neutral fixtures -> differential/out/python/{seam}.json.
 #   3. Compare: deep-diff both; known_divergence cases are reported, unexpected
 #      mismatches fail the run.
+#   Optional positional arguments restrict the run to named seams, for example:
+#   bash differential/run.sh llm_retry tool_retry task_completion task_planning
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -27,14 +29,15 @@ fi
 AGENT_CORE_ROOT=$(cd "$AGENT_CORE_ROOT" && pwd)
 
 PYTHON="${PYTHON:-python3}"
+SEAMS=("$@")
 
 echo "== [1/3] Rust reference (check mode) =="
 cargo test -p ah-app --test differential -- --nocapture
 
 echo "== [2/3] Python reference runner =="
-AGENT_CORE_ROOT="$AGENT_CORE_ROOT" "$PYTHON" differential/run_python.py
+AGENT_CORE_ROOT="$AGENT_CORE_ROOT" "$PYTHON" differential/run_python.py "${SEAMS[@]}"
 
 echo "== [3/3] compare Python outcome vs Rust reference =="
-"$PYTHON" differential/compare.py
+"$PYTHON" differential/compare.py "${SEAMS[@]}"
 
 echo "== differential OK =="

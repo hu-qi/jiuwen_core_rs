@@ -194,46 +194,97 @@ fn expect_roles(case: &Value) -> Vec<&'static str> {
 async fn tools_golden() {
     let root = root_for("tools");
     let ctx = Context::new();
-    let effects = mount(&ctx, base_plugins(&root));
+    let mut plugins = base_plugins(&root);
+    plugins.push(Arc::new(ah_plugins_common_tools::CommonToolsPlugin::new(
+        root.join("common"),
+    )));
+    plugins.push(Arc::new(ah_plugins_memory::MemoryPlugin::new(
+        root.join("memory"),
+    )));
+    let effects = mount(&ctx, plugins);
     let fs = ctx.service::<dyn FsProvider>(&FS).expect("fs");
     let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
-    let fixture = load_fixture("tools");
-
-    for case in fixture["cases"].as_array().unwrap() {
-        let input = &case["input"];
-        match case["name"].as_str().unwrap() {
-            "invoke_real_read_file" => {
-                fs.write(
-                    input["file"].as_str().unwrap(),
-                    input["content"].as_str().unwrap().as_bytes(),
-                )
-                .expect("write probe");
-                let output = registry
-                    .invoke(
-                        input["tool"].as_str().unwrap(),
-                        json!({ "path": input["file"].as_str().unwrap() }),
-                    )
-                    .await
-                    .expect("invoke");
-                assert!(
-                    output
-                        .to_string()
-                        .contains(input["content"].as_str().unwrap()),
-                    "tool output must contain expected content"
-                );
-            }
-            "unknown_tool_rejected" => {
-                assert!(
-                    registry
-                        .invoke(input["tool"].as_str().unwrap(), input["arguments"].clone())
-                        .await
-                        .is_err(),
-                    "unknown tool must error"
-                );
-            }
-            other => panic!("unknown tools case: {other}"),
-        }
+    let names = registry.names();
+    for name in [
+        "cron",
+        "edit",
+        "forget",
+        "glob",
+        "grep",
+        "read_file",
+        "recall",
+        "remember",
+        "todo",
+        "write_file",
+    ] {
+        assert!(
+            names.contains(&name.to_string()),
+            "missing tool {name}: {names:?}"
+        );
     }
+    fs.write("src/main.rs", b"alpha alpha")
+        .expect("write source");
+    let edited = registry
+        .invoke(
+            "edit",
+            json!({"path": "src/main.rs", "old_string": "alpha", "new_string": "beta"}),
+        )
+        .await
+        .expect("edit");
+    assert_eq!(edited["replaced"], 1);
+    let globbed = registry
+        .invoke("glob", json!({"pattern": "*.rs"}))
+        .await
+        .expect("glob");
+    assert!(
+        globbed["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|path| path == "src/main.rs")
+    );
+    let grepped = registry
+        .invoke("grep", json!({"pattern": "beta"}))
+        .await
+        .expect("grep");
+    assert_eq!(grepped["match_count"], 1);
+    let todo = registry
+        .invoke(
+            "todo",
+            json!({"action": "add", "session_id": "golden", "content": "test"}),
+        )
+        .await
+        .expect("todo");
+    assert_eq!(todo["count"], 1);
+    let cron = registry
+        .invoke(
+            "cron",
+            json!({"action": "add", "command": "echo hi", "schedule": "*/5 * * * *"}),
+        )
+        .await
+        .expect("cron");
+    assert_eq!(cron["count"], 1);
+    registry
+        .invoke("remember", json!({"key": "golden", "content": "memory"}))
+        .await
+        .expect("remember");
+    let memory = registry
+        .invoke("recall", json!({"query": "memory"}))
+        .await
+        .expect("recall");
+    assert_eq!(memory["count"], 1);
+    registry
+        .invoke("forget", json!({"key": "golden"}))
+        .await
+        .expect("forget");
+    assert_eq!(
+        registry
+            .invoke("missing", json!({}))
+            .await
+            .expect_err("unknown tool")
+            .0,
+        "tool not found: missing"
+    );
     drop(effects);
     let _ = std::fs::remove_dir_all(&root);
 }

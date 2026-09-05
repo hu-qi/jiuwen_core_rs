@@ -358,9 +358,51 @@ All tasks will be executed using the Agent's default model.
 
 pub fn build_todo_section() -> PromptSection {
     let mut content = BTreeMap::new();
-    content.insert("cn".to_string(), TODO_SYSTEM_PROMPT_CN.to_string());
-    content.insert("en".to_string(), TODO_SYSTEM_PROMPT_EN.to_string());
-    PromptSection::new(section_name::TODO, content, 100)
+    content.insert(
+        "cn".to_string(),
+        format!("{}{}", TODO_SYSTEM_PROMPT_CN, NO_MODEL_SELECTION_PROMPT_CN),
+    );
+    content.insert(
+        "en".to_string(),
+        format!("{}{}", TODO_SYSTEM_PROMPT_EN, NO_MODEL_SELECTION_PROMPT_EN),
+    );
+    PromptSection::new(section_name::TODO, content, 90)
+}
+
+/// 构造与 Python `build_todo_section` 相同的可选模型提示。
+pub fn build_todo_section_with_models(
+    language: &str,
+    models: &[(String, String)],
+) -> PromptSection {
+    let (base, no_model, model_template) = if language == "en" {
+        (
+            TODO_SYSTEM_PROMPT_EN,
+            NO_MODEL_SELECTION_PROMPT_EN,
+            MODEL_SELECTION_PROMPT_EN,
+        )
+    } else {
+        (
+            TODO_SYSTEM_PROMPT_CN,
+            NO_MODEL_SELECTION_PROMPT_CN,
+            MODEL_SELECTION_PROMPT_CN,
+        )
+    };
+    let content = if models.is_empty() {
+        format!("{base}{no_model}")
+    } else {
+        let model_list = models
+            .iter()
+            .map(|(id, description)| format!(" -selected_model_id: {id}: {description}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!(
+            "{base}{}",
+            model_template.replace("{model_list}", &model_list)
+        )
+    };
+    let mut sections = BTreeMap::new();
+    sections.insert(language.to_string(), content);
+    PromptSection::new(section_name::TODO, sections, 90)
 }
 
 // --- task_tool ---

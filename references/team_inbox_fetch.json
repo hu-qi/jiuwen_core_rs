@@ -1,0 +1,36 @@
+{
+  "cases": [
+    {
+      "marked_ids": [
+        "m1",
+        "m2"
+      ],
+      "message_ids": [
+        "m1",
+        "m2"
+      ],
+      "name": "marks_direct_and_broadcast_read",
+      "task_ids": [
+        "t1",
+        "t2"
+      ]
+    },
+    {
+      "marked_ids": [],
+      "message_ids": [
+        "m3"
+      ],
+      "name": "peek_does_not_mark_read",
+      "task_ids": []
+    },
+    {
+      "callback_count": 1,
+      "marked_ids": [
+        "watch-1"
+      ],
+      "name": "watch_cancellation",
+      "unsubscribed": true
+    }
+  ],
+  "seam": "team_inbox_fetch"
+}

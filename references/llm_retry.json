@@ -1,0 +1,60 @@
+{
+  "cases": [
+    {
+      "detected": {
+        "count": 80,
+        "unit": "xy"
+      },
+      "name": "repeated_pair_meets_total_threshold"
+    },
+    {
+      "detected": null,
+      "name": "repeated_pair_below_total_threshold"
+    },
+    {
+      "detected": {
+        "count": 100,
+        "unit": "z"
+      },
+      "name": "single_character_threshold"
+    },
+    {
+      "detected": null,
+      "name": "single_character_below_threshold"
+    },
+    {
+      "detected": null,
+      "name": "normal_output"
+    },
+    {
+      "name": "repeated_marker",
+      "repeat": true,
+      "timeout": false
+    },
+    {
+      "name": "llm_timeout_marker",
+      "repeat": false,
+      "timeout": true
+    },
+    {
+      "name": "frame_timeout_marker",
+      "repeat": false,
+      "timeout": true
+    },
+    {
+      "name": "ordinary_error",
+      "repeat": false,
+      "timeout": false
+    },
+    {
+      "backoff_ms": [
+        500,
+        1000,
+        2000,
+        2000
+      ],
+      "name": "backoff_schedule"
+    }
+  ],
+  "seam": "llm_retry"
+}

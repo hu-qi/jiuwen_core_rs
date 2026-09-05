@@ -23,7 +23,7 @@ use ah_plugins_autoharness::AutoHarnessPlugin;
 use ah_plugins_bridge_compose::BridgeComposePlugin;
 use ah_plugins_checkpointer::{CheckpointerPlugin, redis_store::RedisCheckpointerStore};
 use ah_plugins_ci::CiPlugin;
-use ah_plugins_cli::CliPlugin;
+use ah_plugins_cli::{CliPlugin, TerminalPermissionApprovalPlugin};
 use ah_plugins_code::CodePlugin;
 use ah_plugins_common_tools::CommonToolsPlugin;
 use ah_plugins_context::ContextPlugin;
@@ -45,10 +45,11 @@ use ah_plugins_json_parser::JsonParserPlugin;
 use ah_plugins_kv_cache::KvcCachePlugin;
 use ah_plugins_lsp::LspPlugin;
 use ah_plugins_manifest::ManifestPlugin;
-use ah_plugins_mcp::McpPlugin;
+use ah_plugins_mcp::{BrowserMcpPlugin, McpPlugin};
 use ah_plugins_member_optimizer::MemberOptimizerPlugin;
 use ah_plugins_memory::MemoryPlugin;
 use ah_plugins_memory_lite::MemoryLitePlugin;
+use ah_plugins_messager::MessagerPlugin;
 use ah_plugins_mock::MockPlugin;
 use ah_plugins_model_allocator::ModelAllocatorPlugin;
 use ah_plugins_model_backup::{ModelBackupPlugin, ModelBackupPolicyPlugin};
@@ -64,7 +65,8 @@ use ah_plugins_prompt_builder_devtools::PromptBuilderDevtoolsPlugin;
 use ah_plugins_queue::QueuePlugin;
 use ah_plugins_queue::redis_queue::RedisQueuePlugin;
 use ah_plugins_rails::{
-    ApprovalRailPlugin, PathGuardRailPlugin, ShellGuardRailPlugin, ToolBudgetRailPlugin,
+    ApprovalRailPlugin, GoalPlugin, PathGuardRailPlugin, ShellGuardRailPlugin,
+    TaskPolicyRailPlugin, ToolBudgetRailPlugin,
 };
 use ah_plugins_reliability_burst::ReliabilityBurstPlugin;
 use ah_plugins_reliability_monitor::ReliabilityMonitorPlugin;
@@ -92,7 +94,7 @@ use ah_plugins_team_task_status::TeamTaskStatusPlugin;
 use ah_plugins_tools_metadata::ToolsMetadataPlugin;
 
 use ah_plugins_prompt_attachment::PromptAttachmentPlugin;
-use ah_plugins_security::SecurityRailPlugin;
+use ah_plugins_security::{SecurityRailPlugin, TieredPolicyRailPlugin};
 use ah_plugins_session_log::SessionLogPlugin;
 use ah_plugins_sharing::{LocalSharingBackend, SharingPlugin};
 use ah_plugins_signals::SignalsPlugin;
@@ -102,7 +104,7 @@ use ah_plugins_store::StorePlugin;
 use ah_plugins_store::pg_store::PgStorePlugin;
 use ah_plugins_store::redis_store::RedisStorePlugin;
 use ah_plugins_subagent::SubagentPlugin;
-use ah_plugins_subagents::SubagentsPlugin;
+use ah_plugins_subagents::{MobileAdbPlugin, SubagentsPlugin};
 use ah_plugins_symphony::SymphonyPlugin;
 use ah_plugins_sysop::SysopPlugin;
 use ah_plugins_team_context::TeamContextPlugin;
@@ -159,6 +161,14 @@ pub fn plugin_catalog(
         ),
         ("ah-plugins-tools", Arc::new(ToolsPlugin) as DynPlugin),
         (
+            "ah-plugins-browser-mcp",
+            Arc::new(BrowserMcpPlugin::from_env()) as DynPlugin,
+        ),
+        (
+            "ah-plugins-mobile-adb",
+            Arc::new(MobileAdbPlugin::from_env()) as DynPlugin,
+        ),
+        (
             "ah-plugins-common-tools",
             Arc::new(CommonToolsPlugin::new(workspace_root.to_path_buf())) as DynPlugin,
         ),
@@ -175,6 +185,7 @@ pub fn plugin_catalog(
             "ah-plugins-rails",
             Arc::new(ShellGuardRailPlugin) as DynPlugin,
         ),
+        ("ah-plugins-goal", Arc::new(GoalPlugin) as DynPlugin),
         (
             "ah-plugins-rails-path",
             Arc::new(PathGuardRailPlugin) as DynPlugin,
@@ -182,6 +193,22 @@ pub fn plugin_catalog(
         (
             "ah-plugins-rails-budget",
             Arc::new(ToolBudgetRailPlugin::new(100)) as DynPlugin,
+        ),
+        (
+            "ah-plugins-rails-policy",
+            Arc::new(TaskPolicyRailPlugin::new(ah_contracts::rails::RailConfig {
+                planning_prompt: Some(
+                    "Plan the task in small verifiable steps; execute only after each step is checked."
+                        .to_string(),
+                ),
+                max_rounds: Some(8),
+                completion_promise: None,
+                required_confirmations: 1,
+                allow_promise_details: false,
+                max_model_retries: 2,
+                max_tool_retries: 1,
+                retry_backoff_ms: vec![100, 250, 500],
+            })) as DynPlugin,
         ),
         (
             "ah-plugins-rails-approval",
@@ -209,7 +236,15 @@ pub fn plugin_catalog(
             "ah-plugins-security",
             Arc::new(SecurityRailPlugin) as DynPlugin,
         ),
+        (
+            "ah-plugins-security-tiered-policy",
+            Arc::new(TieredPolicyRailPlugin::new(serde_json::json!({}))) as DynPlugin,
+        ),
         ("ah-plugins-subagent", Arc::new(SubagentPlugin) as DynPlugin),
+        (
+            "ah-plugins-messager",
+            Arc::new(MessagerPlugin::from_env()) as DynPlugin,
+        ),
         ("ah-plugins-teams", Arc::new(TeamsPlugin) as DynPlugin),
         (
             "ah-plugins-teams-sqlite",
@@ -330,6 +365,12 @@ pub fn plugin_catalog(
             }))) as DynPlugin,
         ),
         ("ah-plugins-cli", Arc::new(CliPlugin) as DynPlugin),
+        (
+            "ah-plugins-cli-permission-ui",
+            Arc::new(TerminalPermissionApprovalPlugin::new(
+                workspace_root.join("permissions/approval_overrides.json"),
+            )) as DynPlugin,
+        ),
         (
             // 真实外部 CLI 运行时:通用流式 adapter(boot 不拉起,首次 start 才 spawn)。
             "ah-plugins-external",
@@ -634,6 +675,27 @@ pub fn plugin_catalog(
     catalog
 }
 
+fn tiered_policy_config(profile: &Profile) -> Result<Option<serde_json::Value>, String> {
+    let Some(bundle) = profile.bundles.iter().find(|bundle| {
+        bundle
+            .plugins
+            .iter()
+            .any(|name| name == "ah-plugins-security-tiered-policy")
+    }) else {
+        return Ok(None);
+    };
+    let config = bundle
+        .config
+        .as_ref()
+        .ok_or_else(|| "tiered policy bundle requires a config table".to_string())?;
+    let config = serde_json::to_value(config)
+        .map_err(|error| format!("invalid tiered policy profile configuration: {error}"))?;
+    if !config.is_object() {
+        return Err("tiered policy configuration must be a TOML table".to_string());
+    }
+    Ok(Some(config))
+}
+
 fn model_backup_policy(
     profile: &Profile,
 ) -> Result<ah_contracts::model_backup::ModelBackupPolicy, String> {
@@ -787,8 +849,26 @@ fn parse_env_line(line: &str, line_number: usize) -> Result<Option<(String, Stri
     Ok(Some((key.to_string(), value)))
 }
 
+#[cfg(test)]
 fn load_env_file(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     load_env_file_mode(path, false)
+}
+
+const ENV_FILE_CONTROLLED_VARS: &[&str] = &[
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "OPENAI_MODEL",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_MODEL",
+    "REDIS_URL",
+];
+
+fn clear_env_file_controlled_vars() {
+    for key in ENV_FILE_CONTROLLED_VARS {
+        // SAFETY: boot establishes the application configuration before spawning work.
+        unsafe { std::env::remove_var(key) };
+    }
 }
 
 fn load_env_file_mode(
@@ -816,6 +896,7 @@ fn load_env_for_boot(profile_path: &str) -> Result<(), Box<dyn std::error::Error
         if path.as_os_str().is_empty() {
             return Err("AH_ENV_FILE must not be empty".into());
         }
+        clear_env_file_controlled_vars();
         return load_env_file_mode(&path, true);
     }
     let mut candidates = vec![std::env::current_dir()?.join(".env")];
@@ -826,9 +907,12 @@ fn load_env_for_boot(profile_path: &str) -> Result<(), Box<dyn std::error::Error
             candidates.push(candidate);
         }
     }
-    if let Some(path) = candidates.into_iter().find(|path| path.is_file()) {
-        load_env_file(&path)?;
-    }
+    let Some(path) = candidates.into_iter().find(|path| path.is_file()) else {
+        return Err("no env file found; configure AH_ENV_FILE or provide .env".into());
+    };
+    clear_env_file_controlled_vars();
+    // 启动配置以 env 文件为权威来源,避免继承的全局变量污染 provider 选择。
+    load_env_file_mode(&path, true)?;
     Ok(())
 }
 
@@ -850,6 +934,7 @@ pub fn boot(
         .map_err(|message| format!("invalid controller profile configuration: {message}"))?;
     let configured_backup_policy = model_backup_policy(&profile)
         .map_err(|message| format!("invalid model-backup profile configuration: {message}"))?;
+    let configured_tiered_policy = tiered_policy_config(&profile)?;
     let mut catalog = plugin_catalog(
         workspace_root,
         session_path,
@@ -858,6 +943,13 @@ pub fn boot(
         retrieval_dir,
         telemetry_dir,
     );
+    if let Some(config) = configured_tiered_policy
+        && let Some((_, plugin)) = catalog
+            .iter_mut()
+            .find(|(name, _)| *name == "ah-plugins-security-tiered-policy")
+    {
+        *plugin = Arc::new(TieredPolicyRailPlugin::new(config)) as DynPlugin;
+    }
     if let Some((_, plugin)) = catalog
         .iter_mut()
         .find(|(name, _)| *name == "ah-plugins-controller")
@@ -943,8 +1035,6 @@ impl ah_contracts::prompt_builder_devtools::PromptBuilderModel for UninjectedPro
         ))
     }
 }
-
-/// 未注入抓取器的技能创建抓取器:任何调用显式报错。
 pub struct UninjectedSkillFetcher;
 
 impl ah_contracts::skill_creator::SkillFetcher for UninjectedSkillFetcher {
@@ -977,7 +1067,7 @@ impl ah_contracts::skill_creator::SkillGenerator for UninjectedSkillGenerator {
 mod tests {
     use super::{
         controller_snapshot_path, load_env_file, load_env_for_boot, model_backup_policy,
-        model_backup_provider_names, parse_env_line, redis_url,
+        model_backup_provider_names, parse_env_line, redis_url, tiered_policy_config,
     };
     use ah_hub::profile::Profile;
     #[test]
@@ -1123,5 +1213,26 @@ mod tests {
         )
         .unwrap();
         assert!(model_backup_policy(&profile).is_err());
+    }
+
+    #[test]
+    fn extracts_tiered_policy_config_from_profile_bundle() {
+        let profile = Profile::from_toml(
+            r#"name = "prod"
+            [[bundles]]
+            id = "security-policy"
+            plugins = ["ah-plugins-security-tiered-policy"]
+            [bundles.config]
+            permission_mode = "strict"
+            [bundles.config.defaults]
+            "*" = "deny"
+            [bundles.config.tools]
+            read_file = "allow"
+        "#,
+        )
+        .unwrap();
+        let config = tiered_policy_config(&profile).unwrap().unwrap();
+        assert_eq!(config["permission_mode"], "strict");
+        assert_eq!(config["tools"]["read_file"], "allow");
     }
 }

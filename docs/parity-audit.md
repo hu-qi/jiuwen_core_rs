@@ -5,8 +5,12 @@
 > 本文的百分比与 `done/partial/missing` 账目仍是旧快照结果,未由当前 HEAD 的结构化账本重新计算,不得作为当前完成度。
 > 当前代码复核确认:新增插件多数只有确定性子集;阶段一已将 **10 个新增插件加入 Cargo workspace members**,阶段二已全部接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并通过 targeted mount/resolve/invoke/unmount 集成测试,不能升级为严格 done。
 > 方法仍为按 Python 公开行为面核对 Rust seam/plugin;严格 `done` 还要求生产路径、错误/状态/持久化、差分和适用 E2E 证据。
-> 当前 Python/Rust differential 只验证 `stop_condition`、`messager_inprocess` 两个 seam,共 6 个 case,另有 1 个已知差异;首批 application/agent-loop/session/controller/workflow/tools 仍未接入。
+> 历史基线只验证 `stop_condition`、`messager_inprocess` 两个 seam;当前 HEAD 已新增 `llm_retry`、`tool_retry`、`task_completion` 和 `task_planning` 核心 Rails differential,本次对固定 `agent-core@aeb88cd8` 共 26 个 case 一致,无 known divergence;完整团队 handoff/inbox/watch differential 仍未验证。
 > 当前任务顺序以 `ROADMAP.md` 为准;下一次审计必须先同步当前 HEAD、workspace package 清单和插件接线状态。
+
+本回合聚焦证据: `ah-plugins-mcp` 的 browser probe、runtime health、custom drag/action 已通过 6 个单元测试; `ah-plugins-subagents` 已通过 8 个单元测试,覆盖真实 adb 工具注册、设备序列号覆盖、截图与 dumpsys 前台包名; `ah-plugins-subagent` 已通过 5 个单元测试,覆盖初始截图观察与工具图像提取; `ah-plugins-session-log` 的 user/tool 图像恢复 2 个测试通过; `ah-plugins-context` 全部 8 个单元测试通过,含新增图像预算测试。当前仍是 Rust 侧协议/插件与聚焦回归证据,不升级 Python parity 或 production verification 状态。
+本回合 Rails 长尾证据: `ah-plugins-security/src/tiered_policy.rs` 实现参数规则、`approval_overrides`、整工具/默认优先级和 Shell AST 安全下限; `TieredPolicyRailPlugin` 以 `tools/pre-execute` fail-closed 接线。`ah-plugins-security`、`ah-plugins-rails`、`ah-plugins-agent-loop` 及安全 crate Clippy 通过。
+当前 Rails differential 已由 `differential/run_python.py` 驱动真实 Python `LLMRetryRail`、`ToolCallResilienceRail`、`TaskCompletionRail` 和 `TaskPlanningRail`,并与 Rust normalized references 比较通过(10/9/3/4,共 26 matched);GoalManager lifecycle、完整 prompt attachment lifecycle、runtime model switching 和 cancellation callback parity 仍未验证。
 
 ## 0. 总览
 
@@ -97,7 +101,7 @@ skill_creator 均属于此类。rsi/resource、rsi/storage 判 excluded(见 §3b
 | schema | 45 | **停止条件已收尾(第 143 回合)**:ah-contracts harness_schema(StopEvaluationContext(iteration/token_usage/elapsed_seconds/last_result/extra)+ MaxRoundsEvaluator(iteration>=max)/TokenBudgetEvaluator(token_usage>=max)/TimeoutEvaluator(elapsed>=timeout)/CompletionPromiseEvaluator(连续确认计数,notify_fulfilled·notify_absent 打断·reset·get_state/load_state(fulfilled = count>=required 或已有 fulfilled),对齐 stop_condition.py:20-223));5 契约测试;DeepAgentSpec/交互/事件模型留待后续 |
 | task_loop | 35 | 事件管理器/协调器/控制器/执行器 |
 | cli | 35 | chat/run 交互、auto_harness 子命令 |
-| rails | 30 | 任务完成/规划/重试等 LLM 型 rail |
+| rails | 30 | Rust `ah-plugins-rails` 已实现 planning/completion/retry/approval 与安全 rail,并由 agent-loop 消费; tiered policy/overrides 与 Python LLM differential 仍缺 |
 | subagents | 30 | 7 类具体 LLM 子代理构建器 |
 | security | 48 | **Shell AST + 文件路径防护已收尾(第 142 回合)**:`ah-plugins-security/src/shell_ast.rs` 保守回退扫描器(parse_shell_for_permission:空→simple/风险结构(管道·复合·替换·展开·heredoc·重定向)→parse_unavailable/shlex 风格 argv(shlex_split_posix 单引号·双引号转义·反斜杠·未闭合→None)/ShellStructureFlags.has_risky_structure/运算符标记收集,对齐 shell_ast.py:34-186)+ `file_guard.rs`(PermissionLevel/PermissionResult/FileGuardMode/Match/Action/AxisDefaults/PathRule/EffectiveFileGuardConfig 纯类型 + parse_level/strictest/axis_from_star/apply_implications(Write|Exec⇒Read,显式 deny 优先)/compile_path_entry(prefix 无 / 跳过)/match_glob(手写 **/ */? 分段匹配)/looks_like_path + normalize_path_guard_config(enabled 判定 + native/legacy 分支)+ FileGuardChecker(legacy workspace 隐式放行 + external_directory 前缀 / native defaults+prefix+glob+workspace 轴 + trusted_dirs + 迁移源 / resolve_one(最长前缀·glob 命中·deny>ask>allow·未命中 defaults)/evaluate(全 ALLOW→None,拒绝/待批 reason+matched_rule)/collect_ask_accesses/extract_paths_legacy(写类工具→write 轴,shell 命令路径抽取)),对齐 file_guard.py:81-747 + models.py + tiered_policy.py 确定性部分);8 契约 + 7 插件测试;tiered_policy 工具级规则/权限引擎组合/approval_overrides 留待后续 |
 | tools | 25 | edit/glob/grep/todo/cron/memory 等工具 |

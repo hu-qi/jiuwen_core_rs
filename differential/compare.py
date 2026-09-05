@@ -34,6 +34,10 @@ PY_OUT = HERE / "out" / "python"
 SEAMS = [
     "stop_condition",
     "messager_inprocess",
+    "llm_retry",
+    "tool_retry",
+    "task_completion",
+    "task_planning",
 ]
 
 

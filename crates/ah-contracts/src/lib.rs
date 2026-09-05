@@ -34,6 +34,7 @@ pub mod external_client;
 pub mod external_format;
 pub mod fs;
 pub mod git;
+pub mod goal;
 pub mod graph_memory;
 pub mod harness_schema;
 pub mod inbound_render;
@@ -61,6 +62,7 @@ pub mod prompt_attachment;
 pub mod prompt_builder;
 pub mod prompt_builder_devtools;
 pub mod queue;
+pub mod rails;
 pub mod reliability_config;
 pub mod reliability_detectors;
 pub mod reliability_rail;
@@ -194,6 +196,9 @@ pub mod prelude {
     };
     pub use crate::fs::{FsError, FsProvider};
     pub use crate::git::{GitCommit, GitError, GitProvider, GitStatusEntry};
+    pub use crate::goal::{
+        GoalAssessment, GoalAssessmentStatus, GoalError, GoalRecord, GoalRuntime, GoalTokenUsage,
+    };
     pub use crate::graph_memory::{
         AddMemoryResult, Entity, Episode, GraphHit, GraphMemory, GraphMemoryError, Relation,
     };
@@ -248,6 +253,9 @@ pub mod prelude {
     };
     pub use crate::prompt::{PromptError, PromptRegistry, PromptTemplate, RenderedPrompt};
     pub use crate::queue::{MessageQueue, QueueError, QueueMessage};
+    pub use crate::rails::{
+        RailAction, RailConfig, RailDecision, RailError, RailInput, RailPhase, RailRuntime,
+    };
     pub use crate::reliability_rail::{
         DetectorSpec, LocalSink, PolicyView, ReliabilityFactory, ReliabilityHandler,
         ReliabilityRail, RouteDecision, after_model_call_signal, after_tool_call_signal,
@@ -286,7 +294,9 @@ pub mod prelude {
     };
     pub use crate::seam::Seam;
     pub use crate::security::{
-        Guardrail, GuardrailDecision, SecurityError, SecurityProvider, SecurityVerdict, Severity,
+        Guardrail, GuardrailDecision, PermissionApprovalDecision, PermissionApprovalProvider,
+        PermissionApprovalRequest, PermissionLevel, SecurityError, SecurityProvider,
+        SecurityVerdict, Severity,
     };
     pub use crate::service::ServiceKey;
     pub use crate::session::{SessionError, SessionEvent, SessionEventKind, SessionLog};
@@ -307,7 +317,10 @@ pub mod prelude {
     };
     pub use crate::stream::{TaggedChunk, tag_chunk};
     pub use crate::subagent::{SubagentError, SubagentResult, SubagentRuntime, SubagentSpec};
-    pub use crate::subagents::{SubagentKind, SubagentProfile, TypedSubagentError, TypedSubagents};
+    pub use crate::subagents::{
+        SubagentAggregate, SubagentKind, SubagentProfile, SubagentRequest, TypedSubagentError,
+        TypedSubagents,
+    };
     pub use crate::swarm::{
         SwarmAgentActivity, SwarmAgentRecord, SwarmAgentStatus, SwarmError, SwarmEvent,
         SwarmEventKind, SwarmFlowScript, SwarmPhase, SwarmPhaseRecord, SwarmRun, SwarmRunStatus,

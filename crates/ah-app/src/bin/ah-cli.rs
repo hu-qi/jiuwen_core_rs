@@ -1,7 +1,7 @@
 //! agent-harness 交互 CLI:输入任务跑 agent,会话可新建/切换/分叉;
 //! 子命令覆盖全部真实 seam(teams/rsi/workspace/web/queue/code)。
 
-use std::io::{BufRead, Write};
+use std::io::Write;
 
 use ah_contracts::cli::CliRenderer;
 use ah_contracts::keys::{CLI_RENDERER, CODE, QUEUE, RSI, SESSIONS, TEAMS, WEB, WORKSPACE};
@@ -78,12 +78,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut current: Option<std::sync::Arc<dyn SessionLog>> = Some(default_session);
     let stdin = std::io::stdin();
-    let mut lines = stdin.lock().lines();
 
     loop {
         print!("> ");
         std::io::stdout().flush()?;
-        let Some(Ok(line)) = lines.next() else { break };
+        let mut line = String::new();
+        if stdin.read_line(&mut line)? == 0 {
+            break;
+        }
         let line = line.trim().to_string();
         if line.is_empty() {
             continue;

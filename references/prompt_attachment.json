@@ -1,0 +1,138 @@
+{
+  "cases": [
+    {
+      "name": "crud_filter_expire",
+      "operations": [
+        {
+          "item": {
+            "content": "hello <world>",
+            "content_kind": "text/plain",
+            "content_sha256": "2b7fc8d00cebc0ccdc57aa17074fb77a8416df045c2f3fa9906eeeedad22a419",
+            "expires_at": null,
+            "id": "session.s1.My_Section",
+            "kind": "text",
+            "metadata": {
+              "owner": "alice",
+              "section": "My_Section",
+              "source": "rail"
+            },
+            "priority": 2,
+            "section": "My_Section",
+            "session_id": "s1",
+            "source": "rail"
+          },
+          "name": "add"
+        },
+        {
+          "item": {
+            "content": "second",
+            "content_kind": "text/plain",
+            "content_sha256": "16367aacb67a4a017c8da8ab95682ccb390863780f7114dda0a0e0c55644c7c4",
+            "expires_at": null,
+            "id": "session.s1.Other",
+            "kind": "runtime",
+            "metadata": {
+              "section": "Other",
+              "source": "runtime"
+            },
+            "priority": 3,
+            "section": "Other",
+            "session_id": "s1",
+            "source": "runtime"
+          },
+          "name": "add"
+        },
+        {
+          "item": {
+            "content": "updated & safe",
+            "content_kind": "text/plain",
+            "content_sha256": "c94d26f0c83aed0b3d388c3be31e4be55f159190ba266927a3776447d48b18ed",
+            "expires_at": null,
+            "id": "session.s1.My_Section",
+            "kind": "text",
+            "metadata": {
+              "extra": true,
+              "section": "My_Section",
+              "source": "rail"
+            },
+            "priority": 2,
+            "section": "My_Section",
+            "session_id": "s1",
+            "source": "rail"
+          },
+          "name": "update"
+        },
+        {
+          "items": [],
+          "name": "list"
+        },
+        {
+          "item": {
+            "content": "old",
+            "content_kind": "text/plain",
+            "content_sha256": "cba06b5736faf67e54b07b561eae94395e774c517a7d910a54369e1263ccfbd4",
+            "expires_at": "2000-01-01T00:00:00+00:00",
+            "id": "session.s1.Expired",
+            "kind": "text",
+            "metadata": {
+              "section": "Expired",
+              "source": "rail"
+            },
+            "priority": 1,
+            "section": "Expired",
+            "session_id": "s1",
+            "source": "rail"
+          },
+          "name": "add"
+        },
+        {
+          "items": [
+            {
+              "content": "updated & safe",
+              "content_kind": "text/plain",
+              "content_sha256": "c94d26f0c83aed0b3d388c3be31e4be55f159190ba266927a3776447d48b18ed",
+              "expires_at": null,
+              "id": "session.s1.My_Section",
+              "kind": "text",
+              "metadata": {
+                "extra": true,
+                "section": "My_Section",
+                "source": "rail"
+              },
+              "priority": 2,
+              "section": "My_Section",
+              "session_id": "s1",
+              "source": "rail"
+            },
+            {
+              "content": "second",
+              "content_kind": "text/plain",
+              "content_sha256": "16367aacb67a4a017c8da8ab95682ccb390863780f7114dda0a0e0c55644c7c4",
+              "expires_at": null,
+              "id": "session.s1.Other",
+              "kind": "runtime",
+              "metadata": {
+                "section": "Other",
+                "source": "runtime"
+              },
+              "priority": 3,
+              "section": "Other",
+              "session_id": "s1",
+              "source": "runtime"
+            }
+          ],
+          "name": "collect"
+        },
+        {
+          "count": 1,
+          "name": "clear_section"
+        },
+        {
+          "count": 1,
+          "name": "clear_session"
+        }
+      ]
+    }
+  ],
+  "seam": "prompt_attachment"
+}

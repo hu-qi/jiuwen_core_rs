@@ -1,0 +1,280 @@
+{
+  "cases": [
+    {
+      "name": "create_duplicate_complete",
+      "operations": [
+        {
+          "name": "set",
+          "record": {
+            "attempt_count": 0,
+            "last_assessment": null,
+            "last_stop_reason": null,
+            "max_attempts": 2,
+            "objective": "ship it",
+            "revision": 0,
+            "status": "active",
+            "token_budget": 100,
+            "token_usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            }
+          }
+        },
+        {
+          "code": "already_exists",
+          "name": "set_error"
+        },
+        {
+          "name": "begin",
+          "record": {
+            "attempt_count": 1,
+            "last_assessment": null,
+            "last_stop_reason": null,
+            "max_attempts": 2,
+            "objective": "ship it",
+            "revision": 0,
+            "status": "active",
+            "token_budget": 100,
+            "token_usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            }
+          }
+        },
+        {
+          "name": "usage",
+          "record": {
+            "attempt_count": 1,
+            "last_assessment": null,
+            "last_stop_reason": null,
+            "max_attempts": 2,
+            "objective": "ship it",
+            "revision": 0,
+            "status": "active",
+            "token_budget": 100,
+            "token_usage": {
+              "cached_input_tokens": 1,
+              "input_tokens": 3,
+              "output_tokens": 4,
+              "total_tokens": 7
+            }
+          }
+        },
+        {
+          "name": "complete",
+          "record": {
+            "attempt_count": 1,
+            "last_assessment": {
+              "evidence": "verified",
+              "next_instruction": null,
+              "remaining_work": null,
+              "status": "complete"
+            },
+            "last_stop_reason": "completed",
+            "max_attempts": 2,
+            "objective": "ship it",
+            "revision": 0,
+            "status": "completed",
+            "token_budget": 100,
+            "token_usage": {
+              "cached_input_tokens": 1,
+              "input_tokens": 3,
+              "output_tokens": 4,
+              "total_tokens": 7
+            }
+          }
+        },
+        {
+          "name": "stale_begin",
+          "record": null
+        },
+        {
+          "name": "clear",
+          "record": {
+            "attempt_count": 1,
+            "last_assessment": {
+              "evidence": "verified",
+              "next_instruction": null,
+              "remaining_work": null,
+              "status": "complete"
+            },
+            "last_stop_reason": "completed",
+            "max_attempts": 2,
+            "objective": "ship it",
+            "revision": 0,
+            "status": "completed",
+            "token_budget": 100,
+            "token_usage": {
+              "cached_input_tokens": 1,
+              "input_tokens": 3,
+              "output_tokens": 4,
+              "total_tokens": 7
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "pause_resume_generation",
+      "operations": [
+        {
+          "name": "set",
+          "record": {
+            "attempt_count": 0,
+            "last_assessment": null,
+            "last_stop_reason": null,
+            "max_attempts": null,
+            "objective": "write report",
+            "revision": 0,
+            "status": "active",
+            "token_budget": null,
+            "token_usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            }
+          }
+        },
+        {
+          "name": "pause",
+          "record": {
+            "attempt_count": 0,
+            "last_assessment": null,
+            "last_stop_reason": null,
+            "max_attempts": null,
+            "objective": "write report",
+            "revision": 0,
+            "status": "paused",
+            "token_budget": null,
+            "token_usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            }
+          }
+        },
+        {
+          "name": "resume",
+          "record": {
+            "attempt_count": 0,
+            "last_assessment": null,
+            "last_stop_reason": null,
+            "max_attempts": null,
+            "objective": "write report",
+            "revision": 1,
+            "status": "active",
+            "token_budget": null,
+            "token_usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            }
+          }
+        },
+        {
+          "name": "stale_begin",
+          "record": null
+        },
+        {
+          "name": "begin",
+          "record": {
+            "attempt_count": 1,
+            "last_assessment": null,
+            "last_stop_reason": null,
+            "max_attempts": null,
+            "objective": "write report",
+            "revision": 1,
+            "status": "active",
+            "token_budget": null,
+            "token_usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            }
+          }
+        },
+        {
+          "name": "continue",
+          "record": {
+            "attempt_count": 1,
+            "last_assessment": {
+              "evidence": "more work",
+              "next_instruction": null,
+              "remaining_work": null,
+              "status": "continue"
+            },
+            "last_stop_reason": null,
+            "max_attempts": null,
+            "objective": "write report",
+            "revision": 1,
+            "status": "active",
+            "token_budget": null,
+            "token_usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            }
+          }
+        },
+        {
+          "name": "block",
+          "record": {
+            "attempt_count": 1,
+            "last_assessment": {
+              "evidence": "needs input",
+              "next_instruction": null,
+              "remaining_work": "clarify scope",
+              "status": "blocked"
+            },
+            "last_stop_reason": "blocked",
+            "max_attempts": null,
+            "objective": "write report",
+            "revision": 1,
+            "status": "blocked",
+            "token_budget": null,
+            "token_usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            }
+          }
+        },
+        {
+          "name": "clear",
+          "record": {
+            "attempt_count": 1,
+            "last_assessment": {
+              "evidence": "needs input",
+              "next_instruction": null,
+              "remaining_work": "clarify scope",
+              "status": "blocked"
+            },
+            "last_stop_reason": "blocked",
+            "max_attempts": null,
+            "objective": "write report",
+            "revision": 1,
+            "status": "blocked",
+            "token_budget": null,
+            "token_usage": {
+              "cached_input_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "seam": "goal_manager"
+}

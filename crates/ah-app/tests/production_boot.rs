@@ -6,7 +6,7 @@
 //! compatible provider and the production profile.
 
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -14,10 +14,11 @@ use std::thread;
 
 use ah_contracts::agent::{AgentRequest, AgentRunState, ApplicationRuntime};
 use ah_contracts::controller::{Controller, TaskExecutor, TaskStatus};
-use ah_contracts::keys::{APPLICATION, CONTROLLER, KV_STORE, LLM, QUEUE};
+use ah_contracts::keys::{APPLICATION, CONTROLLER, KV_STORE, LLM, QUEUE, TOOLS};
 use ah_contracts::queue::MessageQueue;
 use ah_contracts::seam::Seam;
 use ah_contracts::store::BaseKVStore;
+use ah_contracts::tools::ToolRegistry;
 use ah_contracts::workflow::{WorkflowError, WorkflowStreamSink};
 use async_trait::async_trait;
 
@@ -64,15 +65,16 @@ impl Drop for EnvGuard {
         }
     }
 }
-
 struct ModelFixture {
     base_url: String,
+    address: SocketAddr,
     stop: Arc<AtomicBool>,
 }
 
 impl Drop for ModelFixture {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
+        let _ = TcpStream::connect(self.address);
     }
 }
 
@@ -148,12 +150,8 @@ fn model_response(body: &str) -> (String, String) {
             .to_string(),
     )
 }
-
 fn start_model_fixture() -> ModelFixture {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind model fixture");
-    listener
-        .set_nonblocking(true)
-        .expect("configure model fixture");
     let address = listener.local_addr().expect("model fixture address");
     let stop = Arc::new(AtomicBool::new(false));
     let server_stop = stop.clone();
@@ -171,15 +169,14 @@ fn start_model_fixture() -> ModelFixture {
                     );
                     let _ = stream.write_all(response.as_bytes());
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    thread::sleep(std::time::Duration::from_millis(5));
-                }
+                Err(_) if !server_stop.load(Ordering::Acquire) => continue,
                 Err(_) => break,
             }
         }
     });
     ModelFixture {
         base_url: format!("http://{address}/v1"),
+        address,
         stop,
     }
 }
@@ -262,6 +259,108 @@ async fn production_profile_exercises_p1_application_controller_workflow() {
         ctx.service::<dyn ah_contracts::llm::ModelProvider>(&LLM)
             .is_some()
     );
+    let tools = ctx
+        .service::<dyn ToolRegistry>(&TOOLS)
+        .expect("production tools");
+    for name in [
+        "cron",
+        "edit",
+        "forget",
+        "glob",
+        "grep",
+        "read_file",
+        "recall",
+        "remember",
+        "todo",
+        "write_file",
+    ] {
+        assert!(
+            tools.names().contains(&name.to_string()),
+            "production profile missing tool {name}"
+        );
+    }
+    tools
+        .invoke(
+            "write_file",
+            serde_json::json!({"path": "tools/tool-smoke.txt", "content": "alpha alpha"}),
+        )
+        .await
+        .expect("production write_file");
+    assert_eq!(
+        tools
+            .invoke(
+                "read_file",
+                serde_json::json!({"path": "tools/tool-smoke.txt"})
+            )
+            .await
+            .expect("production read_file")["content"],
+        "alpha alpha"
+    );
+    assert_eq!(
+        tools
+            .invoke(
+                "edit",
+                serde_json::json!({"path": "tools/tool-smoke.txt", "old_string": "alpha", "new_string": "beta"}),
+            )
+            .await
+            .expect("production edit")["replaced"],
+        1
+    );
+    assert!(
+        tools
+            .invoke("glob", serde_json::json!({"pattern": "*.txt"}))
+            .await
+            .expect("production glob")["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|path| path == "tools/tool-smoke.txt")
+    );
+    assert_eq!(
+        tools
+            .invoke("grep", serde_json::json!({"pattern": "beta"}))
+            .await
+            .expect("production grep")["match_count"],
+        1
+    );
+    assert_eq!(
+        tools
+            .invoke(
+                "todo",
+                serde_json::json!({"action": "add", "session_id": "production", "content": "tool smoke"}),
+            )
+            .await
+            .expect("production todo")["count"],
+        1
+    );
+    assert_eq!(
+        tools
+            .invoke(
+                "cron",
+                serde_json::json!({"action": "add", "command": "echo tool-smoke", "schedule": "*/5 * * * *"}),
+            )
+            .await
+            .expect("production cron")["count"],
+        1
+    );
+    tools
+        .invoke(
+            "remember",
+            serde_json::json!({"key": "production-tool", "content": "tool memory"}),
+        )
+        .await
+        .expect("production remember");
+    assert_eq!(
+        tools
+            .invoke("recall", serde_json::json!({"query": "tool memory"}))
+            .await
+            .expect("production recall")["count"],
+        1
+    );
+    tools
+        .invoke("forget", serde_json::json!({"key": "production-tool"}))
+        .await
+        .expect("production forget");
 
     let kv = ctx.service::<dyn BaseKVStore>(&KV_STORE).expect("redis kv");
     let key = format!("ah:p1:{}", std::process::id());

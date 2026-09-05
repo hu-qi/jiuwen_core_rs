@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "name": "crud_filter_expire",
+      "session_id": "s1",
+      "operations": [
+        {"op": "add", "name": "main", "section": "My Section", "content": "hello <world>", "kind": "text", "source": "rail", "priority": 2, "metadata": {"owner": "alice"}},
+        {"op": "add", "name": "other", "section": "Other", "content": "second", "kind": "runtime", "source": "runtime", "priority": 3},
+        {"op": "update", "name": "main", "content": "updated & safe", "metadata": {"extra": true}},
+        {"op": "list", "section": "my_section"},
+        {"op": "add", "name": "expired", "section": "Expired", "content": "old", "kind": "text", "source": "rail", "priority": 1, "expires_at": "2000-01-01T00:00:00+00:00"},
+        {"op": "collect"},
+        {"op": "clear_section", "section": "Other"},
+        {"op": "clear_session"}
+      ]
+    }
+  ]
+}

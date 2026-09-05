@@ -1,0 +1,8 @@
+{
+  "seam": "task_completion",
+  "cases": [
+    {"name": "completion_prompt_cn", "language": "cn", "promise": "完成"},
+    {"name": "completion_prompt_en", "language": "en", "promise": "DONE"},
+    {"name": "completion_prompt_unknown_language", "language": "ja", "promise": "done"}
+  ]
+}

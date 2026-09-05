@@ -8,10 +8,10 @@
 //! - `shutdown` 请求 + `notifications/exit` 后关闭 stdin 并等待子进程退出。
 
 use async_trait::async_trait;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::seam::Seam;
-
 /// 一个由 MCP server 暴露的工具。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct McpTool {
@@ -33,11 +33,62 @@ pub struct McpToolResult {
     pub is_error: bool,
 }
 
-/// MCP 内容块(线上形态:`{"type":"text","text":"..."}`)。
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type", content = "text", rename_all = "snake_case")]
+/// 一次 MCP 工具调用返回的内容块。
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum McpContent {
     Text(String),
+    Image { mime_type: String, data: String },
+}
+
+impl Serialize for McpContent {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Text(text) => {
+                serde_json::json!({"type":"text","text":text}).serialize(serializer)
+            }
+            Self::Image { mime_type, data } => {
+                serde_json::json!({"type":"image","data":data,"mimeType":mime_type})
+                    .serialize(serializer)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for McpContent {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        match value.get("type").and_then(Value::as_str) {
+            Some("text") => value
+                .get("text")
+                .and_then(Value::as_str)
+                .map(|text| Self::Text(text.to_string()))
+                .ok_or_else(|| serde::de::Error::custom("text content missing text")),
+            Some("image") => {
+                let data = value
+                    .get("data")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| serde::de::Error::custom("image content missing data"))?;
+                let mime_type = value
+                    .get("mimeType")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| serde::de::Error::custom("image content missing mimeType"))?;
+                Ok(Self::Image {
+                    mime_type: mime_type.to_string(),
+                    data: data.to_string(),
+                })
+            }
+            Some(kind) => Err(serde::de::Error::custom(format!(
+                "unsupported MCP content type: {kind}"
+            ))),
+            None => Err(serde::de::Error::custom("MCP content missing type")),
+        }
+    }
 }
 
 /// `initialize` 握手结果(客户端视角的摘要)。
@@ -131,5 +182,18 @@ mod tests {
     fn mcp_error_displays_message() {
         let error = McpError("boom".to_string());
         assert_eq!(error.to_string(), "boom");
+    }
+    #[test]
+    fn mcp_image_content_roundtrips_standard_wire_shape() {
+        let content = McpContent::Image {
+            mime_type: "image/png".to_string(),
+            data: "AAAA".to_string(),
+        };
+        let wire = serde_json::to_value(&content).expect("serialize image");
+        assert_eq!(
+            wire,
+            json!({"type":"image","data":"AAAA","mimeType":"image/png"})
+        );
+        assert_eq!(serde_json::from_value::<McpContent>(wire).unwrap(), content);
     }
 }

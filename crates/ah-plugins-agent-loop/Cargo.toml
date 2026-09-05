@@ -22,3 +22,4 @@ ah-plugins-prompt = { workspace = true }
 ah-plugins-sysop = { workspace = true }
 ah-plugins-tools = { workspace = true }
 ah-plugins-session-log = { workspace = true }
+ah-plugins-rails = { workspace = true }

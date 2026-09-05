@@ -3,6 +3,7 @@
 //! 真实持久化记忆:每条记忆一个 JSON 文件,store 时落盘、启动时恢复。
 //! 提供 memory seam + remember/recall/forget 三个真实工具。
 
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -43,12 +44,15 @@ impl JsonFileMemoryProvider {
             .map_err(|e| MemoryError(format!("read memory dir failed: {e}")))?
         {
             let entry = entry.map_err(|e| MemoryError(format!("entry failed: {e}")))?;
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if let Some(key) = name.strip_suffix(".json")
+            if entry
+                .path()
+                .extension()
+                .and_then(|extension| extension.to_str())
+                == Some("json")
                 && let Ok(text) = std::fs::read_to_string(entry.path())
                 && let Ok(record) = serde_json::from_str::<MemoryRecord>(&text)
             {
-                index.insert(key.to_string(), record);
+                index.insert(record.key.clone(), record);
             }
         }
         Ok(Self {
@@ -58,8 +62,24 @@ impl JsonFileMemoryProvider {
     }
 
     fn path_for(&self, key: &str) -> PathBuf {
-        self.dir.join(format!("{key}.json"))
+        self.dir.join(format!("{}.json", encode_memory_key(key)))
     }
+}
+
+fn encode_memory_key(key: &str) -> String {
+    if !key.is_empty()
+        && !key.starts_with("x-")
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return key.to_string();
+    }
+    let mut encoded = String::from("x-");
+    for byte in key.as_bytes() {
+        let _ = write!(encoded, "{byte:02x}");
+    }
+    encoded
 }
 
 impl Seam for JsonFileMemoryProvider {}
@@ -71,6 +91,9 @@ impl MemoryProvider for JsonFileMemoryProvider {
         content: &str,
         tags: Vec<String>,
     ) -> Result<MemoryRecord, MemoryError> {
+        if key.trim().is_empty() {
+            return Err(MemoryError("memory key must not be empty".to_string()));
+        }
         let record = MemoryRecord {
             key: key.to_string(),
             content: content.to_string(),
@@ -394,5 +417,23 @@ mod tests {
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+    #[test]
+    fn memory_keys_cannot_escape_directory_or_be_empty() {
+        let (memory, dir) = provider("key-boundary");
+        memory
+            .store("../escape", "safe content", Vec::new())
+            .expect("store encoded key");
+        assert!(!dir.parent().unwrap().join("escape.json").exists());
+        drop(memory);
+        let reopened = JsonFileMemoryProvider::open(&dir).expect("reopen encoded key");
+        assert_eq!(
+            reopened.retrieve("../escape").unwrap().content,
+            "safe content"
+        );
+        assert!(reopened.store(" ", "invalid", Vec::new()).is_err());
+        reopened.remove("../escape").expect("remove encoded key");
+        assert!(reopened.retrieve("../escape").is_none());
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

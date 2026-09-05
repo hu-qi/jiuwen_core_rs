@@ -72,9 +72,11 @@ impl Seam for EnvCredentialProvider {}
 
 impl CredentialProvider for EnvCredentialProvider {
     fn get(&self, name: &str) -> Option<Credential> {
-        // 真实读取环境变量;未映射或未设置都返回 None(无猜测 fallback)。
         let env_var = self.mapping.get(name)?;
         let value = std::env::var(env_var).ok()?;
+        if value.trim().is_empty() {
+            return None;
+        }
         Some(Credential {
             name: name.to_string(),
             value,
@@ -222,6 +224,14 @@ mod tests {
             assert!(provider.get("test.api_key").is_none());
         });
     }
+    #[test]
+    fn get_empty_env_returns_none() {
+        let env_var = "AH_CRED_TEST_EMPTY_VAR";
+        with_env_vars(&[(env_var, "   ")], || {
+            let provider = EnvCredentialProvider::new(single_mapping(env_var));
+            assert!(provider.get("test.api_key").is_none());
+        });
+    }
 
     #[test]
     fn set_returns_explicit_read_only_error() {
@@ -288,14 +298,13 @@ mod tests {
         let env_var = "AH_CRED_TEST_PLUGIN_KEY";
         with_env_vars(&[(env_var, "sk-plugin")], || {
             let ctx = Context::new();
-            let plugin: DynPlugin = Arc::new(CredentialsPlugin::default());
+            let plugin: DynPlugin = Arc::new(CredentialsPlugin::new(single_mapping(env_var)));
             let effects = ctx.mount(&plugin).expect("mount credentials plugin");
 
             let provider = ctx
                 .service::<dyn CredentialProvider>(&CREDENTIALS)
                 .expect("credentials seam registered");
-            // 默认映射 openai.api_key → OPENAI_API_KEY;本测试未设置它 → None。
-            assert!(provider.get("openai.api_key").is_none());
+            assert!(provider.get("test.api_key").is_some());
 
             // 卸载后 seam 回滚。
             drop(effects);

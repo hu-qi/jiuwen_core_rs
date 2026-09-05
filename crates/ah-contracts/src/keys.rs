@@ -131,9 +131,13 @@ pub const TUNE: ServiceKey = ServiceKey::new("tune");
 /// `tune-kit` seam 服务键(确定性训练工具门面)。
 pub const TUNE_KIT: ServiceKey = ServiceKey::new("tune-kit");
 
+/// Agent-loop rails policy service key.
+pub const RAILS: ServiceKey = ServiceKey::new("rails");
+
 /// `tool-approval` seam 服务键(渐进工具披露)。
 pub const TOOL_APPROVAL: ServiceKey = ServiceKey::new("tool-approval");
-
+/// `permission-approval` seam 服务键(HITL 权限确认)。
+pub const PERMISSION_APPROVAL: ServiceKey = ServiceKey::new("permission-approval");
 /// `oauth` seam 服务键(设备码授权)。
 pub const OAUTH: ServiceKey = ServiceKey::new("oauth");
 
@@ -200,6 +204,9 @@ pub const TEAM_JOIN_DESCRIPTOR: ServiceKey = ServiceKey::new("team-join-descript
 pub const TEAM_TASK_STATUS: ServiceKey = ServiceKey::new("team-task-status");
 pub const PROMPT_ATTACHMENT: ServiceKey = ServiceKey::new("prompt-attachment");
 pub const PROMPT_ATTACHMENT_STORE: ServiceKey = ServiceKey::new("prompt-attachment-store");
+pub const GOAL_MANAGER: ServiceKey = ServiceKey::new("goal-manager");
+/// `messager` cross-process/team transport service key.
+pub const MESSAGER: ServiceKey = ServiceKey::new("messager");
 pub const PROMPT_BUILDER: ServiceKey = ServiceKey::new("prompt-builder");
 pub const PROMPT_BUILDER_DEVTOOLS: ServiceKey = ServiceKey::new("prompt-builder-devtools");
 pub const STREAM: ServiceKey = ServiceKey::new("stream");

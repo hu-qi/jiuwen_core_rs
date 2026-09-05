@@ -17,4 +17,5 @@ ah-plugins-tokenizer = { workspace = true }
 ah-plugins-mock = { workspace = true }
 ah-plugins-tools = { workspace = true }
 ah-plugins-sysop = { workspace = true }
+ah-plugins-prompt-attachment = { workspace = true }
 ah-plugins-session-log = { workspace = true }

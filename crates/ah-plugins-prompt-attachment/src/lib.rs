@@ -544,6 +544,132 @@ impl PromptAttachmentStore for InMemoryPromptAttachmentStore {
         result.sort_by_key(stable_sort_key);
         result
     }
+    fn update_content_by_id(
+        &self,
+        prompt_attachment_id: &str,
+        content: Option<&str>,
+        session_id: Option<&str>,
+        content_kind: Option<&str>,
+    ) -> Result<PromptAttachment, AttachmentError> {
+        let Some((sid, section)) = self.find_by_id(prompt_attachment_id, session_id) else {
+            return Err(AttachmentError(format!(
+                "prompt attachment not found: {prompt_attachment_id}"
+            )));
+        };
+        let mut items = self.items.lock().unwrap();
+        let current = items[&sid][&section].clone();
+        let mut updated = current.clone();
+        updated.content = content.map(str::to_string);
+        if let Some(content_kind) = content_kind {
+            updated.content_kind = content_kind.to_string();
+        }
+        let updated = self.normalize_for_write(updated, false)?;
+        items
+            .get_mut(&sid)
+            .unwrap()
+            .insert(section, updated.clone());
+        Ok(updated)
+    }
+
+    fn update_metadata_by_id(
+        &self,
+        prompt_attachment_id: &str,
+        metadata: &serde_json::Map<String, serde_json::Value>,
+        session_id: Option<&str>,
+        merge: bool,
+    ) -> Result<PromptAttachment, AttachmentError> {
+        let Some(current) = self.get_by_id(prompt_attachment_id, session_id) else {
+            return Err(AttachmentError(format!(
+                "prompt attachment not found: {prompt_attachment_id}"
+            )));
+        };
+        let next = if merge {
+            let mut merged = current.metadata.clone();
+            merged.extend(metadata.clone());
+            merged
+        } else {
+            metadata.clone()
+        };
+        self.update_by_id(
+            prompt_attachment_id,
+            &PromptAttachmentUpdate {
+                kind: None,
+                content: None,
+                priority: None,
+                source: None,
+                expires_at: None,
+                metadata: Some(next),
+                content_kind: None,
+            },
+        )
+    }
+
+    fn replace_source(
+        &self,
+        source: &str,
+        attachments: &[PromptAttachment],
+        session_id: Option<&str>,
+    ) -> Result<Vec<PromptAttachment>, AttachmentError> {
+        let filter = AttachmentFilter {
+            session_id: session_id.map(str::to_string),
+            source: Some(source.to_string()),
+            ..Default::default()
+        };
+        self.remove_by_filter(&filter, false)?;
+        attachments
+            .iter()
+            .map(|item| {
+                let target_session = session_id.unwrap_or(&item.session_id);
+                self.add_section(
+                    target_session,
+                    &item.section,
+                    item.content.as_deref().unwrap_or_default(),
+                    item.kind,
+                    source,
+                    item.priority,
+                    Some(&item.metadata),
+                    &item.content_kind,
+                    item.expires_at.as_deref(),
+                )
+            })
+            .collect()
+    }
+
+    fn clear_source(&self, source: &str, session_id: Option<&str>) -> usize {
+        let filter = AttachmentFilter {
+            session_id: session_id.map(str::to_string),
+            source: Some(source.to_string()),
+            ..Default::default()
+        };
+        self.remove_by_filter(&filter, false).unwrap_or(0)
+    }
+
+    fn add_file_reference(
+        &self,
+        file_path: &str,
+        summary: Option<&str>,
+        session_id: &str,
+        section: Option<&str>,
+        source: Option<&str>,
+        priority: i32,
+        metadata: Option<&serde_json::Map<String, serde_json::Value>>,
+    ) -> Result<PromptAttachment, AttachmentError> {
+        let mut merged = metadata.cloned().unwrap_or_default();
+        merged.insert("file_path".into(), Value::String(file_path.into()));
+        let fallback_section = format!("file_{}", self.api.safe_id_part(Some(file_path), "file"));
+        let fallback_content = format!("File reference: {file_path}");
+        self.add_section(
+            session_id,
+            section.unwrap_or(&fallback_section),
+            summary.unwrap_or(&fallback_content),
+            PromptAttachmentKind::File,
+            source.unwrap_or("file_reference"),
+            priority,
+            Some(&merged),
+            "text/markdown",
+            None,
+        )
+    }
 }
 
 /// UTC 时间(ISO-8601 近似,与 Python `datetime.now(timezone.utc).isoformat()`
@@ -1241,5 +1367,80 @@ mod tests {
         assert_eq!(injected[2], "RENDERED");
         let unchanged = inject_messages(&msgs, "");
         assert_eq!(unchanged, msgs);
+    }
+
+    #[test]
+    fn store_supports_source_replacement_metadata_and_file_lifecycle() {
+        use ah_contracts::keys::PROMPT_ATTACHMENT_STORE;
+        use ah_contracts::prompt_attachment::PromptAttachmentStore;
+        let ctx = Context::new();
+        let plugin: DynPlugin = Arc::new(PromptAttachmentPlugin);
+        let effects = ctx.mount(&plugin).expect("mount");
+        let store = ctx
+            .service::<dyn PromptAttachmentStore>(&PROMPT_ATTACHMENT_STORE)
+            .expect("store");
+        let first = store
+            .add_section(
+                "s1",
+                "old",
+                "old content",
+                PromptAttachmentKind::Text,
+                "source-a",
+                50,
+                None,
+                "text/plain",
+                None,
+            )
+            .expect("add");
+        let mut metadata = Map::new();
+        metadata.insert("request".into(), json!("r1"));
+        let updated = store
+            .update_metadata_by_id(&first.id, &metadata, Some("s1"), true)
+            .expect("metadata update");
+        assert_eq!(updated.metadata["request"], "r1");
+        let cleared = store
+            .update_content_by_id(&first.id, None, Some("s1"), None)
+            .expect("clear content");
+        assert_eq!(cleared.content, None);
+        assert_eq!(cleared.content_sha256.as_deref(), Some(EMPTY_SHA256));
+
+        let replacement = PromptAttachment {
+            id: "ignored".into(),
+            section: "new".into(),
+            kind: PromptAttachmentKind::Memory,
+            content: Some("replacement".into()),
+            priority: 1,
+            source: None,
+            session_id: "ignored".into(),
+            created_at: None,
+            updated_at: None,
+            expires_at: None,
+            metadata: Map::new(),
+            content_kind: "text/plain".into(),
+            content_path: None,
+            content_sha256: None,
+        };
+        let replaced = store
+            .replace_source("source-a", &[replacement], Some("s1"))
+            .expect("replace source");
+        assert_eq!(replaced.len(), 1);
+        assert_eq!(replaced[0].source.as_deref(), Some("source-a"));
+        assert!(
+            store
+                .list_by_filter(&AttachmentFilter {
+                    source: Some("source-a".into()),
+                    ..Default::default()
+                })
+                .iter()
+                .all(|item| item.section == "new")
+        );
+
+        let file = store
+            .add_file_reference("docs/readme.md", None, "s1", None, None, 10, None)
+            .expect("file reference");
+        assert_eq!(file.kind, PromptAttachmentKind::File);
+        assert_eq!(file.metadata["file_path"], "docs/readme.md");
+        assert_eq!(store.clear_source("file_reference", Some("s1")), 1);
+        drop(effects);
     }
 }

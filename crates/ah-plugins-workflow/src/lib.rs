@@ -364,16 +364,17 @@ impl WorkflowEngineImpl {
             .get("output")
             .cloned()
             .unwrap_or_else(|| input.clone());
-        let message = format!("{prompt}\nContext: {context}");
-        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
         let request = ModelRequest {
-            messages: vec![ChatMessage::new(ChatRole::User, message)],
+            messages: vec![ChatMessage::new(
+                ChatRole::User,
+                format!("{prompt}\nContext: {context}"),
+            )],
             ..Default::default()
         };
-        self.llm
-            .stream_chat(request, tx)
-            .await
-            .map_err(|e| WorkflowError(format!("llm node failed: {e}")))?;
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        let llm = self.llm.clone();
+        let producer = tokio::spawn(async move { llm.stream_chat(request, tx).await });
+
         let mut content = String::new();
         let mut tool_calls: Vec<ah_contracts::llm::ToolCall> = Vec::new();
         while let Some(chunk) = rx.recv().await {
@@ -405,6 +406,10 @@ impl WorkflowEngineImpl {
                 }
             }
         }
+        producer
+            .await
+            .map_err(|error| WorkflowError(format!("llm stream task failed: {error}")))?
+            .map_err(|error| WorkflowError(format!("llm node failed: {error}")))?;
         if !tool_calls.is_empty() {
             return Ok(json!({ "content": content, "tool_calls": tool_calls }));
         }
@@ -1379,6 +1384,98 @@ mod tests {
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
         (ctx, effects)
+    }
+    struct BurstModel;
+
+    impl Seam for BurstModel {}
+
+    #[async_trait]
+    impl ah_contracts::llm::ModelProvider for BurstModel {
+        fn name(&self) -> &'static str {
+            "burst"
+        }
+
+        async fn chat(
+            &self,
+            _request: ah_contracts::llm::ModelRequest,
+        ) -> Result<ah_contracts::llm::ModelResponse, ah_contracts::llm::ModelError> {
+            Err(ah_contracts::llm::ModelError("chat is not used".into()))
+        }
+
+        async fn stream_chat(
+            &self,
+            _request: ah_contracts::llm::ModelRequest,
+            sink: tokio::sync::mpsc::Sender<ah_contracts::llm::ModelChunk>,
+        ) -> Result<(), ah_contracts::llm::ModelError> {
+            for _ in 0..65 {
+                sink.send(ah_contracts::llm::ModelChunk {
+                    content_delta: "x".into(),
+                    ..Default::default()
+                })
+                .await
+                .map_err(|_| ah_contracts::llm::ModelError("sink closed".into()))?;
+            }
+            sink.send(ah_contracts::llm::ModelChunk {
+                done: true,
+                ..Default::default()
+            })
+            .await
+            .map_err(|_| ah_contracts::llm::ModelError("sink closed".into()))?;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn llm_node_drains_bounded_stream_before_awaiting_producer() {
+        let root =
+            std::env::temp_dir().join(format!("ah-wf-bounded-stream-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let tools = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let sessions = ctx.service::<dyn SessionLog>(&SESSIONS).expect("sessions");
+        let engine =
+            WorkflowEngineImpl::new(StdArc::new(BurstModel), tools, sessions, None, None, ctx);
+        let spec = WorkflowSpec {
+            id: "bounded-stream".into(),
+            nodes: vec![
+                NodeSpec {
+                    id: "start".into(),
+                    kind: NodeKind::Start,
+                    config: json!({}),
+                },
+                NodeSpec {
+                    id: "llm".into(),
+                    kind: NodeKind::Llm,
+                    config: json!({ "prompt": "emit" }),
+                },
+                NodeSpec {
+                    id: "end".into(),
+                    kind: NodeKind::End,
+                    config: json!({}),
+                },
+            ],
+            edges: vec![
+                EdgeSpec {
+                    from: "start".into(),
+                    to: "llm".into(),
+                    condition: None,
+                },
+                EdgeSpec {
+                    from: "llm".into(),
+                    to: "end".into(),
+                    condition: None,
+                },
+            ],
+        };
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            engine.run(&spec, json!({})),
+        )
+        .await
+        .expect("bounded stream must not deadlock")
+        .expect("workflow run");
+        assert_eq!(output.output["content"].as_str().unwrap().len(), 65);
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[tokio::test]

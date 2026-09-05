@@ -33,6 +33,7 @@ use ah_contracts::keys::{
     EXTERNAL_CLIENT, EXTERNAL_FORMAT, INBOUND_RENDER, TEAM_CONTEXT, TEAM_I18N, TEAM_MESSAGE,
     TEAM_PROMPT_LOADER, TIMEFMT,
 };
+use ah_contracts::messager::Messager;
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
@@ -41,6 +42,7 @@ use ah_contracts::team_i18n::{KEY_HITT_SILENCE_NOTE, Language, TeamI18n};
 use ah_contracts::team_join_descriptor::{Scope, TeamJoinDescriptor};
 use ah_contracts::team_message::TeamMessage;
 use ah_contracts::team_prompts::TeamPromptLoader;
+use ah_contracts::team_schema::TeamTopic;
 use ah_contracts::timefmt::Timefmt;
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
@@ -54,6 +56,19 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+struct WatchSubscription {
+    messager: Arc<dyn Messager>,
+    topics: Vec<String>,
+}
+
+impl Drop for WatchSubscription {
+    fn drop(&mut self) {
+        for topic in &self.topics {
+            self.messager.unsubscribe(topic);
+        }
+    }
+}
+
 /// 真实客户端实现:描述符投影 + 状态机 + 收件箱组装。
 pub struct ExternalTeamClientImpl {
     descriptor: TeamJoinDescriptor,
@@ -65,6 +80,8 @@ pub struct ExternalTeamClientImpl {
     session: Arc<dyn TeamSessionContext>,
     timefmt: Arc<dyn Timefmt>,
     render: Arc<dyn InboundRender>,
+    /// 消息传输 seam;fetch/read 不依赖,watch 需要它。
+    messager: Option<Arc<dyn Messager>>,
     /// 数据源(connect 时注入)。
     source: Mutex<Option<Arc<dyn ExternalInboxSource>>>,
     connected: AtomicBool,
@@ -82,6 +99,7 @@ impl ExternalTeamClientImpl {
         session: Arc<dyn TeamSessionContext>,
         timefmt: Arc<dyn Timefmt>,
         render: Arc<dyn InboundRender>,
+        messager: Option<Arc<dyn Messager>>,
     ) -> Self {
         Self {
             descriptor,
@@ -92,6 +110,7 @@ impl ExternalTeamClientImpl {
             session,
             timefmt,
             render,
+            messager,
             source: Mutex::new(None),
             connected: AtomicBool::new(false),
         }
@@ -333,12 +352,38 @@ impl ExternalTeamClient for ExternalTeamClientImpl {
         Ok(compose_inbox_text(messages_text, &board))
     }
 
-    async fn watch(&self, _observer: &dyn InboxObserver) -> Result<(), ExternalClientError> {
-        // watch 需要 messager 订阅(MESSAGE/TASK topics);当前数据面是拉取式
-        // 收件箱,事件订阅留待 messager seam 落地。显式报错,不静默。
-        Err(ExternalClientError(
-            "watch requires messager topic subscription (MESSAGE/TASK); not wired yet".to_string(),
-        ))
+    async fn watch(&self, observer: &dyn InboxObserver) -> Result<(), ExternalClientError> {
+        self.require_source()?;
+        let messager = self.messager.clone().ok_or_else(|| {
+            ExternalClientError(
+                "watch requires messager topic subscription (MESSAGE/TASK)".to_string(),
+            )
+        })?;
+        let topics = vec![
+            TeamTopic::Message.build(&self.descriptor.session_id, self.team_name()),
+            TeamTopic::Task.build(&self.descriptor.session_id, self.team_name()),
+            format!("team:{}:messages", self.team_name()),
+            format!("team:{}:task", self.team_name()),
+        ];
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<()>();
+        for topic in &topics {
+            let sender = sender.clone();
+            messager.subscribe(
+                topic,
+                Arc::new(move |_event| {
+                    let _ = sender.send(());
+                }),
+            );
+        }
+        drop(sender);
+        let _subscription = WatchSubscription { messager, topics };
+        while receiver.recv().await.is_some() {
+            let view = self.fetch_inbox(true).await?;
+            if !view.is_empty() {
+                observer.on_inbox(view).await;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -351,6 +396,7 @@ pub struct ExternalClientFactory {
     session: Arc<dyn TeamSessionContext>,
     timefmt: Arc<dyn Timefmt>,
     render: Arc<dyn InboundRender>,
+    messager: Option<Arc<dyn Messager>>,
 }
 
 impl ExternalClientFactory {
@@ -382,6 +428,7 @@ impl ExternalClientFactory {
             render: ctx
                 .service::<dyn InboundRender>(&INBOUND_RENDER)
                 .ok_or_else(|| missing("inbound-render"))?,
+            messager: ctx.service::<dyn Messager>(&ah_contracts::keys::MESSAGER),
         })
     }
 }
@@ -399,6 +446,7 @@ impl ExternalTeamClientFactory for ExternalClientFactory {
             self.session.clone(),
             self.timefmt.clone(),
             self.render.clone(),
+            self.messager.clone(),
         ))
     }
 }
@@ -537,6 +585,14 @@ mod tests {
         let timefmt: Arc<dyn Timefmt> = StdArc::new(TimefmtService::with_offset(0));
         let e1 = ctx.register(INBOUND_RENDER, render);
         let e2 = ctx.register(TIMEFMT, timefmt);
+        let messager = ah_contracts::messager::create_messager(
+            ah_contracts::messager::MessagerTransportConfig {
+                node_id: Some("external-test".into()),
+                ..Default::default()
+            },
+        )
+        .expect("messager");
+        let e3 = ctx.register(ah_contracts::keys::MESSAGER, messager);
         let plugins: Vec<DynPlugin> = vec![
             StdArc::new(ah_plugins_team_context::TeamContextPlugin),
             StdArc::new(TeamPromptsPlugin),
@@ -546,8 +602,107 @@ mod tests {
             StdArc::new(ExternalClientPlugin),
         ];
         let mut effects = ctx.mount_all(plugins).expect("mount");
-        effects.extend([e1, e2]);
+        effects.extend([e1, e2, e3]);
         (ctx, effects)
+    }
+
+    #[tokio::test]
+    async fn watch_notifies_and_unsubscribes_on_cancellation() {
+        let (ctx, effects) = build_ctx();
+        let factory = ctx
+            .service::<dyn ExternalTeamClientFactory>(&EXTERNAL_CLIENT)
+            .expect("external-client seam");
+        let client = factory.build(&descriptor());
+        let source: Arc<dyn ExternalInboxSource> = StdArc::new(MemInboxSource::new(
+            vec![msg("watch-1", "alice", "hello")],
+            vec![],
+            vec![],
+        ));
+        client.connect(source).expect("connect");
+        let views = StdArc::new(Mutex::new(Vec::<InboxView>::new()));
+        let observer = RecordingObserver {
+            views: views.clone(),
+        };
+        let watch_client = client.clone();
+        let watch_task = tokio::spawn(async move { watch_client.watch(&observer).await });
+        tokio::task::yield_now().await;
+        let messager = ctx
+            .service::<dyn ah_contracts::messager::Messager>(&ah_contracts::keys::MESSAGER)
+            .expect("messager seam");
+        let topic = ah_contracts::team_schema::TeamTopic::Message.build("s1", "t1");
+        messager.publish(&topic, serde_json::json!({"event": "message"}));
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if !views.lock().unwrap().is_empty() {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("watch callback");
+        assert_eq!(views.lock().unwrap().len(), 1);
+        let task_topic = ah_contracts::team_schema::TeamTopic::Task.build("s1", "t1");
+        messager.publish(&task_topic, serde_json::json!({"event": "task"}));
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if views.lock().unwrap().len() == 2 {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("task watch callback");
+        assert_eq!(views.lock().unwrap().len(), 2);
+
+        watch_task.abort();
+        let _ = watch_task.await;
+        let count = views.lock().unwrap().len();
+        messager.publish(&topic, serde_json::json!({"event": "after-cancel"}));
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        assert_eq!(views.lock().unwrap().len(), count);
+        drop(effects);
+    }
+
+    struct RecordingObserver {
+        views: StdArc<Mutex<Vec<InboxView>>>,
+    }
+
+    #[async_trait]
+    impl InboxObserver for RecordingObserver {
+        async fn on_inbox(&self, view: InboxView) {
+            self.views.lock().unwrap().push(view);
+        }
+    }
+
+    #[tokio::test]
+    async fn watch_skips_empty_inbox() {
+        let (ctx, effects) = build_ctx();
+        let factory = ctx
+            .service::<dyn ExternalTeamClientFactory>(&EXTERNAL_CLIENT)
+            .expect("external-client seam");
+        let client = factory.build(&descriptor());
+        let source: Arc<dyn ExternalInboxSource> =
+            StdArc::new(MemInboxSource::new(vec![], vec![], vec![]));
+        client.connect(source).expect("connect");
+        let views = StdArc::new(Mutex::new(Vec::<InboxView>::new()));
+        let observer = RecordingObserver {
+            views: views.clone(),
+        };
+        let watch_client = client.clone();
+        let watch_task = tokio::spawn(async move { watch_client.watch(&observer).await });
+        tokio::task::yield_now().await;
+        let messager = ctx
+            .service::<dyn ah_contracts::messager::Messager>(&ah_contracts::keys::MESSAGER)
+            .expect("messager seam");
+        let topic = ah_contracts::team_schema::TeamTopic::Task.build("s1", "t1");
+        messager.publish(&topic, serde_json::json!({"event": "empty-task"}));
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        assert!(views.lock().unwrap().is_empty());
+        watch_task.abort();
+        let _ = watch_task.await;
+        drop(effects);
     }
 
     #[tokio::test]
@@ -660,7 +815,7 @@ mod tests {
         let err2 = client.read_inbox(true).await.unwrap_err();
         assert!(err2.0.contains("not connected"), "{err2}");
         let err3 = client.watch(&NoopObserver).await.unwrap_err();
-        assert!(err3.0.contains("watch"), "{err3}");
+        assert!(err3.0.contains("not connected"), "{err3}");
         drop(effects);
     }
 

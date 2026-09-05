@@ -10,7 +10,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use ah_contracts::keys::{QUEUE, SUBAGENT, TEAMS};
+use ah_contracts::keys::{MESSAGER, QUEUE, SUBAGENT, TEAMS};
+use ah_contracts::messager::Messager;
 use ah_contracts::prelude::Effect;
 use ah_contracts::queue::{MessageQueue, QueueMessage};
 use ah_contracts::seam::Seam;
@@ -41,8 +42,10 @@ struct Team {
 pub struct InMemoryTeamRuntime {
     teams: Mutex<HashMap<String, Team>>,
     subagent: Arc<dyn SubagentRuntime>,
-    /// 消息传输经 queue seam(team:{team}:messages channel)。
+    /// 消息传输默认经 queue;注入 messager 后使用跨进程 topic。
     queue: Arc<dyn MessageQueue>,
+    messager: Option<Arc<dyn Messager>>,
+    messager_messages: Arc<Mutex<HashMap<String, Vec<TeamMessage>>>>,
     ctx: Context,
 }
 
@@ -56,8 +59,40 @@ impl InMemoryTeamRuntime {
             teams: Mutex::new(HashMap::new()),
             subagent,
             queue,
+            messager: None,
+            messager_messages: Arc::new(Mutex::new(HashMap::new())),
             ctx,
         }
+    }
+
+    pub fn with_messager(mut self, messager: Arc<dyn Messager>) -> Self {
+        messager.start();
+        self.messager = Some(messager);
+        let team_ids: Vec<String> = self.teams.lock().unwrap().keys().cloned().collect();
+        for team in team_ids {
+            self.subscribe_team(&team);
+        }
+        self
+    }
+
+    fn subscribe_team(&self, team: &str) {
+        let Some(messager) = &self.messager else {
+            return;
+        };
+        let topic = Self::channel(team);
+        let cache = self.messager_messages.clone();
+        let team_id = team.to_string();
+        messager.subscribe(
+            &topic,
+            Arc::new(move |payload| {
+                let Ok(message) = serde_json::from_value::<TeamMessage>(payload) else {
+                    return;
+                };
+                let mut messages = cache.lock().unwrap();
+                let bucket = messages.entry(team_id.clone()).or_default();
+                bucket.push(message);
+            }),
+        );
     }
 
     fn channel(team: &str) -> String {
@@ -81,6 +116,12 @@ impl InMemoryTeamRuntime {
             task_id: task_id.to_string(),
             status,
         });
+        if let Some(messager) = &self.messager {
+            messager.publish(
+                &format!("team:{team}:task"),
+                serde_json::json!({"task_id": task_id, "status": status}),
+            );
+        }
     }
 }
 
@@ -92,6 +133,7 @@ impl TeamRuntime for InMemoryTeamRuntime {
         if spec.id.is_empty() || spec.name.is_empty() {
             return Err(TeamError("team id/name must not be empty".to_string()));
         }
+        let team_id = spec.id.clone();
         let mut guard = self.teams.lock().unwrap();
         if guard.contains_key(&spec.id) {
             return Err(TeamError(format!("team already exists: {}", spec.id)));
@@ -104,6 +146,8 @@ impl TeamRuntime for InMemoryTeamRuntime {
                 tasks: HashMap::new(),
             },
         );
+        drop(guard);
+        self.subscribe_team(&team_id);
         Ok(())
     }
 
@@ -159,6 +203,12 @@ impl TeamRuntime for InMemoryTeamRuntime {
             .tasks
             .get_mut(task)
             .ok_or_else(|| TeamError(format!("task not found: {task}")))?;
+        if entry.status != TeamTaskStatus::InProgress {
+            return Err(TeamError(format!(
+                "task {task} cannot be completed from status {:?}",
+                entry.status
+            )));
+        }
         entry.status = TeamTaskStatus::Done;
         entry.result = Some(output);
         let status = entry.status;
@@ -271,22 +321,39 @@ impl TeamRuntime for InMemoryTeamRuntime {
         {
             let _guard = self.team(team)?;
         }
-        self.queue
-            .publish(
-                &Self::channel(team),
-                json!({ "from": from, "to": to, "content": content }),
-            )
-            .map_err(|e| TeamError(format!("publish message: {e}")))?;
-        Ok(TeamMessage {
+        let message = TeamMessage {
             from: from.to_string(),
             to: to.map(str::to_string),
             content: content.to_string(),
-        })
+        };
+        if let Some(messager) = &self.messager {
+            messager.publish(
+                &Self::channel(team),
+                serde_json::to_value(&message).unwrap(),
+            );
+        } else {
+            self.queue
+                .publish(
+                    &Self::channel(team),
+                    serde_json::to_value(&message).unwrap(),
+                )
+                .map_err(|e| TeamError(format!("publish message: {e}")))?;
+        }
+        Ok(message)
     }
 
     fn messages(&self, team: &str) -> Result<Vec<TeamMessage>, TeamError> {
         {
             let _guard = self.team(team)?;
+        }
+        if self.messager.is_some() {
+            return Ok(self
+                .messager_messages
+                .lock()
+                .unwrap()
+                .get(team)
+                .cloned()
+                .unwrap_or_default());
         }
         let mut msgs: Vec<QueueMessage> = self
             .queue
@@ -295,24 +362,12 @@ impl TeamRuntime for InMemoryTeamRuntime {
         msgs.sort_by_key(|m| m.seq);
         Ok(msgs
             .into_iter()
-            .map(|m| TeamMessage {
-                from: m
-                    .payload
-                    .get("from")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                to: m
-                    .payload
-                    .get("to")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                content: m
-                    .payload
-                    .get("content")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
+            .map(|m| {
+                serde_json::from_value(m.payload).unwrap_or(TeamMessage {
+                    from: String::new(),
+                    to: None,
+                    content: String::new(),
+                })
             })
             .collect())
     }
@@ -370,10 +425,8 @@ impl TeamRuntime for InMemoryTeamRuntime {
         let status = self
             .team(team)?
             .get(team)
-            .unwrap()
-            .tasks
-            .get(task)
-            .map(|t| t.status)
+            .and_then(|board| board.tasks.get(task))
+            .map(|task| task.status)
             .unwrap_or(TeamTaskStatus::Failed);
         Ok(TeamRunResult {
             task_id: task.to_string(),
@@ -412,8 +465,13 @@ impl Plugin for TeamsPlugin {
                 plugin: self.name(),
                 message: "queue seam not registered".to_string(),
             })?;
-        let runtime: Arc<dyn TeamRuntime> =
-            Arc::new(InMemoryTeamRuntime::new(subagent, queue, ctx.clone()));
+        let runtime = InMemoryTeamRuntime::new(subagent, queue, ctx.clone());
+        let runtime = if let Some(messager) = ctx.service::<dyn Messager>(&MESSAGER) {
+            runtime.with_messager(messager)
+        } else {
+            runtime
+        };
+        let runtime: Arc<dyn TeamRuntime> = Arc::new(runtime);
         Ok(vec![ctx.register(TEAMS, runtime)])
     }
 }
@@ -517,6 +575,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cannot_complete_pending_task() {
+        let root =
+            std::env::temp_dir().join(format!("ah-teams-invalid-complete-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let runtime = ctx.service::<dyn TeamRuntime>(&TEAMS).expect("teams");
+        let (spec, members) = team();
+        runtime.create_team(spec, members).expect("create");
+        runtime.add_task("t1", task("a", vec![])).expect("add");
+        assert!(
+            runtime
+                .complete_task("t1", "a", json!({"ok": true}))
+                .is_err()
+        );
+        assert_eq!(
+            runtime.tasks("t1").expect("tasks")[0].status,
+            TeamTaskStatus::Pending
+        );
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
     async fn review_settles_by_majority() {
         let root = std::env::temp_dir().join(format!("ah-teams-review-{}", std::process::id()));
         let (ctx, effects) = build_ctx(&root);
@@ -612,5 +692,50 @@ mod tests {
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn team_messaging_can_use_inprocess_messager() {
+        let root = std::env::temp_dir().join(format!("ah-teams-messager-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let subagent = ctx
+            .service::<dyn SubagentRuntime>(&SUBAGENT)
+            .expect("subagent");
+        let queue = ctx.service::<dyn MessageQueue>(&QUEUE).expect("queue");
+        let messager = ah_contracts::messager::create_messager(
+            ah_contracts::messager::MessagerTransportConfig {
+                node_id: Some("team-node".into()),
+                ..Default::default()
+            },
+        )
+        .expect("messager");
+        let task_events = Arc::new(Mutex::new(Vec::new()));
+        let task_events_sink = task_events.clone();
+        let messager_for_events = messager.clone();
+        messager_for_events.subscribe(
+            "team:t1:task",
+            Arc::new(move |payload| task_events_sink.lock().unwrap().push(payload)),
+        );
+        let runtime =
+            InMemoryTeamRuntime::new(subagent, queue, ctx.clone()).with_messager(messager);
+        let (spec, members) = team();
+        runtime.create_team(spec, members).expect("create");
+        runtime
+            .add_task("t1", task("task-event", vec![]))
+            .expect("add");
+        runtime.claim_task("t1", "m1").expect("claim");
+        assert_eq!(task_events.lock().unwrap().len(), 1);
+        runtime
+            .send_message("t1", "m1", Some("m2"), "hello over messager")
+            .expect("send");
+        runtime
+            .send_message("t1", "m1", Some("m2"), "hello over messager")
+            .expect("send duplicate");
+        let messages = runtime.messages("t1").expect("messages");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].content, "hello over messager");
+        assert_eq!(messages[1].content, "hello over messager");
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
     }
 }

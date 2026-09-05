@@ -71,6 +71,11 @@ fn validate_session_event(event: &SessionEvent) -> Result<(), SessionError> {
                 .and_then(Value::as_str)
                 .filter(|id| !id.trim().is_empty())
                 .ok_or_else(|| SessionError("tool result requires tool_call_id".into()))?;
+            if let Some(images) = event.payload.get("images") {
+                serde_json::from_value::<Vec<ChatImage>>(images.clone()).map_err(|e| {
+                    SessionError(format!("tool result {id} has invalid images: {e}"))
+                })?;
+            }
             if event
                 .payload
                 .get("output")
@@ -102,7 +107,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ah_contracts::keys::{SESSION_MANAGER, SESSIONS};
-use ah_contracts::llm::{ChatMessage, ChatRole, ToolCall};
+use ah_contracts::llm::{ChatImage, ChatMessage, ChatRole, ToolCall};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
@@ -113,6 +118,21 @@ use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use serde_json::{Value, json};
 
+fn extract_image_attachment(output: &str) -> Vec<ChatImage> {
+    let Ok(value) = serde_json::from_str::<Value>(output) else {
+        return Vec::new();
+    };
+    let Some(mime_type) = value.get("mime_type").and_then(Value::as_str) else {
+        return Vec::new();
+    };
+    let Some(data) = value.get("data").and_then(Value::as_str) else {
+        return Vec::new();
+    };
+    if !mime_type.starts_with("image/") || data.is_empty() {
+        return Vec::new();
+    }
+    vec![ChatImage::new(mime_type, data)]
+}
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -444,11 +464,24 @@ impl SessionLog for JsonlSessionLog {
         self.events()
             .into_iter()
             .filter_map(|event| match event.kind {
-                SessionEventKind::User => event
-                    .payload
-                    .get("content")
-                    .and_then(Value::as_str)
-                    .map(|c| ChatMessage::new(ChatRole::User, c)),
+                SessionEventKind::User => {
+                    let content = event
+                        .payload
+                        .get("content")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let mut message = ChatMessage::new(ChatRole::User, content);
+                    message.images = event
+                        .payload
+                        .get("images")
+                        .and_then(|images| serde_json::from_value(images.clone()).ok())
+                        .unwrap_or_default();
+                    if message.content.is_empty() && message.images.is_empty() {
+                        None
+                    } else {
+                        Some(message)
+                    }
+                },
                 SessionEventKind::Assistant => {
                     let reasoning_content = event
                         .payload
@@ -487,7 +520,7 @@ impl SessionLog for JsonlSessionLog {
                 }
                 SessionEventKind::ToolResult => {
                     let id = event.payload.get("tool_call_id").and_then(Value::as_str)?;
-                    let output = event
+                    let raw_output = event
                         .payload
                         .get("output")
                         .and_then(Value::as_str)
@@ -496,12 +529,18 @@ impl SessionLog for JsonlSessionLog {
                         == Some("unknown")
                     {
                         format!(
-                            "[tool result status=unknown; manual reconciliation required]\n{output}"
+                            "[tool result status=unknown; manual reconciliation required]\n{raw_output}"
                         )
                     } else {
-                        output.to_string()
+                        raw_output.to_string()
                     };
-                    Some(ChatMessage::tool(id, output))
+                    let mut message = ChatMessage::tool(id, output);
+                    message.images = event
+                        .payload
+                        .get("images")
+                        .and_then(|images| serde_json::from_value(images.clone()).ok())
+                        .unwrap_or_else(|| extract_image_attachment(raw_output));
+                    Some(message)
                 }
                 SessionEventKind::System => event
                     .payload
@@ -1158,6 +1197,37 @@ mod tests {
                 .count(),
             1
         );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn derive_messages_restores_tool_image_attachment() {
+        let (log, path) = make_log("tool-image");
+        log.append(
+            SessionEventKind::ToolResult,
+            json!({
+                "tool_call_id": "screenshot-1",
+                "output": "{\"mime_type\":\"image/png\"}",
+                "images": [{"mime_type":"image/png","data":"AAAA"}]
+            }),
+        )
+        .expect("tool image");
+        let messages = log.derive_messages();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].images[0].data, "AAAA");
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn derive_messages_restores_user_observation_image() {
+        let (log, path) = make_log("user-image");
+        log.append(
+            SessionEventKind::User,
+            json!({"content":"[current Android screen]","images":[{"mime_type":"image/png","data":"AAAA"}]}),
+        )
+        .expect("observation");
+        let messages = log.derive_messages();
+        assert_eq!(messages[0].images[0].mime_type, "image/png");
         let _ = std::fs::remove_file(path);
     }
 }

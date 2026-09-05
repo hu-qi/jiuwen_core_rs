@@ -8,8 +8,8 @@ Percentages below are status shares, not weighted capability completion.
 
 | Status | Count | Share |
 | --- | ---: | ---: |
-| done | 16 | 61.5% |
-| partial | 9 | 34.6% |
+| done | 18 | 69.2% |
+| partial | 7 | 26.9% |
 | missing | 1 | 3.8% |
 | excluded | 0 | 0.0% |
 | **total** | **26** | **100.0%** |
@@ -20,7 +20,7 @@ Percentages below are status shares, not weighted capability completion.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | agent | 3 | 3 | 0 | 0 | 0 | 100.0% |
 | application | 1 | 1 | 0 | 0 | 0 | 100.0% |
-| context | 1 | 0 | 1 | 0 | 0 | 0.0% |
+| context | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | controller | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | evolving | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | external | 1 | 0 | 1 | 0 | 0 | 0.0% |
@@ -34,16 +34,14 @@ Percentages below are status shares, not weighted capability completion.
 | session | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | subagents | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | teams | 1 | 0 | 1 | 0 | 0 | 0.0% |
-| tools | 1 | 0 | 1 | 0 | 0 | 0.0% |
+| tools | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | workflow | 1 | 1 | 0 | 0 | 0 | 100.0% |
 
 ## Incomplete work packages
 
 | ID | Phase | Domain | Title | Status |
 | --- | --- | --- | --- | --- |
-| P2-01 | P2 | tools | Common tool parity | partial |
 | P2-02 | P2 | rails | Rails and security policy | partial |
-| P2-03 | P2 | context | Context engine | partial |
 | P2-04 | P2 | subagents | Subagents | partial |
 | P2-05 | P2 | teams | Multi-agent and messager | partial |
 | P2-06 | P2 | retrieval | Production retrieval and memory backends | partial |
@@ -184,43 +182,43 @@ Percentages below are status shares, not weighted capability completion.
 
 ### P2-01 — Common tool parity
 
-- Status: `partial`
-- Implementation: `crates/ah-plugins-sysop/src/lib.rs`, `crates/ah-plugins-common-tools/src/lib.rs`
-- Verification: `tool contract and focused plugin tests`
-- Production: dev tool smoke passed
-- Differential: full tool differential pending
+- Status: `done`
+- Implementation: `crates/ah-plugins-sysop/src/fs.rs`, `crates/ah-plugins-sysop/src/tools.rs`, `crates/ah-plugins-common-tools/src/lib.rs`, `crates/ah-plugins-memory/src/lib.rs`, `crates/ah-plugins-rails/src/lib.rs`, `crates/ah-app/tests/rust_contract.rs`, `crates/ah-app/tests/golden.rs`, `crates/ah-app/tests/production_boot.rs`, `fixtures/tools.json`
+- Verification: `cargo test --offline -p ah-plugins-common-tools`, `cargo test --offline -p ah-plugins-memory`, `cargo test --offline -p ah-plugins-sysop rejects_writing_through_symlinked_file`, `cargo test --offline -p ah-plugins-rails path_guard_blocks_escapes_but_allows_safe`, `cargo test --offline -p ah-app --test golden tools_golden`, `cargo test --offline -p ah-app --test rust_contract rust_contract_tools_fixture`, `cargo test --offline -p ah-app --test production_boot production_profile_exercises_p1_application_controller_workflow -- --ignored --nocapture`, `cargo clippy --workspace --all-targets --offline -- -D warnings`
+- Production: production-p1 smoke passed against prod.toml with real Redis KV/queue/checkpointer, local OpenAI-compatible HTTP fixture, and all six deterministic tool capabilities; browser/LSP and other external-process tools remain separately dependency-bound
+- Differential: tools are explicitly not-comparable to agent-core Python at the current seam: Python uses different ToolOutput/SysOperation/session/backend contracts; Python differential remains non-authoritative and is not claimed
 
 ### P2-02 — Rails and security policy
 
 - Status: `partial`
-- Implementation: `crates/ah-plugins-rails/src/lib.rs`, `crates/ah-plugins-security/src/lib.rs`
-- Verification: `deterministic rail and security tests`
-- Production: dangerous command blocking verified in dev smoke
-- Differential: LLM rails differential pending
+- Implementation: `crates/ah-contracts/src/agent.rs`, `crates/ah-contracts/src/prompt_attachment.rs`, `crates/ah-contracts/src/model_catalog.rs`, `crates/ah-plugins-rails/src/lib.rs`, `crates/ah-plugins-security/src/lib.rs`, `crates/ah-plugins-security/src/tiered_policy.rs`, `crates/ah-plugins-prompt-attachment/src/lib.rs`, `crates/ah-plugins-agent-loop/src/lib.rs`, `crates/ah-plugins-agent-control/src/lib.rs`, `crates/ah-plugins-workflow/src/lib.rs`, `crates/ah-app/src/lib.rs`, `profiles/dev.toml`, `profiles/prod.toml`, `fixtures/goal_manager.json`, `fixtures/prompt_attachment.json`, `fixtures/runtime_model_switching.json`, `differential/run_python.py`, `references/goal_manager.json`, `references/prompt_attachment.json`, `references/runtime_model_switching.json`
+- Verification: `cargo test --offline -p ah-plugins-rails -p ah-plugins-prompt-attachment -p ah-app (109 passed)`, `cargo test --offline -p ah-plugins-agent-control --lib callback_checkpoint_can_request_cancellation (1 passed)`, `cargo test --offline -p ah-plugins-agent-loop --lib cancellation_callback_stops_after_model_checkpoint (1 passed)`, `cargo test --offline -p ah-plugins-workflow --lib llm_node_drains_bounded_stream_before_awaiting_producer (1 passed)`, `cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml (boot and end-to-end smoke passed)`, `AH_ENV_FILE=.env cargo run --offline -p ah-app --bin ah-app -- profiles/prod.toml (full boot, real model chat/stream, agent, workflow and remaining demo paths passed)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core bash differential/run.sh llm_retry tool_retry task_completion task_planning (26 matched; 0 known divergence; 0 mismatch)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py goal_manager + python differential/compare.py goal_manager (2 matched; 0 known divergence; 0 mismatch)`, `AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_goal_manager -- --nocapture (reference generated)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py prompt_attachment + python differential/compare.py prompt_attachment (1 matched; 0 known divergence; 0 mismatch)`, `cargo test --offline -p ah-app --test differential reference_prompt_attachment (1 passed)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py runtime_model_switching + python differential/compare.py runtime_model_switching (2 matched; 0 known divergence; 0 mismatch)`, `AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_runtime_model_switching (1 passed)`
+- Production: prod.toml with the repository .env completed the full deterministic application demo in 249.23 seconds; real OpenAI-compatible chat and stream, agent/tool, workflow, telemetry and symphony paths passed
+- Differential: Python reference agent-core@aeb88cd8 and Rust reference compared successfully: Rails 26 cases matched, GoalManager 2 cases matched, PromptAttachment lifecycle 1 case matched, and runtime model switching 2 cases matched; total 31 matched, 0 known divergence, 0 mismatch. Rust cancellation callback checkpoint has a focused test, but agent-core Python has no equivalent callback-control seam, so no Python differential is claimed
 
 ### P2-03 — Context engine
 
-- Status: `partial`
-- Implementation: `crates/ah-plugins-context/src/lib.rs`, `crates/ah-plugins-context-evolver/src/lib.rs`
-- Verification: `context focused tests`
-- Production: not verified
-- Differential: round/dialogue parity pending
+- Status: `done`
+- Implementation: `crates/ah-plugins-context/src/lib.rs`, `crates/ah-plugins-context/Cargo.toml`, `crates/ah-app/src/lib.rs`, `profiles/prod.toml`
+- Verification: `cargo test --offline -p ah-plugins-context --lib`, `cargo test --offline -p ah-plugins-agent-loop`, `cargo test --offline -p ah-app --test static_composition --test dev_boot`, `cargo test --offline --workspace`
+- Production: dev boot and static dev/prod composition passed; prompt attachments are injected only into the model window
+- Differential: Python round/dialogue differential not run
 
 ### P2-04 — Subagents
 
 - Status: `partial`
-- Implementation: `crates/ah-plugins-subagent/src/lib.rs`, `crates/ah-plugins-subagents/src/lib.rs`
-- Verification: `subagent focused tests`
-- Production: not verified
-- Differential: Python builder and E2E parity pending
+- Implementation: `crates/ah-contracts/src/llm.rs`, `crates/ah-contracts/src/mcp.rs`, `crates/ah-contracts/src/session.rs`, `crates/ah-plugins-openai/src/lib.rs`, `crates/ah-plugins-anthropic/src/lib.rs`, `crates/ah-plugins-session-log/src/lib.rs`, `crates/ah-plugins-agent-loop/src/lib.rs`, `crates/ah-plugins-mcp/src/client.rs`, `crates/ah-plugins-mcp/src/lib.rs`, `crates/ah-plugins-subagents/src/lib.rs`, `crates/ah-app/src/lib.rs`, `profiles/dev.toml`, `profiles/prod.toml`, `docs/config-catalog.md`, `docs/ROADMAP.md`, `docs/capability-map.md`
+- Verification: `cargo test --offline -p ah-plugins-mcp -p ah-plugins-subagents (19 passed)`, `cargo test --offline -p ah-contracts -p ah-plugins-mcp --lib --tests (245 passed; 0 failed)`, `cargo test --offline -p ah-plugins-openai -p ah-plugins-anthropic --lib (284 passed; 0 failed)`, `adb version (36.0.0)`, `adb devices (daemon started; no device attached)`, `Rust fake MCP stdio server initialize/list_tools/call_tool protocol smoke passed`
+- Production: Rust browser proxy and Android ADB paths are implemented and locally protocol-tested; actual Playwright MCP process was attempted with npx but package startup did not reach protocol readiness, and no Android device is attached
+- Differential: Python browser/mobile factory behavior is represented at the Rust protocol boundary; high-level Python-only rails/probes/uiautomator2 lifecycle remain unclaimed as fully differential-verified
 
 ### P2-05 — Multi-agent and messager
 
 - Status: `partial`
-- Implementation: `crates/ah-contracts/src/messager.rs`, `crates/ah-plugins-teams/src/lib.rs`
-- Verification: `in-process messager and team lifecycle tests`
-- Production: cross-process transport pending
-- Differential: 2 seams matched; cross-instance case known divergence
+- Implementation: `crates/ah-contracts/src/messager.rs`, `crates/ah-plugins-messager/src/lib.rs`, `crates/ah-plugins-teams/src/lib.rs`, `crates/ah-plugins-teams/src/sqlite.rs`, `crates/ah-plugins-external/src/client.rs`, `crates/ah-plugins-external-format/src/lib.rs`, `crates/ah-app/src/lib.rs`, `crates/ah-app/tests/differential.rs`, `profiles/dev.toml`, `profiles/prod.toml`, `fixtures/team_inbox_format.json`, `fixtures/team_inbox_fetch.json`, `differential/run_python.py`, `references/team_inbox_format.json`, `references/team_inbox_fetch.json`
+- Verification: `cargo test --offline -p ah-plugins-messager (3 passed; P2P same-process, cross-process, PUB/SUB lifecycle)`, `cargo test --offline -p ah-plugins-teams --lib (17 passed; task state guard, queue, team message, and task-event messager paths)`, `cargo test --offline -p ah-plugins-external --lib watch_ (2 passed; MESSAGE/TASK notification, empty inbox suppression, cancellation unsubscribe)`, `cargo test --offline -p ah-app --test static_composition --test dev_boot (5 passed)`, `TZ=UTC AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py team_inbox_format + python differential/compare.py team_inbox_format (4 matched; 0 known divergence; 0 mismatch)`, `TZ=UTC AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_team_inbox_format (1 passed)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py team_inbox_fetch + python differential/compare.py team_inbox_fetch (3 matched; 0 known divergence; 0 mismatch)`, `AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_team_inbox_fetch (1 passed; fetch mark-read and watch cancellation)`, `cargo fmt --all --check`
+- Production: libzmq-backed ROUTER/DEALER P2P and PUB/SUB transport passes TCP cross-process and broadcast tests; InMemoryTeamRuntime and SqliteTeamRuntime use team-message messager and publish legacy task events when the seam is registered, while ExternalTeamClient watch uses session-scoped MESSAGE/TASK topics plus legacy team-message/task topics and cleans subscriptions on cancellation
+- Differential: Python reference agent-core@aeb88cd8 and Rust external client/format implementations matched inbox fetch mark-read behavior, watch callback cancellation cleanup, ordinary/template/human messages, and task-board filtering in 7 cases; full Python team handoff/task mutation lifecycle remains unverified. Rust team runtimes now reject completion outside in_progress and preserve result payloads
 
 ### P2-06 — Production retrieval and memory backends
 

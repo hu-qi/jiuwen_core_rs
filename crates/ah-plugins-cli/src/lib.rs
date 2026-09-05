@@ -8,16 +8,24 @@
 //! - ⚙ message / 推理(默认隐藏)   —— 系统消息与推理
 //! - ✗ controller 失败信息        —— 控制器错误渲染
 
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::io::{self, Write};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use ah_contracts::cli::{CliChunk, CliRenderer, TodoItem, TodoStatus};
-use ah_contracts::keys::CLI_RENDERER;
+use ah_contracts::keys::{CLI_RENDERER, PERMISSION_APPROVAL};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
+use ah_contracts::security::{
+    PermissionApprovalDecision, PermissionApprovalProvider, PermissionApprovalRequest,
+    SecurityError,
+};
 use ah_contracts::service::ServiceKey;
 use ah_contracts::session::{SessionEvent, SessionEventKind};
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
+use async_trait::async_trait;
 use serde_json::Value;
 
 /// 内部工具名 → 友好显示名(对齐 Python _TOOL_DISPLAY_NAMES)。
@@ -335,7 +343,154 @@ impl CliRenderer for TerminalRenderer {
         (lines, summary)
     }
 }
+fn permission_key(request: &PermissionApprovalRequest) -> String {
+    format!("{}:{}", request.tool_name, request.arguments)
+}
 
+fn redact_permission_args(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, value)| {
+                    let sensitive = ["password", "secret", "token", "api_key", "authorization"]
+                        .iter()
+                        .any(|marker| key.to_ascii_lowercase().contains(marker));
+                    (
+                        key.clone(),
+                        if sensitive {
+                            Value::String("[redacted]".to_string())
+                        } else {
+                            redact_permission_args(value)
+                        },
+                    )
+                })
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.iter().map(redact_permission_args).collect()),
+        other => other.clone(),
+    }
+}
+
+struct TerminalPermissionApproval {
+    path: PathBuf,
+    approved: Arc<Mutex<HashSet<String>>>,
+    prompt: Arc<Mutex<()>>,
+}
+
+impl TerminalPermissionApproval {
+    fn open(path: PathBuf) -> Result<Self, SecurityError> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                SecurityError(format!("create permission UI directory failed: {error}"))
+            })?;
+        }
+        let approved = if path.is_file() {
+            let text = std::fs::read_to_string(&path).map_err(|error| {
+                SecurityError(format!("read permission approvals failed: {error}"))
+            })?;
+            let entries: Vec<String> = serde_json::from_str(&text)
+                .map_err(|error| SecurityError(format!("invalid permission approvals: {error}")))?;
+            entries.into_iter().collect()
+        } else {
+            HashSet::new()
+        };
+        Ok(Self {
+            path,
+            approved: Arc::new(Mutex::new(approved)),
+            prompt: Arc::new(Mutex::new(())),
+        })
+    }
+
+    fn persist(path: &PathBuf, approved: &HashSet<String>) -> Result<(), SecurityError> {
+        let mut entries: Vec<&String> = approved.iter().collect();
+        entries.sort();
+        let text = serde_json::to_string_pretty(&entries).map_err(|error| {
+            SecurityError(format!("serialize permission approvals failed: {error}"))
+        })?;
+        let temporary = path.with_extension("json.tmp");
+        std::fs::write(&temporary, text)
+            .and_then(|_| std::fs::rename(&temporary, path))
+            .map_err(|error| SecurityError(format!("persist permission approval failed: {error}")))
+    }
+}
+
+impl Seam for TerminalPermissionApproval {}
+
+#[async_trait]
+impl PermissionApprovalProvider for TerminalPermissionApproval {
+    async fn request(
+        &self,
+        request: PermissionApprovalRequest,
+    ) -> Result<PermissionApprovalDecision, SecurityError> {
+        let key = permission_key(&request);
+        if self.approved.lock().unwrap().contains(&key) {
+            return Ok(PermissionApprovalDecision::AllowAlways);
+        }
+        let approved = self.approved.clone();
+        let prompt = self.prompt.clone();
+        let path = self.path.clone();
+        tokio::task::spawn_blocking(move || {
+            let _prompt_guard = prompt.lock().unwrap();
+            println!(
+                "\n[permission] tool={} args={}",
+                request.tool_name,
+                redact_permission_args(&request.arguments)
+            );
+            print!("Allow once [y], always [a], deny [n]? ");
+            io::stdout().flush().map_err(|error| {
+                SecurityError(format!("flush permission prompt failed: {error}"))
+            })?;
+            let mut answer = String::new();
+            io::stdin().read_line(&mut answer).map_err(|error| {
+                SecurityError(format!("read permission answer failed: {error}"))
+            })?;
+            match answer.trim().to_ascii_lowercase().as_str() {
+                "y" | "yes" => Ok(PermissionApprovalDecision::AllowOnce),
+                "a" | "always" => {
+                    let mut state = approved.lock().unwrap();
+                    state.insert(key);
+                    TerminalPermissionApproval::persist(&path, &state)?;
+                    Ok(PermissionApprovalDecision::AllowAlways)
+                }
+                _ => Ok(PermissionApprovalDecision::Deny),
+            }
+        })
+        .await
+        .map_err(|error| SecurityError(format!("permission prompt task failed: {error}")))?
+    }
+}
+
+/// DSH/Cordis 风格终端 UI 插件:通过 service seam 提供权限确认,不侵入 agent loop。
+pub struct TerminalPermissionApprovalPlugin {
+    path: PathBuf,
+}
+
+impl TerminalPermissionApprovalPlugin {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+}
+
+impl Plugin for TerminalPermissionApprovalPlugin {
+    fn name(&self) -> &'static str {
+        "ah-plugins-cli-permission-ui"
+    }
+
+    fn provides(&self) -> Vec<ServiceKey> {
+        vec![PERMISSION_APPROVAL]
+    }
+
+    fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
+        let provider = TerminalPermissionApproval::open(self.path.clone()).map_err(|error| {
+            PluginError::Apply {
+                plugin: self.name(),
+                message: error.0,
+            }
+        })?;
+        let provider: Arc<dyn PermissionApprovalProvider> = Arc::new(provider);
+        Ok(vec![ctx.register(PERMISSION_APPROVAL, provider)])
+    }
+}
 /// cli 渲染插件:提供 cli-renderer seam。
 pub struct CliPlugin;
 
@@ -375,6 +530,9 @@ mod tests {
                 &session_dir,
             )),
             StdArc::new(CliPlugin),
+            StdArc::new(TerminalPermissionApprovalPlugin::new(
+                root.join("permissions/approval_overrides.json"),
+            )),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
         (ctx, effects)
@@ -389,6 +547,56 @@ mod tests {
         }
     }
 
+    #[test]
+    fn permission_ui_plugin_registers_provider_service() {
+        let root = std::env::temp_dir().join(format!("ah-cli-permission-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        assert!(
+            ctx.service::<dyn PermissionApprovalProvider>(&PERMISSION_APPROVAL)
+                .is_some()
+        );
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn permission_provider_reuses_persisted_approval_and_redacts_args() {
+        let root =
+            std::env::temp_dir().join(format!("ah-cli-permission-persist-{}", std::process::id()));
+        let path = root.join("approvals.json");
+        let request = PermissionApprovalRequest {
+            tool_name: "run_shell".to_string(),
+            arguments: json!({
+                "command": "git status",
+                "api_token": "do-not-print"
+            }),
+            matched_rule: "shell".to_string(),
+        };
+        let key = permission_key(&request);
+        std::fs::create_dir_all(&root).expect("create test directory");
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&vec![key]).expect("encode approval"),
+        )
+        .expect("write approval");
+
+        let provider = TerminalPermissionApproval::open(path).expect("open provider");
+        assert_eq!(
+            provider.request(request).await.expect("request approval"),
+            PermissionApprovalDecision::AllowAlways
+        );
+        assert_eq!(
+            redact_permission_args(&json!({
+                "command": "git status",
+                "nested": {"access_token": "hidden"}
+            })),
+            json!({
+                "command": "git status",
+                "nested": {"access_token": "[redacted]"}
+            })
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
     #[test]
     fn renderer_is_registered_and_renders_tool_call() {
         let root = std::env::temp_dir().join(format!("ah-cli-reg-{}", std::process::id()));

@@ -13,7 +13,7 @@ use ah_contracts::controller::{Controller, IntentType, Task, TaskStatus};
 use ah_contracts::fs::FsProvider;
 use ah_contracts::keys::{AGENT_LOOP, FS, SESSION_MANAGER, SESSIONS, TOOLS};
 use ah_contracts::session::{SessionEventKind, SessionLog, SessionManager};
-use ah_contracts::tools::ToolRegistry;
+use ah_contracts::tools::{ToolDecision, ToolInvocation, ToolRegistry};
 use ah_contracts::workflow::{WorkflowEngine, WorkflowSpec};
 use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
@@ -625,14 +625,26 @@ async fn rust_contract_tools_fixture() {
     let root = root_for("tools");
     let ctx = Context::new();
     let effects = ctx
-        .mount_all(base_plugins(&root))
+        .mount_all(vec![
+            Arc::new(ah_plugins_mock::MockPlugin),
+            Arc::new(ah_plugins_tools::ToolsPlugin),
+            Arc::new(ah_plugins_sysop::SysopPlugin::new(&root)),
+            Arc::new(ah_plugins_common_tools::CommonToolsPlugin::new(
+                root.join("common"),
+            )),
+            Arc::new(ah_plugins_memory::MemoryPlugin::new(root.join("memory"))),
+            Arc::new(ah_plugins_session_log::SessionLogPlugin::new(
+                root.join("sessions/default.jsonl"),
+                root.join("sessions"),
+            )),
+        ])
         .expect("mount tool plugins");
     let fs = ctx.service::<dyn FsProvider>(&FS).expect("filesystem");
     let registry = ctx
         .service::<dyn ToolRegistry>(&TOOLS)
         .expect("tool registry");
-
     let fixture = load_fixture("tools");
+
     for case in fixture_cases(&fixture) {
         let actual = match case["name"].as_str().expect("case name") {
             "invoke_real_read_file" => {
@@ -649,13 +661,214 @@ async fn rust_contract_tools_fixture() {
                     )
                     .await
                     .expect("read_file invocation");
-                json!({
-                    "ok": true,
-                    "tool": input["tool"],
-                    "contains_expected": output.to_string().contains(
-                        input["content"].as_str().expect("content"),
-                    ),
-                })
+                json!({"ok": true, "tool": input["tool"], "contains_expected": output["content"] == input["content"]})
+            }
+            "edit_replaces_once_and_preserves_unmatched" => {
+                let input = &case["input"];
+                let file = input["file"].as_str().expect("file");
+                fs.write(file, input["content"].as_str().expect("content").as_bytes())
+                    .expect("write edit fixture");
+                let edited = registry.invoke("edit", json!({"path": file, "old_string": input["old"], "new_string": input["new"]})).await.expect("edit invocation");
+                let before = fs.read(file).expect("read edited file");
+                let error = registry
+                    .invoke(
+                        "edit",
+                        json!({"path": file, "old_string": "absent", "new_string": "x"}),
+                    )
+                    .await
+                    .expect_err("missing edit target");
+                json!({"ok": true, "replaced": edited["replaced"], "content": String::from_utf8(before.clone()).expect("utf8"), "missing_error": if error.0.contains("old_string not found") { "edit_not_found" } else { "tool_error" }, "unchanged_after_error": fs.read(file).expect("read unchanged file") == before})
+            }
+            "glob_recurses_with_sorted_paths" => {
+                fs.write("src/nested/b.rs", b"b")
+                    .expect("write nested file");
+                fs.write("src/a.rs", b"a").expect("write source file");
+                fs.write("README.md", b"readme").expect("write readme");
+                let output = registry
+                    .invoke("glob", json!({"pattern": "*.rs"}))
+                    .await
+                    .expect("glob invocation");
+                json!({"matches": output["matches"]})
+            }
+            "grep_supports_regex_literal_and_invalid_pattern" => {
+                let input = &case["input"];
+                fs.write("grep.txt", b"p2alpha 1\nbeta\np2alpha 2\np2alpha [")
+                    .expect("write grep fixture");
+                let regex = registry
+                    .invoke("grep", json!({"pattern": input["regex"]}))
+                    .await
+                    .expect("regex grep");
+                let literal = registry
+                    .invoke(
+                        "grep",
+                        json!({"pattern": input["literal"], "literal": true}),
+                    )
+                    .await
+                    .expect("literal grep");
+                let invalid = registry
+                    .invoke("grep", json!({"pattern": input["invalid"]}))
+                    .await
+                    .expect_err("invalid regex");
+                json!({"regex_count": regex["match_count"], "literal_count": literal["match_count"], "invalid_error": if invalid.0.contains("invalid regex") { "invalid_regex" } else { "tool_error" }})
+            }
+            "todo_is_session_isolated_and_persistent" => {
+                let input = &case["input"];
+                let slash = input["slash_session"].as_str().expect("slash session");
+                let underscore = input["underscore_session"]
+                    .as_str()
+                    .expect("underscore session");
+                let slash_item = registry
+                    .invoke(
+                        "todo",
+                        json!({"action": "add", "session_id": slash, "content": "slash"}),
+                    )
+                    .await
+                    .expect("slash todo");
+                registry.invoke("todo", json!({"action": "update", "session_id": slash, "id": slash_item["id"], "status": "done"})).await.expect("update slash todo");
+                registry
+                    .invoke(
+                        "todo",
+                        json!({"action": "add", "session_id": underscore, "content": "underscore"}),
+                    )
+                    .await
+                    .expect("underscore todo");
+                let slash_list = registry
+                    .invoke("todo", json!({"action": "list", "session_id": slash}))
+                    .await
+                    .expect("list slash todos");
+                let underscore_list = registry
+                    .invoke("todo", json!({"action": "list", "session_id": underscore}))
+                    .await
+                    .expect("list underscore todos");
+                let ctx2 = Context::new();
+                let effects2 = ctx2
+                    .mount_all(vec![
+                        Arc::new(ah_plugins_tools::ToolsPlugin),
+                        Arc::new(ah_plugins_common_tools::CommonToolsPlugin::new(
+                            root.join("common"),
+                        )),
+                    ])
+                    .expect("reopen todo tools");
+                let reopened = ctx2
+                    .service::<dyn ToolRegistry>(&TOOLS)
+                    .expect("reopened tools");
+                let reopened_list = reopened
+                    .invoke("todo", json!({"action": "list", "session_id": slash}))
+                    .await
+                    .expect("reopened slash todos");
+                drop(effects2);
+                json!({"slash_count": slash_list["count"], "slash_content": slash_list["todos"][0]["content"], "slash_status": slash_list["todos"][0]["status"], "underscore_count": underscore_list["count"], "underscore_content": underscore_list["todos"][0]["content"], "reopened_slash_count": reopened_list["count"]})
+            }
+            "todo_rejects_invalid_status" => {
+                let input = &case["input"];
+                let add_error = registry.invoke("todo", json!({"action": "add", "session_id": "todo-invalid", "content": "valid", "status": input["status"]})).await.expect_err("invalid todo status");
+                let valid = registry
+                    .invoke(
+                        "todo",
+                        json!({"action": "add", "session_id": "todo-invalid", "content": "valid"}),
+                    )
+                    .await
+                    .expect("valid todo");
+                let update_error = registry.invoke("todo", json!({"action": "update", "session_id": "todo-invalid", "id": valid["id"], "status": input["status"]})).await.expect_err("invalid todo update status");
+                json!({"add_error": if add_error.0.contains("invalid todo status") { "invalid_todo_status" } else { "tool_error" }, "update_error": if update_error.0.contains("invalid todo status") { "invalid_todo_status" } else { "tool_error" }})
+            }
+            "cron_persists_toggle_and_rejects_invalid_schedule" => {
+                let input = &case["input"];
+                let added = registry.invoke("cron", json!({"action": "add", "command": "echo hi", "schedule": input["schedule"]})).await.expect("cron add");
+                registry
+                    .invoke(
+                        "cron",
+                        json!({"action": "toggle", "id": added["id"], "enabled": false}),
+                    )
+                    .await
+                    .expect("cron toggle");
+                let ctx2 = Context::new();
+                let effects2 = ctx2
+                    .mount_all(vec![
+                        Arc::new(ah_plugins_tools::ToolsPlugin),
+                        Arc::new(ah_plugins_common_tools::CommonToolsPlugin::new(
+                            root.join("common"),
+                        )),
+                    ])
+                    .expect("reopen cron tools");
+                let reopened = ctx2
+                    .service::<dyn ToolRegistry>(&TOOLS)
+                    .expect("reopened cron tools");
+                let listed = reopened
+                    .invoke("cron", json!({"action": "list"}))
+                    .await
+                    .expect("cron list");
+                let next = reopened
+                    .invoke("cron", json!({"action": "next_run", "id": added["id"]}))
+                    .await
+                    .expect("cron next run");
+                drop(effects2);
+                let range_error = registry.invoke("cron", json!({"action": "add", "command": "x", "schedule": input["invalid_range"]})).await.expect_err("invalid cron range");
+                let shape_error = registry.invoke("cron", json!({"action": "add", "command": "x", "schedule": input["invalid_shape"]})).await.expect_err("invalid cron shape");
+                json!({"count": listed["count"], "enabled": listed["jobs"][0]["enabled"], "persisted": listed["jobs"][0]["id"] == added["id"], "next_epoch_present": next["next_epoch"].as_i64().is_some(), "invalid_range_error": if range_error.0.contains("invalid schedule") { "invalid_schedule" } else { "tool_error" }, "invalid_shape_error": if shape_error.0.contains("invalid schedule") { "invalid_schedule" } else { "tool_error" }})
+            }
+            "memory_key_is_contained_and_persistent" => {
+                let input = &case["input"];
+                registry
+                    .invoke(
+                        "remember",
+                        json!({"key": input["key"], "content": input["content"], "tags": ["p2"]}),
+                    )
+                    .await
+                    .expect("remember memory");
+                let ctx2 = Context::new();
+                let effects2 = ctx2
+                    .mount_all(vec![
+                        Arc::new(ah_plugins_tools::ToolsPlugin),
+                        Arc::new(ah_plugins_memory::MemoryPlugin::new(root.join("memory"))),
+                    ])
+                    .expect("reopen memory tools");
+                let reopened = ctx2
+                    .service::<dyn ToolRegistry>(&TOOLS)
+                    .expect("reopened memory tools");
+                let recalled = reopened
+                    .invoke("recall", json!({"query": input["content"]}))
+                    .await
+                    .expect("recall memory");
+                let escaped_file_exists = root.join("escape.json").exists();
+                reopened
+                    .invoke("forget", json!({"key": input["key"]}))
+                    .await
+                    .expect("forget memory");
+                let after_forget = reopened
+                    .invoke("recall", json!({"query": input["content"]}))
+                    .await
+                    .expect("recall after forget");
+                drop(effects2);
+                json!({"stored": true, "recall_count": recalled["count"], "persisted_count": recalled["count"], "escaped_file_exists": escaped_file_exists, "after_forget_count": after_forget["count"]})
+            }
+            "workspace_escape_is_rejected" => {
+                let outside = root
+                    .parent()
+                    .expect("root parent")
+                    .join(format!("p2-outside-{}.txt", std::process::id()));
+                let result = registry.invoke("write_file", json!({"path": format!("../{}", outside.file_name().expect("outside name").to_string_lossy()), "content": "escape"})).await;
+                json!({"ok": result.is_ok(), "error_class": result.err().map(|error| if error.0.contains("escapes workspace root") { "workspace_escape" } else { "tool_error" }), "outside_created": outside.exists()})
+            }
+            "rail_denial_prevents_write" => {
+                let input = &case["input"];
+                let denied = ctx.on_waterfall::<ToolInvocation, ToolDecision, _, _>(
+                    |event, decision, next| async move {
+                        if event.name == "write_file" {
+                            ToolDecision::deny(decision.arguments, "fixture policy")
+                        } else {
+                            next.next(decision).await
+                        }
+                    },
+                );
+                let result = registry
+                    .invoke(
+                        "write_file",
+                        json!({"path": input["file"], "content": "denied"}),
+                    )
+                    .await;
+                drop(denied);
+                json!({"ok": result.is_ok(), "error_class": result.err().map(|error| if error.0.contains("rejected by rail") { "rail_denied" } else { "tool_error" }), "file_created": fs.exists(input["file"].as_str().expect("file"))})
             }
             "unknown_tool_rejected" => {
                 let result = registry
@@ -664,16 +877,7 @@ async fn rust_contract_tools_fixture() {
                         case["input"]["arguments"].clone(),
                     )
                     .await;
-                json!({
-                    "ok": result.is_ok(),
-                    "error_class": result.err().map(|error| {
-                        if error.0.starts_with("tool not found:") {
-                            "tool_not_found"
-                        } else {
-                            "tool_error"
-                        }
-                    }),
-                })
+                json!({"ok": result.is_ok(), "error_class": result.err().map(|error| if error.0.starts_with("tool not found:") { "tool_not_found" } else { "tool_error" })})
             }
             other => panic!("unknown tools fixture case: {other}"),
         };
@@ -683,7 +887,6 @@ async fn rust_contract_tools_fixture() {
             case["name"]
         );
     }
-
     drop(effects);
     let _ = std::fs::remove_dir_all(root);
 }

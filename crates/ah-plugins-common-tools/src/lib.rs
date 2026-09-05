@@ -8,9 +8,6 @@
 //!   确定性 `schedule` 解析(cron 五字段子集)与 `next_run_after` 计算
 //!   (调度执行循环属运行时组件,不在本工具层,后续接入)。
 
-use std::path::PathBuf;
-use std::sync::Arc;
-
 use ah_contracts::keys::TOOLS;
 use ah_contracts::prelude::Effect;
 use ah_contracts::service::ServiceKey;
@@ -20,6 +17,9 @@ use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::fmt::Write as _;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // todo
@@ -45,25 +45,18 @@ impl TodoStore {
     }
 
     fn path(&self, session_id: &str) -> PathBuf {
-        let safe: String = session_id
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect();
+        let safe = encode_component(session_id);
         self.dir.join(format!("{safe}.json"))
     }
 
-    fn load(&self, session_id: &str) -> Vec<TodoItem> {
+    fn load(&self, session_id: &str) -> Result<Vec<TodoItem>, ToolError> {
         let path = self.path(session_id);
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|text| serde_json::from_str::<Vec<TodoItem>>(&text).ok())
-            .unwrap_or_default()
+        match std::fs::read_to_string(path) {
+            Ok(text) => serde_json::from_str::<Vec<TodoItem>>(&text)
+                .map_err(|error| ToolError(format!("todo parse failed: {error}"))),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(error) => Err(ToolError(format!("todo read failed: {error}"))),
+        }
     }
 
     fn save(&self, session_id: &str, items: &[TodoItem]) -> Result<(), ToolError> {
@@ -73,6 +66,50 @@ impl TodoStore {
         let text = serde_json::to_string_pretty(items)
             .map_err(|e| ToolError(format!("todo serialize failed: {e}")))?;
         std::fs::write(path, text).map_err(|e| ToolError(format!("todo write failed: {e}")))
+    }
+}
+
+fn encode_component(value: &str) -> String {
+    if !value.is_empty()
+        && !value.starts_with("x-")
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return value.to_string();
+    }
+    let mut encoded = String::from("x-");
+    for byte in value.as_bytes() {
+        let _ = write!(encoded, "{byte:02x}");
+    }
+    encoded
+}
+
+fn todo_session_id(arguments: &Value) -> Result<&str, ToolError> {
+    match arguments.get("session_id") {
+        None => Ok("default"),
+        Some(value) => value
+            .as_str()
+            .filter(|session_id| !session_id.trim().is_empty())
+            .ok_or_else(|| ToolError("session_id must be a non-empty string".to_string())),
+    }
+}
+
+fn todo_status(arguments: &Value) -> Result<Option<&str>, ToolError> {
+    match arguments.get("status") {
+        None => Ok(None),
+        Some(value) => value
+            .as_str()
+            .map(Some)
+            .ok_or_else(|| ToolError("status must be a string".to_string())),
+    }
+}
+
+fn validate_todo_status(status: &str) -> Result<(), ToolError> {
+    if matches!(status, "pending" | "in_progress" | "done") {
+        Ok(())
+    } else {
+        Err(ToolError(format!("invalid todo status: {status}")))
     }
 }
 
@@ -127,11 +164,8 @@ impl Tool for TodoTool {
             .get("action")
             .and_then(Value::as_str)
             .ok_or_else(|| ToolError("missing string field action".to_string()))?;
-        let session_id = arguments
-            .get("session_id")
-            .and_then(Value::as_str)
-            .unwrap_or("default");
-        let mut items = self.store.load(session_id);
+        let session_id = todo_session_id(&arguments)?;
+        let mut items = self.store.load(session_id)?;
         match action {
             "add" => {
                 let content = arguments
@@ -141,15 +175,13 @@ impl Tool for TodoTool {
                     .ok_or_else(|| {
                         ToolError("missing non-empty string field content".to_string())
                     })?;
+                let status = todo_status(&arguments)?.unwrap_or("pending");
+                validate_todo_status(status)?;
                 let id = Self::next_id(&items);
                 let item = TodoItem {
                     id: id.clone(),
                     content: content.to_string(),
-                    status: arguments
-                        .get("status")
-                        .and_then(Value::as_str)
-                        .unwrap_or("pending")
-                        .to_string(),
+                    status: status.to_string(),
                 };
                 items.push(item);
                 self.store.save(session_id, &items)?;
@@ -167,7 +199,8 @@ impl Tool for TodoTool {
                 if let Some(content) = arguments.get("content").and_then(Value::as_str) {
                     item.content = content.to_string();
                 }
-                if let Some(status) = arguments.get("status").and_then(Value::as_str) {
+                if let Some(status) = todo_status(&arguments)? {
+                    validate_todo_status(status)?;
                     item.status = status.to_string();
                 }
                 self.store.save(session_id, &items)?;
@@ -299,7 +332,7 @@ impl Schedule {
                 fields.len()
             ));
         }
-        let validate = |spec: &str, max: u32, name: &str| -> Result<(), String> {
+        let validate = |spec: &str, min: u32, max: u32, name: &str| -> Result<(), String> {
             if spec == "*" {
                 return Ok(());
             }
@@ -315,16 +348,16 @@ impl Schedule {
             let value: u32 = spec
                 .parse()
                 .map_err(|_| format!("invalid {name} field: {spec}"))?;
-            if value > max {
+            if value < min || value > max {
                 return Err(format!("{name} value out of range: {spec}"));
             }
             Ok(())
         };
-        validate(fields[0], 59, "minute")?;
-        validate(fields[1], 23, "hour")?;
-        validate(fields[2], 31, "day")?;
-        validate(fields[3], 12, "month")?;
-        validate(fields[4], 6, "weekday")?;
+        validate(fields[0], 0, 59, "minute")?;
+        validate(fields[1], 0, 23, "hour")?;
+        validate(fields[2], 1, 31, "day")?;
+        validate(fields[3], 1, 12, "month")?;
+        validate(fields[4], 0, 6, "weekday")?;
         Ok(Self {
             minute: fields[0].to_string(),
             hour: fields[1].to_string(),
@@ -380,11 +413,13 @@ impl CronStore {
         }
     }
 
-    fn load(&self) -> Vec<CronJob> {
-        std::fs::read_to_string(&self.path)
-            .ok()
-            .and_then(|text| serde_json::from_str::<Vec<CronJob>>(&text).ok())
-            .unwrap_or_default()
+    fn load(&self) -> Result<Vec<CronJob>, ToolError> {
+        match std::fs::read_to_string(&self.path) {
+            Ok(text) => serde_json::from_str::<Vec<CronJob>>(&text)
+                .map_err(|error| ToolError(format!("cron parse failed: {error}"))),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(error) => Err(ToolError(format!("cron read failed: {error}"))),
+        }
     }
 
     fn save(&self, jobs: &[CronJob]) -> Result<(), ToolError> {
@@ -449,7 +484,7 @@ impl Tool for CronTool {
             .get("action")
             .and_then(Value::as_str)
             .ok_or_else(|| ToolError("missing string field action".to_string()))?;
-        let mut jobs = self.store.load();
+        let mut jobs = self.store.load()?;
         match action {
             "add" => {
                 let command = arguments
@@ -742,5 +777,29 @@ mod tests {
             .expect("list");
         assert_eq!(relisted["jobs"][0]["enabled"], false);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+    #[tokio::test]
+    async fn corrupted_persistent_state_returns_explicit_errors() {
+        let root = std::env::temp_dir().join(format!("ah-tools-corrupt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("todos")).expect("todo dir");
+        std::fs::write(root.join("todos/default.json"), b"not json").expect("corrupt todo");
+        std::fs::create_dir_all(root.join("cron")).expect("cron dir");
+        std::fs::write(root.join("cron/jobs.json"), b"not json").expect("corrupt cron");
+
+        let todo = TodoTool::new(root.join("todos"));
+        let todo_error = todo
+            .invoke(json!({"action": "list"}))
+            .await
+            .expect_err("corrupt todo must fail");
+        assert!(todo_error.0.contains("todo parse failed"));
+
+        let cron = CronTool::new(root.join("cron"));
+        let cron_error = cron
+            .invoke(json!({"action": "list"}))
+            .await
+            .expect_err("corrupt cron must fail");
+        assert!(cron_error.0.contains("cron parse failed"));
+        let _ = std::fs::remove_dir_all(root);
     }
 }

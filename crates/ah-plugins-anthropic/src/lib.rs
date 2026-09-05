@@ -81,6 +81,11 @@ enum WireBlock {
         kind: String,
         text: String,
     },
+    Image {
+        #[serde(rename = "type")]
+        kind: String,
+        source: WireImageSource,
+    },
     ToolUse {
         #[serde(rename = "type")]
         kind: String,
@@ -96,6 +101,14 @@ enum WireBlock {
     },
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct WireImageSource {
+    #[serde(rename = "type")]
+    kind: String,
+    media_type: String,
+    data: String,
+}
+
 #[derive(Serialize)]
 struct WireTool {
     name: String,
@@ -107,12 +120,34 @@ struct WireTool {
 struct WireResponse {
     content: Vec<WireBlock>,
 }
-
 fn text_block(text: &str) -> WireBlock {
     WireBlock::Text {
         kind: "text".to_string(),
         text: text.to_string(),
     }
+}
+
+fn image_block(image: &ah_contracts::llm::ChatImage) -> WireBlock {
+    WireBlock::Image {
+        kind: "image".to_string(),
+        source: WireImageSource {
+            kind: "base64".to_string(),
+            media_type: image.mime_type.clone(),
+            data: image.base64_data().to_string(),
+        },
+    }
+}
+
+fn content_blocks(message: &ChatMessage, include_empty_text: bool) -> Vec<WireBlock> {
+    let mut blocks = Vec::new();
+    if !message.content.is_empty() || (message.images.is_empty() && include_empty_text) {
+        blocks.push(text_block(&message.content));
+    }
+    blocks.extend(message.images.iter().map(image_block));
+    if blocks.is_empty() {
+        blocks.push(text_block(""));
+    }
+    blocks
 }
 
 /// 把 OJ ChatMessage 列表转成 (system_blocks, anthropic_messages)。
@@ -139,21 +174,16 @@ fn convert_messages(messages: &[ChatMessage]) -> (Option<Vec<WireBlock>>, Vec<Wi
             }
             ChatRole::Tool => {
                 let id = message.tool_call_id.clone().unwrap_or_default();
-                let content = if message.content.is_empty() {
-                    vec![text_block("")]
-                } else {
-                    vec![text_block(&message.content)]
-                };
                 pending_tool_results.push(WireBlock::ToolResult {
                     kind: "tool_result".to_string(),
                     tool_use_id: id,
-                    content,
+                    content: content_blocks(message, true),
                 });
             }
             ChatRole::Assistant => {
                 flush_tool_results(&mut out, &mut pending_tool_results);
                 if let Some(calls) = &message.tool_calls {
-                    let blocks: Vec<WireBlock> = calls
+                    let mut blocks: Vec<WireBlock> = calls
                         .iter()
                         .map(|call| WireBlock::ToolUse {
                             kind: "tool_use".to_string(),
@@ -162,37 +192,26 @@ fn convert_messages(messages: &[ChatMessage]) -> (Option<Vec<WireBlock>>, Vec<Wi
                             input: call.arguments.clone(),
                         })
                         .collect();
-                    let content = if blocks.is_empty() {
-                        vec![text_block("")]
-                    } else {
-                        blocks
-                    };
-                    out.push(WireMessage {
-                        role: "assistant".to_string(),
-                        content,
-                    });
-                } else {
-                    let blocks = if message.content.is_empty() {
-                        vec![text_block("")]
-                    } else {
-                        vec![text_block(&message.content)]
-                    };
+                    blocks.extend(message.images.iter().map(image_block));
+                    if blocks.is_empty() {
+                        blocks.push(text_block(""));
+                    }
                     out.push(WireMessage {
                         role: "assistant".to_string(),
                         content: blocks,
+                    });
+                } else {
+                    out.push(WireMessage {
+                        role: "assistant".to_string(),
+                        content: content_blocks(message, true),
                     });
                 }
             }
             ChatRole::User => {
                 flush_tool_results(&mut out, &mut pending_tool_results);
-                let blocks = if message.content.is_empty() {
-                    vec![text_block("")]
-                } else {
-                    vec![text_block(&message.content)]
-                };
                 out.push(WireMessage {
                     role: "user".to_string(),
-                    content: blocks,
+                    content: content_blocks(message, true),
                 });
             }
         }
@@ -296,6 +315,11 @@ impl ModelProvider for AnthropicModelProvider {
                         content.push('\n');
                     }
                     content.push_str(&text);
+                }
+                WireBlock::Image { .. } => {
+                    return Err(ModelError(
+                        "unsupported image block in Anthropic model response".to_string(),
+                    ));
                 }
                 WireBlock::ToolUse {
                     id, name, input, ..
@@ -537,5 +561,19 @@ mod tests {
             matches!(&out[2].content[0], WireBlock::ToolResult { tool_use_id, .. } if tool_use_id == "c1")
         );
         assert_eq!(out[3].role, "user", "q2 after tool result flush");
+    }
+
+    #[test]
+    fn convert_messages_serializes_user_image_block() {
+        let messages = vec![ChatMessage::user_with_image(
+            "inspect",
+            ah_contracts::llm::ChatImage::new("image/png", "AAAA"),
+        )];
+        let (_, out) = convert_messages(&messages);
+        assert!(matches!(
+            &out[0].content[1],
+            WireBlock::Image { source, .. }
+                if source.data == "AAAA" && source.media_type == "image/png"
+        ));
     }
 }

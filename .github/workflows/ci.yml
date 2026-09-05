@@ -24,8 +24,38 @@ jobs:
           git diff --exit-code -- docs/generated/audit-summary.md
       - name: Mock gate (prod profile must not contain ah-plugins-mock)
         run: cargo test -p ah-app --test mock_gate
+      - name: Rust tools contract fixture (P2-01)
+        run: cargo test -p ah-app --test rust_contract rust_contract_tools_fixture
+      - name: Tool path containment and symlink guard (P2-01)
+        run: |
+          cargo test -p ah-plugins-sysop rejects_writing_through_symlinked_file
+          cargo test -p ah-plugins-rails path_guard_blocks_escapes_but_allows_safe
       - name: Test
         run: cargo test --workspace
+
+
+  rails-differential:
+    name: LLM Rails Python/Rust differential
+    runs-on: ubuntu-latest
+    env:
+      AGENT_CORE_REF: aeb88cd85cc43197a00615818f124e85cca053da
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python differential dependency
+        run: python -m pip install "pydantic>=2,<3"
+      - name: Checkout pinned agent-core reference
+        run: |
+          git init "$RUNNER_TEMP/agent-core"
+          git -C "$RUNNER_TEMP/agent-core" remote add origin https://atomgit.com/openJiuwen/agent-core.git
+          git -C "$RUNNER_TEMP/agent-core" fetch --depth 1 origin "$AGENT_CORE_REF"
+          git -C "$RUNNER_TEMP/agent-core" checkout --detach FETCH_HEAD
+      - name: Run normalized LLM Rails differential
+        env:
+          AGENT_CORE_ROOT: ${{ runner.temp }}/agent-core
+        run: bash differential/run.sh llm_retry tool_retry task_completion task_planning
 
   coverage:
     name: coverage-gate

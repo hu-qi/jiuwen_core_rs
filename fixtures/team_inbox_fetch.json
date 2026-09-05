@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "name": "marks_direct_and_broadcast_read",
+      "mark_read": true,
+      "direct_ids": ["m1"],
+      "broadcast_ids": ["m2"],
+      "task_ids": ["t1", "t2"]
+    },
+    {
+      "name": "peek_does_not_mark_read",
+      "mark_read": false,
+      "direct_ids": ["m3"],
+      "broadcast_ids": [],
+      "task_ids": []
+    },
+    {
+      "name": "watch_cancellation",
+      "kind": "watch",
+      "direct_ids": ["watch-1"],
+      "task_ids": [],
+      "message_topic": "session:s1:team:t1:message"
+    }
+  ]
+}

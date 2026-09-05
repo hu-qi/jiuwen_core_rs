@@ -93,6 +93,7 @@ def shim_logging() -> None:
     logger = logging.getLogger("openjiuwen.team.differential")
     logger.addHandler(logging.NullHandler())
     leaf.team_logger = logger
+    leaf.logger = logger
     sys.modules["openjiuwen.core.common.logging"] = leaf
     _LOADED.add("openjiuwen.core.common.logging")
 
@@ -250,7 +251,803 @@ def run_messager_inprocess() -> dict:
     return asyncio.run(run_messager_inprocess_async())
 
 
+
+def _install_module(name: str, **attributes) -> types.ModuleType:
+    """Install a minimal host dependency without replacing the Rail source."""
+    parts = name.split(".")
+    for index in range(1, len(parts)):
+        package = ".".join(parts[:index])
+        if package not in sys.modules:
+            module = types.ModuleType(package)
+            module.__path__ = []
+            sys.modules[package] = module
+    module = types.ModuleType(name)
+    for key, value in attributes.items():
+        setattr(module, key, value)
+    sys.modules[name] = module
+    return module
+
+
+def shim_llm_retry_dependencies() -> None:
+    """Provide only import-time host types needed by the real LLMRetryRail."""
+    _install_module(
+        "openjiuwen.core.common.exception.codes",
+        StatusCode=types.SimpleNamespace(MODEL_CALL_FAILED="MODEL_CALL_FAILED"),
+    )
+    _install_module(
+        "openjiuwen.core.common.exception.errors",
+        build_error=lambda _status, error_msg: RuntimeError(error_msg),
+    )
+    _install_module(
+        "openjiuwen.core.single_agent.rail.base",
+        AgentCallbackContext=object,
+    )
+    _install_module(
+        "openjiuwen.harness.rails.base",
+        DeepAgentRail=type("DeepAgentRail", (), {"__init__": lambda self: None}),
+    )
+
+
+def run_llm_retry() -> dict:
+    """Drive the real Python LLMRetryRail's deterministic suffix detector."""
+    shim_llm_retry_dependencies()
+    rail_module = load_module_file("openjiuwen.harness.rails.llm_retry_rail")
+    fixture = load_fixture("llm_retry")
+    rail = rail_module.LLMRetryRail(backoff_seconds=fixture["backoff_seconds"])
+    cases_out = []
+    for case in fixture["cases"]:
+        text = case["text"] if "text" in case else case["unit"] * case["count"]
+        detected = rail._detect_repeated_suffix(text)
+        cases_out.append(
+            {
+                "name": case["name"],
+                "detected": (
+                    {"unit": detected[0], "count": detected[1]}
+                    if detected is not None
+                    else None
+                ),
+            }
+        )
+    for item in fixture["error_markers"]:
+        message = RuntimeError(item["message"])
+        cases_out.append(
+            {
+                "name": item["name"],
+                "repeat": rail._is_repeat_exception(message),
+                "timeout": rail._is_stream_timeout_exception(message),
+            }
+        )
+    cases_out.append(
+        {
+            "name": "backoff_schedule",
+            "backoff_ms": [
+                round(rail.backoff_delay(index) * 1000)
+                for index in fixture["backoff_indexes"]
+            ],
+        }
+    )
+    return {"seam": "llm_retry", "cases": cases_out}
+
+
+def shim_tool_resilience_dependencies() -> None:
+    """Provide import-time host types needed by the real tool resilience Rail."""
+    _install_module(
+        "openjiuwen.core.foundation.tool.schema",
+        ToolTimeoutResult=type("ToolTimeoutResult", (), {}),
+    )
+    _install_module(
+        "openjiuwen.core.single_agent.ability_manager",
+        AbilityExecutionError=type("AbilityExecutionError", (Exception,), {}),
+    )
+    _install_module(
+        "openjiuwen.core.single_agent.rail.base",
+        AgentCallbackContext=object,
+        ToolCallInputs=object,
+    )
+    _install_module(
+        "openjiuwen.harness.rails.base",
+        DeepAgentRail=type("DeepAgentRail", (), {"__init__": lambda self: None}),
+    )
+
+
+def run_tool_retry() -> dict:
+    """Drive the real Python ToolCallResilienceRail classifier."""
+    shim_tool_resilience_dependencies()
+    rail_module = load_module_file(
+        "openjiuwen.harness.rails.tool_call_resilience_rail"
+    )
+    rail = rail_module.ToolCallResilienceRail()
+    fixture = load_fixture("tool_retry")
+    exception_types = {
+        "TimeoutError": TimeoutError,
+        "ConnectionResetError": ConnectionResetError,
+        "BrokenPipeError": BrokenPipeError,
+        "ConnectionAbortedError": ConnectionAbortedError,
+        "ValueError": ValueError,
+        "PermissionError": PermissionError,
+    }
+    cases = []
+    for item in fixture["exceptions"]:
+        exception_type = exception_types.get(item["type"], RuntimeError)
+        cases.append(
+            {
+                "name": item["name"],
+                "retryable": rail._is_retryable_exception(
+                    exception_type(item["message"])
+                ),
+            }
+        )
+    return {"seam": "tool_retry", "cases": cases}
+
+
+
+def shim_task_completion_prompt_dependencies() -> None:
+    """Provide host objects while executing the real TaskCompletionRail."""
+    class PromptSection:
+        def __init__(self, *, name, content, priority):
+            self.name = name
+            self.content = content
+            self.priority = priority
+
+    _install_module(
+        "openjiuwen.core.foundation.tool",
+        Tool=type("Tool", (), {}),
+    )
+    _install_module(
+        "openjiuwen.core.single_agent.prompts.builder",
+        PromptSection=PromptSection,
+    )
+    sections_module = _install_module(
+        "openjiuwen.harness.prompts.sections",
+        SectionName=types.SimpleNamespace(COMPLETION_SIGNAL="completion_signal"),
+    )
+    sections_module.__path__ = []
+    _install_module(
+        "openjiuwen.core.single_agent.rail.base",
+        AgentCallbackContext=object,
+        ToolCallInputs=object,
+    )
+    _install_module(
+        "openjiuwen.harness.rails.base",
+        DeepAgentRail=type("DeepAgentRail", (), {"__init__": lambda self: None}),
+    )
+
+
+def run_task_completion() -> dict:
+    """Drive the real Python TaskCompletionRail prompt hook."""
+    shim_task_completion_prompt_dependencies()
+    load_module_file("openjiuwen.harness.prompts.sections.task_completion")
+    load_module_file("openjiuwen.harness.schema.stop_condition")
+    module = load_module_file("openjiuwen.harness.rails.task_completion_rail")
+    fixture = load_fixture("task_completion")
+    cases = []
+    for case in fixture["cases"]:
+        sections = []
+
+        class RecordingPromptBuilder:
+            language = case["language"]
+
+            def add_section(self, section):
+                sections.append(section)
+
+        rail = module.TaskCompletionRail(completion_promise=case["promise"])
+        agent = types.SimpleNamespace(system_prompt_builder=RecordingPromptBuilder())
+        context = types.SimpleNamespace(agent=agent)
+        asyncio.run(rail.before_model_call(context))
+        section = sections[0]
+        cases.append(
+            {
+                "name": case["name"],
+                "content": section.content[case["language"]],
+                "priority": section.priority,
+            }
+        )
+    return {"seam": "task_completion", "cases": cases}
+
+
+
+def shim_task_planning_dependencies() -> None:
+    """Provide host symbols while executing the real TaskPlanningRail."""
+    class PromptSection:
+        def __init__(self, *, name, content, priority):
+            self.name = name
+            self.content = content
+            self.priority = priority
+
+    prompts = _install_module(
+        "openjiuwen.harness.prompts", PromptSection=PromptSection
+    )
+    prompts.__path__ = []
+    sections = _install_module(
+        "openjiuwen.harness.prompts.sections",
+        SectionName=types.SimpleNamespace(TODO="todo"),
+    )
+    sections.__path__ = []
+    class Model:
+        def __init__(self, model_id):
+            self.model_client_config = types.SimpleNamespace(client_id=model_id)
+            self.model_config = types.SimpleNamespace(model_name=model_id)
+
+        def __hash__(self):
+            return id(self)
+
+        def __eq__(self, other):
+            return self is other
+
+
+
+    llm = _install_module("openjiuwen.core.foundation.llm", Model=Model)
+    llm.__path__ = []
+    _install_module("openjiuwen.core.foundation.llm.model", Model=Model)
+    _install_module("openjiuwen.core.foundation.tool", ToolCard=object)
+    _install_module(
+        "openjiuwen.core.runner",
+        Runner=types.SimpleNamespace(resource_mgr=types.SimpleNamespace()),
+    )
+    class TodoStatus:
+        IN_PROGRESS = "in_progress"
+
+    _install_module(
+        "openjiuwen.harness.schema.task",
+        ModelUsageRecord=type("ModelUsageRecord", (), {}),
+        TodoItem=type("TodoItem", (), {}),
+        TodoStatus=TodoStatus,
+    )
+    _install_module(
+        "openjiuwen.harness.tools",
+        TodoTool=type("TodoTool", (), {}),
+        TodoCreateTool=type("TodoCreateTool", (), {}),
+        TodoListTool=type("TodoListTool", (), {}),
+        TodoGetTool=type("TodoGetTool", (), {}),
+        TodoModifyTool=type("TodoModifyTool", (), {}),
+    )
+    _install_module(
+        "openjiuwen.harness.workspace.workspace",
+        WorkspaceNode=types.SimpleNamespace(TODO="todo"),
+    )
+    _install_module(
+        "openjiuwen.harness.rails.base",
+        DeepAgentRail=type("DeepAgentRail", (), {"__init__": lambda self: None}),
+    )
+    _install_module(
+        "openjiuwen.core.single_agent.rail.base",
+        AgentCallbackContext=object,
+        ToolCallInputs=object,
+    )
+def run_runtime_model_switching() -> dict:
+    """Drive the real Python TaskPlanningRail model switch hook."""
+    shim_task_planning_dependencies()
+    load_module_file("openjiuwen.harness.prompts.sections.todo")
+    module = load_module_file("openjiuwen.harness.rails.task_planning_rail")
+    fixture = load_fixture("runtime_model_switching")
+    model_class = sys.modules["openjiuwen.core.foundation.llm"].Model
+    todo_status = sys.modules["openjiuwen.harness.schema.task"].TodoStatus
+    todo_tool_class = sys.modules["openjiuwen.harness.tools"].TodoTool
+    cases = []
+    for case in fixture["cases"]:
+        class TodoTool(todo_tool_class):
+            async def load_todos(self, _session_id):
+                todo = types.SimpleNamespace(
+                    status=todo_status.IN_PROGRESS,
+                    selected_model_id=case["selected_model_id"],
+                )
+                return [todo]
+
+        class Agent:
+            def __init__(self, llm):
+                self._llm = llm
+                self.config = types.SimpleNamespace(model_name=llm.model_config.model_name)
+
+            def set_llm(self, llm):
+                self._llm = llm
+
+        default = model_class(case["default_model"])
+        models = {
+            model_class(model_id): model_id
+            for model_id in case["models"]
+        }
+        rail = module.TaskPlanningRail(model_selection=models)
+        rail.system_prompt_builder = types.SimpleNamespace(
+            language="en", add_section=lambda _section: None
+        )
+        rail.tools = [TodoTool()]
+        agent = Agent(default)
+        context = types.SimpleNamespace(
+            agent=agent,
+            session=types.SimpleNamespace(get_session_id=lambda: "model-switch"),
+        )
+        asyncio.run(rail.before_model_call(context))
+        cases.append(
+            {
+                "name": case["name"],
+                "selected_model": agent._llm.model_client_config.client_id,
+                "config_model": agent.config.model_name,
+            }
+        )
+    return {"seam": "runtime_model_switching", "cases": cases}
+
+
+
+
+def run_task_planning() -> dict:
+    """Drive the real Python TaskPlanningRail prompt hook."""
+    shim_task_planning_dependencies()
+    load_module_file("openjiuwen.harness.prompts.sections.todo")
+    module = load_module_file("openjiuwen.harness.rails.task_planning_rail")
+    fixture = load_fixture("task_planning")
+    cases = []
+    for case in fixture["cases"]:
+        sections = []
+
+        class RecordingPromptBuilder:
+            language = case["language"]
+
+            def add_section(self, section):
+                sections.append(section)
+
+        model_class = sys.modules["openjiuwen.core.foundation.llm"].Model
+        model_selection = {
+            model_class(item["id"]): item["description"]
+            for item in case["models"]
+        }
+        rail = module.TaskPlanningRail(model_selection=model_selection)
+        rail.system_prompt_builder = RecordingPromptBuilder()
+        asyncio.run(
+            rail.before_model_call(
+                types.SimpleNamespace(agent=None, session=None)
+            )
+        )
+        section = sections[0]
+        cases.append(
+            {
+                "name": case["name"],
+                "content": section.content[case["language"]],
+                "priority": section.priority,
+            }
+        )
+    return {"seam": "task_planning", "cases": cases}
+
+
+def run_team_inbox_fetch() -> dict:
+    """Drive real Python ExternalTeamClient fetch and watch paths."""
+    class Topic:
+        def __init__(self, value):
+            self.value = value
+
+        def build(self, session_id, team_name):
+            return f"session:{session_id}:team:{team_name}:{self.value}"
+
+    class TeamTopic:
+        MESSAGE = Topic("message")
+        TASK = Topic("task")
+
+    _install_module("openjiuwen.agent_teams.context", set_session_id=lambda _sid: None, reset_session_id=lambda _token: None)
+    _install_module("openjiuwen.agent_teams.external.descriptor", TeamJoinDescriptor=object)
+    _install_module("openjiuwen.agent_teams.external.format", render_messages=lambda *args, **kwargs: "", render_task_board=lambda *args, **kwargs: "")
+    _install_module("openjiuwen.agent_teams.i18n", set_language=lambda _language: None)
+    _install_module("openjiuwen.agent_teams.message_template", expand_message=lambda *args, **kwargs: None)
+    _install_module("openjiuwen.agent_teams.messager.base", Messager=object, create_messager=lambda _config: None)
+    _install_module("openjiuwen.agent_teams.schema.events", EventMessage=object, TeamTopic=TeamTopic)
+    _install_module("openjiuwen.agent_teams.schema.task", TaskCreateResult=object, TaskDetail=object, TaskOpResult=object)
+    _install_module("openjiuwen.agent_teams.messager.messager", Messager=object)
+    _install_module("openjiuwen.agent_teams.spawn.shared_resources", get_shared_db=lambda _config: None)
+    _install_module("openjiuwen.agent_teams.tools.database.engine", get_current_time=lambda: 0)
+    _install_module("openjiuwen.agent_teams.tools.models", TeamMember=object, TeamMessageBase=object, TeamTaskBase=object)
+    _install_module("openjiuwen.agent_teams.tools.message_manager", TeamMessageManager=object)
+    _install_module("openjiuwen.agent_teams.tools.task_manager", TeamTaskManager=object)
+    _install_module("openjiuwen.core.common.exception.codes", StatusCode=types.SimpleNamespace(AGENT_TEAM_STATE_INVALID="invalid"))
+    _install_module("openjiuwen.core.common.exception.errors", raise_error=lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("not connected")))
+    _install_module("openjiuwen.core.common.logging", team_logger=logging.getLogger("team-fetch"))
+    module = load_module_file("openjiuwen.agent_teams.external.client")
+    fixture = load_fixture("team_inbox_fetch")
+    cases = []
+    for case in fixture["cases"]:
+        if case.get("kind") == "watch":
+            continue
+        class Messages:
+            def __init__(self):
+                self.marked = []
+
+            async def get_messages(self, **_kwargs):
+                return [types.SimpleNamespace(message_id=mid) for mid in case["direct_ids"]]
+
+            async def get_broadcast_messages(self, **_kwargs):
+                return [types.SimpleNamespace(message_id=mid) for mid in case["broadcast_ids"]]
+
+            async def mark_message_read(self, message_id, _member_name):
+                self.marked.append(message_id)
+
+        class Tasks:
+            async def list_tasks(self, **_kwargs):
+                return [types.SimpleNamespace(task_id=task_id) for task_id in case["task_ids"]]
+
+        client = module.ExternalTeamClient.__new__(module.ExternalTeamClient)
+        client._descriptor = types.SimpleNamespace(member_name="dev-1")
+        messages = Messages()
+        client._messages = messages
+        client._tasks = Tasks()
+        view = asyncio.run(client.fetch_inbox(mark_read=case["mark_read"]))
+        cases.append({
+            "name": case["name"],
+            "message_ids": [message.message_id for message in view.messages],
+            "task_ids": [task.task_id for task in view.tasks],
+            "marked_ids": messages.marked,
+        })
+
+    watch_case = next(case for case in fixture["cases"] if case.get("kind") == "watch")
+
+    class WatchMessages:
+        def __init__(self):
+            self.marked = []
+
+        async def get_messages(self, **_kwargs):
+            return [types.SimpleNamespace(message_id=mid) for mid in watch_case["direct_ids"]]
+
+        async def get_broadcast_messages(self, **_kwargs):
+            return []
+
+        async def mark_message_read(self, message_id, _member_name):
+            self.marked.append(message_id)
+
+    class WatchTasks:
+        async def list_tasks(self, **_kwargs):
+            return [types.SimpleNamespace(task_id=task_id) for task_id in watch_case["task_ids"]]
+
+    class Messager:
+        def __init__(self):
+            self.handlers = {}
+            self.subscribed = []
+            self.unsubscribed = []
+
+        async def subscribe(self, topic, handler):
+            self.subscribed.append(topic)
+            self.handlers[topic] = handler
+
+        async def unsubscribe(self, topic):
+            self.unsubscribed.append(topic)
+            self.handlers.pop(topic, None)
+
+    async def exercise_watch():
+        client = module.ExternalTeamClient.__new__(module.ExternalTeamClient)
+        client._descriptor = types.SimpleNamespace(session_id="s1", team_name="t1", member_name="dev-1")
+        messages = WatchMessages()
+        messager = Messager()
+        client._messages = messages
+        client._tasks = WatchTasks()
+        client._messager = messager
+        observed = []
+
+        async def observer(view):
+            observed.append(view)
+
+        task = asyncio.create_task(client.watch(observer))
+        for _ in range(10):
+            if watch_case["message_topic"] in messager.handlers:
+                break
+            await asyncio.sleep(0)
+        await messager.handlers[watch_case["message_topic"]](None)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        return {
+            "callback_count": len(observed),
+            "marked_ids": messages.marked,
+            "unsubscribed": sorted(messager.unsubscribed) == sorted(messager.subscribed),
+        }
+
+    watch = asyncio.run(exercise_watch())
+    cases.append({"name": "watch_cancellation", **watch})
+    return {"seam": "team_inbox_fetch", "cases": cases}
+
+
+def run_team_inbox_format() -> dict:
+    """Drive the real Python external inbox formatter."""
+    translations = {
+        "hitt.silence_note": "stay silent",
+        "dispatcher.leader_task_board": "LEADER-BOARD",
+        "dispatcher.teammate_task_list": "TEAMMATE-LIST",
+        "dispatcher.task_unassigned_marker": " (unassigned)",
+        "time.just_now": "刚刚",
+        "time.unknown": "unknown time",
+    }
+
+    def translate(key, **kwargs):
+        template = translations.get(key, key)
+        return template.format(**kwargs)
+
+    _install_module(
+        "openjiuwen.agent_teams.i18n",
+        reply_hint_for=lambda _sender: "please reply",
+        t=translate,
+    )
+    load_module_file("openjiuwen.agent_teams.inbound_render")
+    load_module_file("openjiuwen.agent_teams.timefmt")
+    module = load_module_file("openjiuwen.agent_teams.external.format")
+    fixture = load_fixture("team_inbox_format")
+    cases = []
+    for case in fixture["cases"]:
+        if case["kind"] == "message":
+            message = types.SimpleNamespace(
+                broadcast=case["broadcast"],
+                timestamp=case["timestamp"],
+                from_member_name=case["from_member_name"],
+                message_id=case["message_id"],
+                content=case["content"],
+            )
+            output = module.render_message(
+                message,
+                is_human_agent=case["is_human_agent"],
+                now_ms=case["now_ms"],
+                body=case["body"],
+            )
+        elif case["kind"] == "task_board":
+            tasks = [types.SimpleNamespace(**task) for task in case["tasks"]]
+            output = module.render_task_board(tasks, is_leader=case["is_leader"], now_ms=case["now_ms"])
+        else:
+            raise ValueError(f"unknown team inbox case kind {case['kind']}")
+        cases.append({"name": case["name"], "output": output})
+    return {"seam": "team_inbox_format", "cases": cases}
+
+
+def shim_prompt_attachment_dependencies() -> None:
+    """Provide narrow host shims for the real attachment manager."""
+    _install_module(
+        "openjiuwen.core.context_engine.base",
+        ContextWindow=object,
+        ModelContext=object,
+    )
+    _install_module(
+        "openjiuwen.core.foundation.llm",
+        BaseMessage=object,
+        UserMessage=type("UserMessage", (), {"__init__": lambda self, **kwargs: None}),
+    )
+
+
+def _prompt_attachment_view(item) -> dict | None:
+    if item is None:
+        return None
+    kind = item.kind.value if hasattr(item.kind, "value") else str(item.kind)
+    return {
+        "id": item.id,
+        "section": item.section,
+        "kind": kind,
+        "content": item.content,
+        "priority": item.priority,
+        "source": item.source,
+        "session_id": item.session_id,
+        "expires_at": item.expires_at,
+        "metadata": item.metadata,
+        "content_kind": item.content_kind,
+        "content_sha256": item.content_sha256,
+    }
+
+
+async def _run_prompt_attachment_case(module, case: dict) -> dict:
+    manager = module.PromptAttachmentManager()
+    session_id = case["session_id"]
+    ids = {}
+    operations = []
+    for op in case["operations"]:
+        name = op["op"]
+        if name == "add":
+            item = await manager.add_section(
+                session_id=session_id,
+                section=op["section"],
+                content=op["content"],
+                kind=op["kind"],
+                source=op["source"],
+                priority=op["priority"],
+                metadata=op.get("metadata"),
+                expires_at=op.get("expires_at"),
+            )
+            ids[op["name"]] = item.id
+            operations.append({"name": "add", "item": _prompt_attachment_view(item)})
+        elif name == "update":
+            item = await manager.update_by_id(
+                ids[op["name"]],
+                module.PromptAttachmentUpdate(
+                    content=op["content"],
+                    metadata=op["metadata"],
+                ),
+            )
+            operations.append({"name": "update", "item": _prompt_attachment_view(item)})
+        elif name == "list":
+            items = await manager.list_by_filter(
+                session_id=session_id,
+                section=op.get("section"),
+            )
+            operations.append({
+                "name": "list",
+                "items": [_prompt_attachment_view(item) for item in items],
+            })
+        elif name == "collect":
+            items = await manager.collect_for_session(session_id)
+            operations.append({
+                "name": "collect",
+                "items": [_prompt_attachment_view(item) for item in items],
+            })
+        elif name == "clear_section":
+            count = await manager.clear_section(session_id=session_id, section=op["section"])
+            operations.append({"name": "clear_section", "count": count})
+        elif name == "clear_session":
+            count = await manager.clear_session(session_id)
+            operations.append({"name": "clear_session", "count": count})
+        else:
+            raise ValueError(f"unknown prompt attachment operation {name}")
+    return {"name": case["name"], "operations": operations}
+
+
+def run_prompt_attachment() -> dict:
+    """Drive the real Python PromptAttachmentManager against the fixture."""
+    shim_prompt_attachment_dependencies()
+    module = load_module_file("openjiuwen.harness.prompts.prompt_attachment_manager")
+    fixture = load_fixture("prompt_attachment")
+    cases = [
+        asyncio.run(_run_prompt_attachment_case(module, case))
+        for case in fixture["cases"]
+    ]
+    return {"seam": "prompt_attachment", "cases": cases}
+
+
+def shim_goal_manager_dependencies() -> None:
+    """Provide narrow host shims while executing the real GoalManager."""
+    class EventManager:
+        def discard_goal_work(self, *, session_id, goal_id):
+            return None
+
+        def has_running_goal(self, *, goal_id):
+            return False
+
+        def push_goal(self, work):
+            return False
+
+    class InteractionEvent:
+        @staticmethod
+        def goal_updated(payload):
+            return payload
+
+    class RoundWorkItem:
+        @staticmethod
+        def goal(**kwargs):
+            return kwargs
+
+    _install_module(
+        "openjiuwen.harness.task_loop.event_manager",
+        EventManager=EventManager,
+    )
+    _install_module(
+        "openjiuwen.harness.schema.interaction",
+        InteractionEvent=InteractionEvent,
+        RoundWorkItem=RoundWorkItem,
+    )
+
+
+def _goal_record_view(record) -> dict | None:
+    if record is None:
+        return None
+    assessment = record.last_assessment
+    return {
+        "objective": record.objective,
+        "status": record.status.value,
+        "revision": record.revision,
+        "attempt_count": record.attempt_count,
+        "token_usage": record.token_usage.to_dict(),
+        "max_attempts": record.max_attempts,
+        "token_budget": record.token_budget,
+        "last_assessment": assessment.to_dict() if assessment else None,
+        "last_stop_reason": record.last_stop_reason,
+    }
+
+
+async def _run_goal_manager_case(module, case: dict) -> dict:
+    class Store:
+        session_id = case["session_id"]
+
+        def __init__(self):
+            self.record = None
+
+        def load(self):
+            return self.record
+
+        def save(self, record):
+            self.record = record
+
+        def clear(self):
+            self.record = None
+
+        async def commit(self):
+            return None
+
+    store = Store()
+    manager = module.GoalManager(
+        store=store,
+        event_manager=module.EventManager(),
+        control_lock=asyncio.Lock(),
+        has_output_stream=lambda: False,
+        cancel_active_round=lambda **kwargs: asyncio.sleep(0),
+        emit_event=lambda _event: None,
+        notify_work=lambda: None,
+    )
+    goal_id = None
+    revision = 0
+    operations = []
+    schema = sys.modules["openjiuwen.harness.goal.schema"]
+    for op in case["operations"]:
+        name = op["op"]
+        if name == "set":
+            try:
+                record = await manager.set(
+                    op["objective"],
+                    max_attempts=op.get("max_attempts"),
+                    token_budget=op.get("token_budget"),
+                )
+            except schema.GoalOperationError as error:
+                operations.append({"name": "set_error", "code": error.code})
+            else:
+                goal_id = record.goal_id
+                revision = record.revision
+                operations.append({"name": "set", "record": _goal_record_view(record)})
+        elif name in ("begin", "stale_begin"):
+            record = await manager.begin_attempt(
+                goal_id=goal_id or "",
+                revision=revision if name == "begin" else max(0, revision - 1),
+            )
+            if record is not None:
+                revision = record.revision
+            operations.append({"name": name, "record": _goal_record_view(record)})
+        elif name == "usage":
+            await manager.accumulate_usage(
+                goal_id=goal_id or "",
+                revision=revision,
+                input_tokens=op.get("input_tokens", 0),
+                output_tokens=op.get("output_tokens", 0),
+                cached_input_tokens=op.get("cached_input_tokens", 0),
+            )
+            operations.append(
+                {"name": "usage", "record": _goal_record_view(await manager.get())}
+            )
+        elif name in ("pause", "resume"):
+            record = await getattr(manager, name)()
+            if record is not None and name == "resume":
+                revision = record.revision
+            operations.append({"name": name, "record": _goal_record_view(record)})
+        elif name in ("continue", "complete", "block"):
+            status = {
+                "continue": schema.GoalAssessmentStatus.CONTINUE,
+                "complete": schema.GoalAssessmentStatus.COMPLETE,
+                "block": schema.GoalAssessmentStatus.BLOCKED,
+            }[name]
+            record = await manager.apply_assessment(
+                goal_id=goal_id or "",
+                revision=revision,
+                assessment=schema.GoalAssessment(
+                    status=status,
+                    evidence=op.get("evidence", ""),
+                    remaining_work=op.get("remaining_work"),
+                ),
+            )
+            operations.append({"name": name, "record": _goal_record_view(record)})
+        elif name == "clear":
+            record = await manager.clear()
+            operations.append({"name": "clear", "record": _goal_record_view(record)})
+        else:
+            raise ValueError(f"unknown goal operation {name}")
+    return {"name": case["name"], "operations": operations}
+
+
+def run_goal_manager() -> dict:
+    """Drive the real Python GoalManager against the shared fixture."""
+    shim_goal_manager_dependencies()
+    load_module_file("openjiuwen.harness.goal.schema")
+    module = load_module_file("openjiuwen.harness.goal.manager")
+    fixture = load_fixture("goal_manager")
+    cases = [asyncio.run(_run_goal_manager_case(module, case)) for case in fixture["cases"]]
+    return {"seam": "goal_manager", "cases": cases}
+
 def main() -> int:
+
     if not AGENT_CORE_ROOT.exists():
         print(f"[python] AGENT_CORE_ROOT missing: {AGENT_CORE_ROOT}", file=sys.stderr)
         return 2
@@ -264,6 +1061,15 @@ def main() -> int:
     runners = {
         "stop_condition": run_stop_condition,
         "messager_inprocess": run_messager_inprocess,
+        "tool_retry": run_tool_retry,
+        "llm_retry": run_llm_retry,
+        "task_completion": run_task_completion,
+        "task_planning": run_task_planning,
+        "prompt_attachment": run_prompt_attachment,
+        "runtime_model_switching": run_runtime_model_switching,
+        "team_inbox_format": run_team_inbox_format,
+        "team_inbox_fetch": run_team_inbox_fetch,
+        "goal_manager": run_goal_manager,
     }
     selected = sys.argv[1:] or list(runners)
     for name in selected:

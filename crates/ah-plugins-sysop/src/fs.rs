@@ -57,6 +57,14 @@ impl LocalFsProvider {
         if !canonical_parent.starts_with(&root) {
             return Err(FsError(format!("path escapes workspace root: {rel}")));
         }
+        if std::fs::symlink_metadata(&candidate).is_ok() {
+            let canonical = candidate
+                .canonicalize()
+                .map_err(|e| FsError(format!("path not accessible: {rel}: {e}")))?;
+            if !canonical.starts_with(&root) {
+                return Err(FsError(format!("path escapes workspace root: {rel}")));
+            }
+        }
         Ok(candidate)
     }
 
@@ -158,6 +166,25 @@ mod tests {
             // 相对路径向上逃逸:必须失败(不存在则不可访问,存在则逃逸)。
             let upward = fs.read("../../etc/passwd");
             assert!(upward.is_err(), "escape must not succeed");
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_writing_through_symlinked_file() {
+        use std::os::unix::fs::symlink;
+
+        with_workspace("symlink-file", |fs, dir| {
+            let outside = dir
+                .parent()
+                .unwrap()
+                .join(format!("ah-sysop-outside-{}-symlink", std::process::id()));
+            std::fs::write(&outside, b"outside").expect("outside file");
+            symlink(&outside, dir.join("link.txt")).expect("symlink");
+            let result = fs.write("link.txt", b"must not escape");
+            assert!(matches!(result, Err(FsError(message)) if message.contains("escapes")));
+            assert_eq!(std::fs::read(&outside).unwrap(), b"outside");
+            let _ = std::fs::remove_file(outside);
         });
     }
 

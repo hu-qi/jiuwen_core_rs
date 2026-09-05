@@ -1,0 +1,41 @@
+{
+  "cases": [
+    {
+      "name": "timeout_type",
+      "retryable": true
+    },
+    {
+      "name": "connection_reset_type",
+      "retryable": true
+    },
+    {
+      "name": "broken_pipe_type",
+      "retryable": true
+    },
+    {
+      "name": "connection_aborted_type",
+      "retryable": true
+    },
+    {
+      "name": "stream_closed_marker",
+      "retryable": true
+    },
+    {
+      "name": "protocol_marker",
+      "retryable": true
+    },
+    {
+      "name": "value_error_type",
+      "retryable": false
+    },
+    {
+      "name": "permission_error_type",
+      "retryable": false
+    },
+    {
+      "name": "ordinary_error",
+      "retryable": false
+    }
+  ],
+  "seam": "tool_retry"
+}
