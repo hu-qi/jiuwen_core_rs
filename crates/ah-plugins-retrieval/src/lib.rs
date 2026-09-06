@@ -793,13 +793,23 @@ fn dashscope_credentials(
     provider: Option<&dyn ah_contracts::credentials::CredentialProvider>,
 ) -> Option<DashScopeSettings> {
     let api_key = provider?.get("dashscope.api_key")?.value;
-    let endpoint = provider
-        .and_then(|provider| provider.get("dashscope.base_url"))
-        .map(|credential| credential.value)
+    let endpoint = std::env::var("DASHSCOPE_EMBEDDING_ENDPOINT")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            provider
+                .and_then(|provider| provider.get("dashscope.base_url"))
+                .map(|credential| credential.value)
+        })
         .unwrap_or_else(|| DashScopeEmbeddingClient::DEFAULT_ENDPOINT.to_string());
-    let model = provider
-        .and_then(|provider| provider.get("dashscope.model"))
-        .map(|credential| credential.value)
+    let model = std::env::var("DASHSCOPE_EMBEDDING_MODEL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            provider
+                .and_then(|provider| provider.get("dashscope.model"))
+                .map(|credential| credential.value)
+        })
         .unwrap_or_else(|| DashScopeEmbeddingClient::DEFAULT_MODEL.to_string());
     Some(DashScopeSettings {
         endpoint,
@@ -809,15 +819,6 @@ fn dashscope_credentials(
 }
 
 fn configured_embedder(ctx: &Context) -> std::sync::Arc<dyn EmbeddingBackend> {
-    let credentials = ctx.service::<dyn ah_contracts::credentials::CredentialProvider>(
-        &ah_contracts::keys::CREDENTIALS,
-    );
-    if let Some(config) = dashscope_credentials(credentials.as_deref())
-        && let Ok(client) =
-            DashScopeEmbeddingClient::new(config.endpoint, config.model, config.api_key)
-    {
-        return std::sync::Arc::new(client);
-    }
     if let Ok(endpoint) = std::env::var("EMBEDDING_BASE_URL")
         && !endpoint.trim().is_empty()
     {
@@ -827,6 +828,15 @@ fn configured_embedder(ctx: &Context) -> std::sync::Arc<dyn EmbeddingBackend> {
             .ok()
             .or_else(|| std::env::var("OPENAI_API_KEY").ok());
         return std::sync::Arc::new(HttpEmbeddingClient::new(endpoint, model, api_key));
+    }
+    let credentials = ctx.service::<dyn ah_contracts::credentials::CredentialProvider>(
+        &ah_contracts::keys::CREDENTIALS,
+    );
+    if let Some(config) = dashscope_credentials(credentials.as_deref())
+        && let Ok(client) =
+            DashScopeEmbeddingClient::new(config.endpoint, config.model, config.api_key)
+    {
+        return std::sync::Arc::new(client);
     }
     if let Some(client) = DashScopeEmbeddingClient::from_env() {
         return std::sync::Arc::new(client);
@@ -1177,7 +1187,7 @@ mod tests {
 }
 #[test]
 fn http_embedding_client_parses_openai_compatible_response() {
-    use std::io::Write;
+    use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
 
@@ -1185,10 +1195,19 @@ fn http_embedding_client_parses_openai_compatible_response() {
     let endpoint = format!("http://{}/v1/embeddings", listener.local_addr().unwrap());
     let server = thread::spawn(move || {
         let (mut stream, _) = listener.accept().expect("accept");
-        let mut request = [0_u8; 2048];
-        let _ = std::io::Read::read(&mut stream, &mut request);
+        let mut request = Vec::new();
+        let mut chunk = [0_u8; 2048];
+        loop {
+            let size = stream.read(&mut chunk).expect("request");
+            assert!(size > 0, "request closed before headers");
+            request.extend_from_slice(&chunk[..size]);
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                break;
+            }
+        }
         let body = r#"{"data":[{"embedding":[0.25,-0.5,1.0]}]}"#;
         write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).expect("response");
+        stream.flush().expect("flush response");
     });
     let client = HttpEmbeddingClient::new(endpoint, "test-model", Some("secret".into()));
     assert_eq!(

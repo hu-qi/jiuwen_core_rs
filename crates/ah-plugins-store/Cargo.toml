@@ -3,7 +3,7 @@ name = "ah-plugins-store"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Real file-backed store: BaseKVStore (JSON files) and BaseMessageStore (JSONL channels); external Redis/GaussDB/ES backends later"
+description = "Real file, Redis, and PostgreSQL backends for BaseKVStore and BaseMessageStore"
 
 [dependencies]
 ah-contracts = { workspace = true }

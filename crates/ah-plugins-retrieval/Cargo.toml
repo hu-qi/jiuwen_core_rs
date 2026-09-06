@@ -3,7 +3,7 @@ name = "ah-plugins-retrieval"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Real local knowledge-base retrieval (BM25-style, JSON persistence) with ingest/search tools"
+description = "Production retrieval with local or external embedding and Redis-backed vector index"
 
 [dependencies]
 ah-contracts = { workspace = true }

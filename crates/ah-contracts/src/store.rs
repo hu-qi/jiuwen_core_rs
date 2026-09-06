@@ -1,8 +1,8 @@
 //! store seam:通用存储基类(KV / message)。
 //!
 //! 对应 openjiuwen/core 的 BaseKVStore / BaseMessageStore。
-//! 契约零实现;真实后端由插件提供(ah-plugins-store 已提供本地文件后端,
-//! 外部 Redis/GaussDB/ES 后端留待后续,文档注明)。
+//! 契约零实现;真实后端由插件提供:ah-plugins-store 含文件、Redis 和 PostgreSQL
+//! 实现,其他外部后端按对应工作包接入。
 
 use async_trait::async_trait;
 use serde_json::Value;

@@ -5,7 +5,7 @@
 //! - KV:dir/{key}.json,set 落盘、get/delete 真实读写,scan 按前缀枚举;
 //! - message:dir/messages/{channel}.jsonl append-only,read 按 seq 增量。
 //!
-//! 外部后端(Redis/GaussDB/ES/Milvus)留待后续,文档注明。
+//! - 外部后端:Redis KV 与 PostgreSQL KV/message 由同 crate 的真实插件提供。
 
 use std::path::PathBuf;
 use std::sync::Mutex;

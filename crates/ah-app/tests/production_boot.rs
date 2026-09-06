@@ -1,4 +1,4 @@
-//! Production composition E2E for P1 application, controller and workflow paths.
+//! Production composition E2E for P1 application/controller/workflow and P2-06 retrieval/memory backends.
 //!
 //! The test is ignored by default because it requires a real Redis service. CI runs it
 //! with `cargo test -p ah-app --test production_boot -- --ignored --nocapture`; the
@@ -14,8 +14,12 @@ use std::thread;
 
 use ah_contracts::agent::{AgentRequest, AgentRunState, ApplicationRuntime};
 use ah_contracts::controller::{Controller, TaskExecutor, TaskStatus};
-use ah_contracts::keys::{APPLICATION, CONTROLLER, KV_STORE, LLM, QUEUE, TOOLS};
+use ah_contracts::keys::{
+    APPLICATION, CONTROLLER, KV_STORE, LLM, QUERY_RERANK, QUEUE, RETRIEVAL, TOOLS,
+};
 use ah_contracts::queue::MessageQueue;
+use ah_contracts::rerank::QueryReranker;
+use ah_contracts::retrieval::{RetrievalHit, RetrievalProvider};
 use ah_contracts::seam::Seam;
 use ah_contracts::store::BaseKVStore;
 use ah_contracts::tools::ToolRegistry;
@@ -69,6 +73,7 @@ struct ModelFixture {
     base_url: String,
     address: SocketAddr,
     stop: Arc<AtomicBool>,
+    requests: Arc<Mutex<Vec<(String, String)>>>,
 }
 
 impl Drop for ModelFixture {
@@ -117,7 +122,31 @@ fn read_request(stream: &mut TcpStream) -> Option<(String, String)> {
     ))
 }
 
-fn model_response(body: &str) -> (String, String) {
+fn model_response(request_line: &str, body: &str) -> (String, String) {
+    if request_line.contains(" /v1/embeddings ") {
+        let vector = if body.to_lowercase().contains("pasta") {
+            "[0.0,1.0]"
+        } else {
+            "[1.0,0.0]"
+        };
+        return (
+            "application/json".to_string(),
+            format!(r#"{{"data":[{{"embedding":{vector}}}]}}"#),
+        );
+    }
+    if request_line.contains(" /dashscope-embedding ") {
+        return (
+            "application/json".to_string(),
+            r#"{"output":{"embeddings":[{"embedding":[1.0,0.0],"text_index":0}]}}"#.to_string(),
+        );
+    }
+    if request_line.contains(" /rerank ") {
+        return (
+            "application/json".to_string(),
+            r#"{"output":{"results":[{"index":1,"relevance_score":0.9},{"index":0,"relevance_score":0.1}]}}"#
+                .to_string(),
+        );
+    }
     if body.contains("Classify the request") {
         return (
             "application/json".to_string(),
@@ -154,15 +183,21 @@ fn start_model_fixture() -> ModelFixture {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind model fixture");
     let address = listener.local_addr().expect("model fixture address");
     let stop = Arc::new(AtomicBool::new(false));
+    let requests = Arc::new(Mutex::new(Vec::new()));
     let server_stop = stop.clone();
+    let server_requests = requests.clone();
     thread::spawn(move || {
         while !server_stop.load(Ordering::Acquire) {
             match listener.accept() {
                 Ok((mut stream, _)) => {
-                    let Some((_request_line, body)) = read_request(&mut stream) else {
+                    let Some((request_line, body)) = read_request(&mut stream) else {
                         continue;
                     };
-                    let (content_type, response_body) = model_response(&body);
+                    server_requests
+                        .lock()
+                        .unwrap()
+                        .push((request_line.clone(), body.clone()));
+                    let (content_type, response_body) = model_response(&request_line, &body);
                     let response = format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{response_body}",
                         response_body.len()
@@ -178,6 +213,7 @@ fn start_model_fixture() -> ModelFixture {
         base_url: format!("http://{address}/v1"),
         address,
         stop,
+        requests,
     }
 }
 
@@ -229,11 +265,14 @@ async fn production_profile_exercises_p1_application_controller_workflow() {
     std::fs::write(
         &env_file,
         format!(
-            "OPENAI_API_KEY=fixture-key\nOPENAI_BASE_URL={}\nOPENAI_MODEL=test-model\nREDIS_URL={}\n",
+            "OPENAI_API_KEY=fixture-key\nOPENAI_BASE_URL={}\nOPENAI_MODEL=test-model\nREDIS_URL={}\nEMBEDDING_BASE_URL={}/embeddings\nEMBEDDING_MODEL=fixture-embedding\nEMBEDDING_API_KEY=fixture-key\nDASHSCOPE_API_KEY=dashscope-fixture-key\nDASHSCOPE_EMBEDDING_ENDPOINT=http://{}/dashscope-embedding\nDASHSCOPE_EMBEDDING_MODEL=fixture-dashscope-embedding\nDASHSCOPE_RERANK_ENDPOINT=http://{}/rerank\nDASHSCOPE_RERANK_MODEL=fixture-rerank\n",
             fixture.base_url,
             std::env::var("REDIS_URL")
-                .unwrap_or_else(|_| "redis://127.0.0.1:6379/".to_string())
-        ),
+                .unwrap_or_else(|_| "redis://127.0.0.1:6379/".to_string()),
+            fixture.base_url,
+            fixture.address,
+            fixture.address,
+        )
     )
     .expect("production env file");
     let _env = EnvGuard::set(&[
@@ -343,26 +382,107 @@ async fn production_profile_exercises_p1_application_controller_workflow() {
             .expect("production cron")["count"],
         1
     );
+    let kv = ctx.service::<dyn BaseKVStore>(&KV_STORE).expect("redis kv");
+    let memory_key = format!("p206-memory-{}", std::process::id());
+    let memory_query = format!("p206 memory {}", std::process::id());
     tools
         .invoke(
             "remember",
-            serde_json::json!({"key": "production-tool", "content": "tool memory"}),
+            serde_json::json!({"key": memory_key.as_str(), "content": memory_query.as_str()}),
         )
         .await
         .expect("production remember");
     assert_eq!(
         tools
-            .invoke("recall", serde_json::json!({"query": "tool memory"}))
+            .invoke(
+                "recall",
+                serde_json::json!({"query": memory_query.as_str()}),
+            )
             .await
             .expect("production recall")["count"],
         1
     );
-    tools
-        .invoke("forget", serde_json::json!({"key": "production-tool"}))
-        .await
-        .expect("production forget");
+    assert!(
+        kv.get(&format!("memory:{memory_key}"))
+            .expect("external memory lookup")
+            .is_some(),
+        "memory must be stored in the production KV backend"
+    );
 
-    let kv = ctx.service::<dyn BaseKVStore>(&KV_STORE).expect("redis kv");
+    let _retrieval = ctx
+        .service::<dyn RetrievalProvider>(&RETRIEVAL)
+        .expect("retrieval provider");
+    let doc_id = format!("p206-doc-{}", std::process::id());
+    tools
+        .invoke(
+            "ingest_knowledge",
+            serde_json::json!({
+                "doc_id": doc_id.as_str(),
+                "text": "Rust memory retrieval document"
+            }),
+        )
+        .await
+        .expect("production ingest");
+    let vector = tools
+        .invoke(
+            "search_knowledge",
+            serde_json::json!({"query": "Rust memory", "mode": "vector", "k": 1}),
+        )
+        .await
+        .expect("production vector search");
+    assert_eq!(vector["count"], 1);
+    assert_eq!(vector["hits"][0]["doc_id"], doc_id);
+    assert!(
+        kv.scan("retrieval-vector:")
+            .expect("external vector scan")
+            .iter()
+            .any(|entry| entry.value["doc_id"] == doc_id),
+        "vector index must be stored in the production KV backend"
+    );
+
+    let query_reranker = ctx
+        .service::<dyn QueryReranker>(&QUERY_RERANK)
+        .expect("query reranker");
+    let reranked = query_reranker
+        .rerank_query(
+            "p206 rerank query",
+            &[
+                RetrievalHit {
+                    doc_id: "first".into(),
+                    chunk: "first candidate".into(),
+                    score: 0.0,
+                },
+                RetrievalHit {
+                    doc_id: "second".into(),
+                    chunk: "second candidate".into(),
+                    score: 0.0,
+                },
+            ],
+            2,
+        )
+        .expect("production query rerank");
+    assert_eq!(reranked[0].doc_id, "second");
+    assert_eq!(reranked[0].score, 0.9);
+
+    let requests = fixture.requests.lock().unwrap().clone();
+    assert!(
+        requests
+            .iter()
+            .any(|(line, _)| line.contains(" /v1/embeddings ")),
+        "OpenAI-compatible embedding endpoint must be used"
+    );
+    assert!(
+        requests
+            .iter()
+            .any(|(line, body)| line.contains(" /rerank ") && body.contains("p206 rerank query")),
+        "query-aware reranker endpoint must receive the query"
+    );
+    assert!(
+        !requests
+            .iter()
+            .any(|(line, _)| line.contains(" /dashscope-embedding ")),
+        "DashScope embedding must not override EMBEDDING_BASE_URL"
+    );
     let key = format!("ah:p1:{}", std::process::id());
     kv.set(&key, serde_json::json!({"ok": true}))
         .expect("redis set");
@@ -477,15 +597,16 @@ async fn production_profile_exercises_p1_application_controller_workflow() {
         Some("{\"content\":\"workflow production stream\"}")
     );
     assert!(sink.closed.load(Ordering::Acquire));
-    let chunks = sink.chunks.lock().unwrap();
-    let types: Vec<_> = chunks
-        .iter()
-        .filter_map(|chunk| chunk["type"].as_str())
-        .collect();
-    assert!(types.contains(&"workflow_delta"));
-    assert!(types.contains(&"workflow_node"));
-    assert_eq!(types.last(), Some(&"workflow_final"));
-    drop(chunks);
+    let types: Vec<String> = {
+        let chunks = sink.chunks.lock().unwrap();
+        chunks
+            .iter()
+            .filter_map(|chunk| chunk["type"].as_str().map(str::to_string))
+            .collect()
+    };
+    assert!(types.iter().any(|ty| ty == "workflow_delta"));
+    assert!(types.iter().any(|ty| ty == "workflow_node"));
+    assert_eq!(types.last().map(String::as_str), Some("workflow_final"));
 
     drop(effects);
     let (ctx, effects) = ah_app::boot(
@@ -505,7 +626,103 @@ async fn production_profile_exercises_p1_application_controller_workflow() {
         restored_controller.get_task("p1-task").unwrap().status,
         TaskStatus::Completed
     );
+    let tools_after_restart = ctx
+        .service::<dyn ToolRegistry>(&TOOLS)
+        .expect("production tools after restart");
+    let recalled_after_restart = tools_after_restart
+        .invoke(
+            "recall",
+            serde_json::json!({"query": memory_query.as_str()}),
+        )
+        .await
+        .expect("production recall after restart");
+    assert_eq!(recalled_after_restart["count"], 1);
+    let vector_after_restart = tools_after_restart
+        .invoke(
+            "search_knowledge",
+            serde_json::json!({"query": "Rust memory", "mode": "vector", "k": 1}),
+        )
+        .await
+        .expect("production vector search after restart");
+    assert_eq!(vector_after_restart["hits"][0]["doc_id"], doc_id);
+    let retrieval_after_restart = ctx
+        .service::<dyn RetrievalProvider>(&RETRIEVAL)
+        .expect("retrieval provider after restart");
+    retrieval_after_restart
+        .remove(&doc_id)
+        .expect("remove production vector document");
+    tools_after_restart
+        .invoke("forget", serde_json::json!({"key": memory_key.as_str()}))
+        .await
+        .expect("production forget after restart");
     drop(effects);
+    std::fs::write(
+        &env_file,
+        format!(
+            "OPENAI_API_KEY=fixture-key\nOPENAI_BASE_URL={}\nOPENAI_MODEL=test-model\nREDIS_URL={}\nEMBEDDING_BASE_URL=\nEMBEDDING_MODEL=fixture-embedding\nEMBEDDING_API_KEY=fixture-key\nDASHSCOPE_API_KEY=dashscope-fixture-key\nDASHSCOPE_EMBEDDING_ENDPOINT=http://{}/dashscope-embedding\nDASHSCOPE_EMBEDDING_MODEL=fixture-dashscope-embedding\nDASHSCOPE_RERANK_ENDPOINT=http://{}/rerank\nDASHSCOPE_RERANK_MODEL=fixture-rerank\n",
+            fixture.base_url,
+            std::env::var("REDIS_URL")
+                .unwrap_or_else(|_| "redis://127.0.0.1:6379/".to_string()),
+            fixture.address,
+            fixture.address,
+        ),
+    )
+    .expect("native embedding env file");
+    let native_root = root.join("p206-native");
+    let native_session_path = native_root.join("default.jsonl");
+    let native_session_dir = native_root.join("sessions");
+    let native_memory_dir = native_root.join("memory");
+    let native_retrieval_dir = native_root.join("retrieval");
+    let native_telemetry_dir = native_root.join("telemetry");
+    let (native_ctx, native_effects) = ah_app::boot(
+        profile,
+        &native_root,
+        &native_session_path,
+        &native_session_dir,
+        &native_memory_dir,
+        &native_retrieval_dir,
+        &native_telemetry_dir,
+    )
+    .expect("native DashScope production boot");
+    let native_tools = native_ctx
+        .service::<dyn ToolRegistry>(&TOOLS)
+        .expect("native production tools");
+    let native_doc = format!("p206-native-doc-{}", std::process::id());
+    native_tools
+        .invoke(
+            "ingest_knowledge",
+            serde_json::json!({
+                "doc_id": native_doc.as_str(),
+                "text": "DashScope native embedding document"
+            }),
+        )
+        .await
+        .expect("native embedding ingest");
+    let native_vector = native_tools
+        .invoke(
+            "search_knowledge",
+            serde_json::json!({"query": "DashScope native", "mode": "vector", "k": 1}),
+        )
+        .await
+        .expect("native embedding vector search");
+    assert_eq!(native_vector["count"], 1);
+    assert_eq!(native_vector["hits"][0]["doc_id"], native_doc);
+    let native_retrieval = native_ctx
+        .service::<dyn RetrievalProvider>(&RETRIEVAL)
+        .expect("native retrieval provider");
+    native_retrieval
+        .remove(&native_doc)
+        .expect("remove native vector document");
+    assert!(
+        fixture
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(line, _)| line.contains(" /dashscope-embedding ")),
+        "DashScope native embedding endpoint must be used when compatible endpoint is empty"
+    );
+    drop(native_effects);
     drop(fixture);
     let _ = std::fs::remove_dir_all(root);
 }

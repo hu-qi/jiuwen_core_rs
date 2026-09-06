@@ -3,7 +3,7 @@ name = "ah-plugins-rerank"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Real retrieval reranker: weighted fusion of lexical + vector scores with diversity penalty (deterministic)"
+description = "Hybrid and query-aware retrieval rerankers with DashScope protocol support"
 
 [dependencies]
 ah-contracts = { workspace = true }
