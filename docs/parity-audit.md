@@ -1,6 +1,6 @@
 # 对等审计基线(parity-audit.md)
 
-> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前代码 HEAD:`0c3b057`。
+> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;P2-04 实现快照 HEAD:`0c3b057`。
 > 旧快照之后已有功能提交,包括 AgentBuilder、A2A、数据加载/策展、模型分配、交互路由、入站渲染、桥接和提示附件;原文“无功能面变化”已失效。
 > 本文的百分比与 `done/partial/missing` 账目仍是旧快照结果,未由当前 HEAD 的结构化账本重新计算,不得作为当前完成度。
 > 当前代码复核确认:新增插件多数只有确定性子集;阶段一已将 **10 个新增插件加入 Cargo workspace members**,阶段二已全部接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并通过 targeted mount/resolve/invoke/unmount 集成测试,不能升级为严格 done。
