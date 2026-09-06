@@ -141,9 +141,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             ah_contracts::teams::TeamTask {
                                 id: task.clone(),
                                 title: task.clone(),
+                                content: String::new(),
                                 status: ah_contracts::teams::TeamTaskStatus::Pending,
                                 dependencies: vec![],
                                 assignee: None,
+                                reviewers: vec![],
                                 review_votes: vec![],
                                 result: None,
                             },

@@ -67,7 +67,7 @@ impl RedisStore for RedisCheckpointerStore {
         if let Some(expiry) = expiry_seconds.filter(|expiry| *expiry > 0) {
             command.arg("EX").arg(expiry);
         }
-        let result: Option<Vec<u8>> = command
+        let result: Option<String> = command
             .query(&mut *connection)
             .map_err(|error| CheckpointerError(format!("redis SET NX {key}: {error}")))?;
         Ok(result.is_some())
@@ -205,5 +205,56 @@ mod tests {
             Some(RedisValue::Bytes(b"x".to_vec()))
         );
         assert_eq!(RedisCheckpointerStore::value(None), None);
+    }
+    #[test]
+    fn redis_store_roundtrips_atomic_claim_prefix_and_pipeline() {
+        let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".into());
+        let store = match RedisCheckpointerStore::open(&url) {
+            Ok(store) => store,
+            Err(error) => {
+                println!("skipping: redis unavailable: {error}");
+                return;
+            }
+        };
+        let prefix = format!("ah-checkpointer-test:{}:", std::process::id());
+        let key = format!("{prefix}state");
+        let claim = format!("{prefix}claim");
+        let pipeline_key = format!("{prefix}pipeline");
+        store.delete_by_prefix(&prefix, 0).expect("cleanup before");
+
+        store
+            .set(&key, RedisValue::Str("payload".into()))
+            .expect("set");
+        assert_eq!(
+            store.get(&key).expect("get"),
+            Some(RedisValue::Bytes(b"payload".to_vec()))
+        );
+        assert!(store.exists(&key).expect("exists"));
+        assert!(
+            store
+                .exclusive_set(&claim, RedisValue::Str("owner".into()), Some(30))
+                .expect("claim")
+        );
+        assert!(
+            !store
+                .exclusive_set(&claim, RedisValue::Str("other".into()), Some(30))
+                .expect("second claim")
+        );
+
+        let values = store
+            .pipeline(
+                &RedisPipeline::new()
+                    .set(&pipeline_key, RedisValue::Str("p".into()), Some(30))
+                    .get(&pipeline_key)
+                    .exists(&pipeline_key),
+            )
+            .expect("pipeline");
+        assert_eq!(values.len(), 3);
+        assert_eq!(store.get_by_prefix(&prefix).expect("prefix").len(), 3);
+        assert_eq!(
+            store.delete_by_prefix(&prefix, 1).expect("delete prefix"),
+            3
+        );
+        assert!(!store.exists(&key).expect("deleted"));
     }
 }

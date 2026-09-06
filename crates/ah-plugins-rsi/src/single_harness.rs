@@ -243,6 +243,9 @@ mod tests {
                 root.join("evolving"),
             )),
             StdArc::new(crate::RsiPlugin::new(root.join("rsi"))),
+            StdArc::new(ah_plugins_operator::OperatorPlugin),
+            StdArc::new(ah_plugins_optimizer::OptimizerPlugin),
+            StdArc::new(ah_plugins_evolving::UpdaterPlugin),
             StdArc::new(SingleHarnessPlugin::new(root.join("single_harness"))),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");

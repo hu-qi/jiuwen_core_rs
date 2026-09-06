@@ -154,7 +154,146 @@ impl TeamRuntime for InMemoryTeamRuntime {
     fn add_task(&self, team: &str, task: TeamTask) -> Result<(), TeamError> {
         let mut guard = self.team(team)?;
         let board = guard.get_mut(team).unwrap();
+        if board.tasks.contains_key(&task.id) {
+            return Err(TeamError(format!("task already exists: {}", task.id)));
+        }
+        if task.id.is_empty() || task.title.is_empty() {
+            return Err(TeamError("task id/title must not be empty".to_string()));
+        }
+        if task
+            .dependencies
+            .iter()
+            .any(|dependency| !board.tasks.contains_key(dependency))
+        {
+            return Err(TeamError("dependency task not found".to_string()));
+        }
         board.tasks.insert(task.id.clone(), task);
+        Ok(())
+    }
+
+    fn create_task(
+        &self,
+        team: &str,
+        id: &str,
+        title: &str,
+        content: &str,
+        dependencies: Vec<String>,
+        reviewers: Vec<String>,
+    ) -> Result<TeamTask, TeamError> {
+        self.add_task(
+            team,
+            TeamTask {
+                id: id.to_string(),
+                title: title.to_string(),
+                content: content.to_string(),
+                status: TeamTaskStatus::Pending,
+                dependencies,
+                assignee: None,
+                reviewers,
+                review_votes: Vec::new(),
+                result: None,
+            },
+        )?;
+        self.tasks(team)?
+            .into_iter()
+            .find(|task| task.id == id)
+            .ok_or_else(|| TeamError(format!("task not found after create: {id}")))
+    }
+
+    fn update_task(
+        &self,
+        team: &str,
+        task: &str,
+        title: Option<&str>,
+        content: Option<&str>,
+    ) -> Result<(), TeamError> {
+        let mut guard = self.team(team)?;
+        let entry = guard
+            .get_mut(team)
+            .unwrap()
+            .tasks
+            .get_mut(task)
+            .ok_or_else(|| TeamError(format!("task not found: {task}")))?;
+        if matches!(
+            entry.status,
+            TeamTaskStatus::InReview | TeamTaskStatus::Done
+        ) {
+            return Err(TeamError(format!(
+                "task {task} cannot be edited from status {:?}",
+                entry.status
+            )));
+        }
+        if let Some(title) = title {
+            entry.title = title.to_string();
+        }
+        if let Some(content) = content {
+            entry.content = content.to_string();
+        }
+        Ok(())
+    }
+
+    fn add_dependency(&self, team: &str, task: &str, dependency: &str) -> Result<(), TeamError> {
+        let mut guard = self.team(team)?;
+        let board = guard.get_mut(team).unwrap();
+        if !board.tasks.contains_key(dependency) {
+            return Err(TeamError(format!(
+                "dependency task not found: {dependency}"
+            )));
+        }
+        let entry = board
+            .tasks
+            .get_mut(task)
+            .ok_or_else(|| TeamError(format!("task not found: {task}")))?;
+        if matches!(
+            entry.status,
+            TeamTaskStatus::InProgress
+                | TeamTaskStatus::InReview
+                | TeamTaskStatus::Done
+                | TeamTaskStatus::Failed
+        ) {
+            return Err(TeamError(format!(
+                "task {task} cannot gain dependencies from status {:?}",
+                entry.status
+            )));
+        }
+        if entry.dependencies.contains(&dependency.to_string()) {
+            return Ok(());
+        }
+        entry.dependencies.push(dependency.to_string());
+        let adjacency: HashMap<String, Vec<String>> = board
+            .tasks
+            .iter()
+            .map(|(id, task)| (id.clone(), task.dependencies.clone()))
+            .collect();
+        fn cycle(
+            id: &str,
+            graph: &HashMap<String, Vec<String>>,
+            visiting: &mut std::collections::HashSet<String>,
+            visited: &mut std::collections::HashSet<String>,
+        ) -> bool {
+            if visiting.contains(id) {
+                return true;
+            }
+            if !visited.insert(id.to_string()) {
+                return false;
+            }
+            visiting.insert(id.to_string());
+            let result = graph
+                .get(id)
+                .map(|deps| deps.iter().any(|dep| cycle(dep, graph, visiting, visited)))
+                .unwrap_or(false);
+            visiting.remove(id);
+            result
+        }
+        if cycle(
+            task,
+            &adjacency,
+            &mut std::collections::HashSet::new(),
+            &mut std::collections::HashSet::new(),
+        ) {
+            board.tasks.get_mut(task).unwrap().dependencies.pop();
+            return Err(TeamError("dependency cycle detected".to_string()));
+        }
         Ok(())
     }
 
@@ -209,8 +348,13 @@ impl TeamRuntime for InMemoryTeamRuntime {
                 entry.status
             )));
         }
-        entry.status = TeamTaskStatus::Done;
         entry.result = Some(output);
+        entry.status = if entry.reviewers.is_empty() {
+            TeamTaskStatus::Done
+        } else {
+            TeamTaskStatus::InReview
+        };
+        entry.review_votes.clear();
         let status = entry.status;
         drop(guard);
         self.emit(team, task, status);
@@ -258,7 +402,19 @@ impl TeamRuntime for InMemoryTeamRuntime {
         if !is_member {
             return Err(TeamError(format!("member not in team: {member}")));
         }
-        if entry.review_votes.contains(&member.to_string()) {
+        if !entry.reviewers.is_empty()
+            && (!entry.reviewers.iter().any(|reviewer| reviewer == member)
+                || entry.assignee.as_deref() == Some(member))
+        {
+            return Err(TeamError(format!(
+                "member {member} is not an eligible reviewer"
+            )));
+        }
+        if entry
+            .review_votes
+            .iter()
+            .any(|vote| vote.trim_start_matches('!') == member)
+        {
             return Err(TeamError(format!("member {member} already voted")));
         }
         // 记录投票:approve 记成员名,否决记 "!member"(简化多数判定)。
@@ -529,12 +685,72 @@ mod tests {
         TeamTask {
             id: id.to_string(),
             title: format!("do {id}"),
+            content: format!("content for {id}"),
             status: TeamTaskStatus::Pending,
             dependencies: deps,
             assignee: None,
+            reviewers: Vec::new(),
             review_votes: Vec::new(),
             result: None,
         }
+    }
+
+    #[tokio::test]
+    async fn full_task_mutation_lifecycle_matches_manager_contract() {
+        let root = std::env::temp_dir().join(format!("ah-teams-mutation-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let runtime = ctx.service::<dyn TeamRuntime>(&TEAMS).expect("teams");
+        let (spec, members) = team();
+        runtime.create_team(spec, members).expect("create");
+
+        let created = runtime
+            .create_task("t1", "a", "Original", "body", vec![], vec!["m2".into()])
+            .expect("create task");
+        assert_eq!(created.status, TeamTaskStatus::Pending);
+        assert_eq!(created.content, "body");
+        assert!(
+            runtime
+                .create_task("t1", "a", "dup", "", vec![], vec![])
+                .is_err()
+        );
+        runtime
+            .update_task("t1", "a", Some("Updated"), Some("revised"))
+            .expect("update");
+        let updated = runtime
+            .tasks("t1")
+            .expect("tasks")
+            .into_iter()
+            .find(|t| t.id == "a")
+            .unwrap();
+        assert_eq!(updated.title, "Updated");
+        assert_eq!(updated.content, "revised");
+        runtime
+            .create_task("t1", "b", "Blocked", "b-body", vec![], vec![])
+            .expect("create b");
+        runtime.add_dependency("t1", "b", "a").expect("dependency");
+        assert!(runtime.add_dependency("t1", "a", "b").is_err());
+        assert_eq!(runtime.claim_task("t1", "m1").unwrap(), "a");
+        runtime
+            .complete_task("t1", "a", serde_json::json!({"answer":"ok"}))
+            .expect("review submission");
+        assert_eq!(
+            runtime
+                .tasks("t1")
+                .unwrap()
+                .iter()
+                .find(|t| t.id == "a")
+                .unwrap()
+                .status,
+            TeamTaskStatus::InReview
+        );
+        runtime.vote_review("t1", "a", "m2", true).expect("review");
+        assert_eq!(
+            runtime.settle_review("t1", "a").unwrap(),
+            TeamTaskStatus::Done
+        );
+        assert_eq!(runtime.claim_task("t1", "m1").unwrap(), "b");
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[tokio::test]

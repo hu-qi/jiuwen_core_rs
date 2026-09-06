@@ -124,6 +124,7 @@ pub mod trainer;
 pub mod transport;
 pub mod tune;
 pub mod tune_kit;
+pub mod updater;
 pub mod web;
 pub mod workflow;
 pub mod workspace;
@@ -263,7 +264,7 @@ pub mod prelude {
         format_anomaly, format_anomaly_event, measure_response, member_detector_specs,
         model_exception_signal, route_decision, severity_value, tool_exception_signal,
     };
-    pub use crate::rerank::{RerankConfig, RerankError, RerankedHit, Reranker};
+    pub use crate::rerank::{QueryReranker, RerankConfig, RerankError, RerankedHit, Reranker};
     pub use crate::resources::{
         AgentTemplateSpec, BuiltinToolSpec, ExtensionParts, LoadRecord, McpServerSpec, PluginSpec,
         PromptSectionSpec, RailSpec, ResolvedPromptSection, ResolvedSkill, ResourceKind,

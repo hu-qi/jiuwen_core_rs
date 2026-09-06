@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "seam": "subagents",
+  "cases": [
+    {"name": "core_only", "requested": []},
+    {"name": "pdf_and_vision", "requested": ["pdf", "vision"]},
+    {"name": "duplicate_and_unknown", "requested": ["vision", "vision", "unknown"]}
+  ]
+}

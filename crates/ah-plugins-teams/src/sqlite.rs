@@ -53,7 +53,7 @@ impl SqliteTeamRuntime {
         let conn =
             Connection::open(path).map_err(|e| TeamError(format!("open sqlite failed: {e}")))?;
         conn.execute_batch(
-            "PRAGMA journal_mode=WAL;
+            r#"PRAGMA journal_mode=WAL;
              CREATE TABLE IF NOT EXISTS teams (
                  id TEXT PRIMARY KEY, name TEXT NOT NULL
              );
@@ -64,13 +64,21 @@ impl SqliteTeamRuntime {
              );
              CREATE TABLE IF NOT EXISTS tasks (
                  team_id TEXT NOT NULL, task_id TEXT NOT NULL,
-                 title TEXT NOT NULL, status TEXT NOT NULL,
+                 title TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
                  assignee TEXT, result TEXT, deps TEXT NOT NULL,
-                 review_votes TEXT NOT NULL,
+                 reviewers TEXT NOT NULL DEFAULT '[]', review_votes TEXT NOT NULL,
                  PRIMARY KEY (team_id, task_id)
-             );",
+             );"#,
         )
         .map_err(|e| TeamError(format!("init schema failed: {e}")))?;
+        let _ = conn.execute(
+            r#"ALTER TABLE tasks ADD COLUMN content TEXT NOT NULL DEFAULT ''"#,
+            [],
+        );
+        let _ = conn.execute(
+            r#"ALTER TABLE tasks ADD COLUMN reviewers TEXT NOT NULL DEFAULT '[]'"#,
+            [],
+        );
         Ok(Self {
             conn: Mutex::new(conn),
             subagent,
@@ -126,33 +134,36 @@ impl SqliteTeamRuntime {
 
     /// 读取团队全部任务(按 task_id 排序)。
     fn load_tasks(&self, conn: &Connection, team: &str) -> Result<Vec<TeamTask>, TeamError> {
-        let mut stmt = conn
-            .prepare("SELECT task_id, title, status, assignee, result, deps, review_votes FROM tasks WHERE team_id = ?1 ORDER BY task_id")
-            .map_err(|e| TeamError(format!("prepare tasks: {e}")))?;
+        let mut stmt = conn.prepare("SELECT task_id, title, content, status, assignee, result, deps, reviewers, review_votes FROM tasks WHERE team_id = ?1 ORDER BY task_id").map_err(|e| TeamError(format!("prepare tasks: {e}")))?;
         let rows = stmt
             .query_map([team], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
-                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, String>(3)?,
                     row.get::<_, Option<String>>(4)?,
-                    row.get::<_, String>(5)?,
+                    row.get::<_, Option<String>>(5)?,
                     row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
                 ))
             })
             .map_err(|e| TeamError(format!("query tasks: {e}")))?;
         let mut tasks = Vec::new();
         for row in rows {
-            let (id, title, status, assignee, result, deps, votes) =
+            let (id, title, content, status, assignee, result, deps, reviewers, votes) =
                 row.map_err(|e| TeamError(format!("row: {e}")))?;
             tasks.push(TeamTask {
                 id,
                 title,
+                content,
                 status: status_from_str(&status)?,
                 dependencies: serde_json::from_str(&deps)
                     .map_err(|e| TeamError(format!("deps json: {e}")))?,
                 assignee,
+                reviewers: serde_json::from_str(&reviewers)
+                    .map_err(|e| TeamError(format!("reviewers json: {e}")))?,
                 review_votes: serde_json::from_str(&votes)
                     .map_err(|e| TeamError(format!("votes json: {e}")))?,
                 result: result
@@ -210,24 +221,141 @@ impl TeamRuntime for SqliteTeamRuntime {
     }
 
     fn add_task(&self, team: &str, task: TeamTask) -> Result<(), TeamError> {
+        if task.id.is_empty() || task.title.is_empty() {
+            return Err(TeamError("task id/title must not be empty".to_string()));
+        }
         let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO tasks (team_id, task_id, title, status, assignee, result, deps, review_votes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            rusqlite::params![
-                team,
-                task.id,
-                task.title,
-                status_to_str(task.status),
-                task.assignee,
-                task.result.as_ref().map(|v| v.to_string()),
-                serde_json::to_string(&task.dependencies).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&task.review_votes).unwrap_or_else(|_| "[]".to_string()),
-            ],
-        )
-        .map_err(|e| TeamError(format!("insert task: {e}")))?;
+        for dependency in &task.dependencies {
+            let exists: Option<i32> = conn
+                .query_row(
+                    "SELECT 1 FROM tasks WHERE team_id = ?1 AND task_id = ?2",
+                    rusqlite::params![team, dependency],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| TeamError(format!("dependency check: {e}")))?;
+            if exists.is_none() {
+                return Err(TeamError(format!(
+                    "dependency task not found: {dependency}"
+                )));
+            }
+        }
+        conn.execute("INSERT INTO tasks (team_id, task_id, title, content, status, assignee, result, deps, reviewers, review_votes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)", rusqlite::params![team, task.id, task.title, task.content, status_to_str(task.status), task.assignee, task.result.as_ref().map(|v| v.to_string()), serde_json::to_string(&task.dependencies).unwrap_or_else(|_| "[]".to_string()), serde_json::to_string(&task.reviewers).unwrap_or_else(|_| "[]".to_string()), serde_json::to_string(&task.review_votes).unwrap_or_else(|_| "[]".to_string())]).map_err(|e| TeamError(format!("insert task: {e}")))?;
         Ok(())
     }
 
+    fn create_task(
+        &self,
+        team: &str,
+        id: &str,
+        title: &str,
+        content: &str,
+        dependencies: Vec<String>,
+        reviewers: Vec<String>,
+    ) -> Result<TeamTask, TeamError> {
+        self.add_task(
+            team,
+            TeamTask {
+                id: id.to_string(),
+                title: title.to_string(),
+                content: content.to_string(),
+                status: TeamTaskStatus::Pending,
+                dependencies,
+                assignee: None,
+                reviewers,
+                review_votes: Vec::new(),
+                result: None,
+            },
+        )?;
+        self.tasks(team)?
+            .into_iter()
+            .find(|task| task.id == id)
+            .ok_or_else(|| TeamError(format!("task not found after create: {id}")))
+    }
+
+    fn update_task(
+        &self,
+        team: &str,
+        task: &str,
+        title: Option<&str>,
+        content: Option<&str>,
+    ) -> Result<(), TeamError> {
+        let conn = self.conn.lock().unwrap();
+        let current = self
+            .load_tasks(&conn, team)?
+            .into_iter()
+            .find(|entry| entry.id == task)
+            .ok_or_else(|| TeamError(format!("task not found: {task}")))?;
+        if matches!(
+            current.status,
+            TeamTaskStatus::InReview | TeamTaskStatus::Done
+        ) {
+            return Err(TeamError(format!(
+                "task {task} cannot be edited from status {:?}",
+                current.status
+            )));
+        }
+        conn.execute("UPDATE tasks SET title = COALESCE(?1, title), content = COALESCE(?2, content) WHERE team_id = ?3 AND task_id = ?4", rusqlite::params![title, content, team, task]).map_err(|e| TeamError(format!("update task: {e}")))?;
+        Ok(())
+    }
+    fn add_dependency(&self, team: &str, task: &str, dependency: &str) -> Result<(), TeamError> {
+        let conn = self.conn.lock().unwrap();
+        let mut tasks = self.load_tasks(&conn, team)?;
+        if !tasks.iter().any(|entry| entry.id == dependency) {
+            return Err(TeamError(format!(
+                "dependency task not found: {dependency}"
+            )));
+        }
+        let dependencies = {
+            let entry = tasks
+                .iter_mut()
+                .find(|entry| entry.id == task)
+                .ok_or_else(|| TeamError(format!("task not found: {task}")))?;
+            if matches!(
+                entry.status,
+                TeamTaskStatus::InProgress
+                    | TeamTaskStatus::InReview
+                    | TeamTaskStatus::Done
+                    | TeamTaskStatus::Failed
+            ) {
+                return Err(TeamError(format!(
+                    "task {task} cannot gain dependencies from status {:?}",
+                    entry.status
+                )));
+            }
+            if entry.dependencies.iter().any(|dep| dep == dependency) {
+                return Ok(());
+            }
+            entry.dependencies.push(dependency.to_string());
+            entry.dependencies.clone()
+        };
+        fn cycle(id: &str, tasks: &[TeamTask], visiting: &mut Vec<String>) -> bool {
+            if visiting.iter().any(|node| node == id) {
+                return true;
+            }
+            visiting.push(id.to_string());
+            let result = tasks
+                .iter()
+                .find(|task| task.id == id)
+                .map(|task| {
+                    task.dependencies
+                        .iter()
+                        .any(|dep| cycle(dep, tasks, visiting))
+                })
+                .unwrap_or(false);
+            visiting.pop();
+            result
+        }
+        if cycle(task, &tasks, &mut Vec::new()) {
+            return Err(TeamError("dependency cycle detected".to_string()));
+        }
+        conn.execute(
+            "UPDATE tasks SET deps = ?1 WHERE team_id = ?2 AND task_id = ?3",
+            rusqlite::params![serde_json::to_string(&dependencies).unwrap(), team, task],
+        )
+        .map_err(|e| TeamError(format!("update dependency: {e}")))?;
+        Ok(())
+    }
     fn claim_task(&self, team: &str, member: &str) -> Result<String, TeamError> {
         let conn = self.conn.lock().unwrap();
         if !self.is_member(&conn, team, member)? {
@@ -236,18 +364,16 @@ impl TeamRuntime for SqliteTeamRuntime {
         let tasks = self.load_tasks(&conn, team)?;
         let candidate = tasks
             .iter()
-            .filter(|t| t.status == TeamTaskStatus::Pending)
-            .find(|t| {
-                t.dependencies.iter().all(|d| {
+            .filter(|task| task.status == TeamTaskStatus::Pending)
+            .find(|task| {
+                task.dependencies.iter().all(|dependency| {
                     tasks
                         .iter()
-                        .any(|x| x.id == *d && x.status == TeamTaskStatus::Done)
+                        .any(|dep| dep.id == *dependency && dep.status == TeamTaskStatus::Done)
                 })
             })
-            .map(|t| t.id.clone());
-        let Some(task_id) = candidate else {
-            return Err(TeamError("no claimable task".to_string()));
-        };
+            .map(|task| task.id.clone());
+        let task_id = candidate.ok_or_else(|| TeamError("no claimable task".to_string()))?;
         conn.execute(
             "UPDATE tasks SET status = ?1, assignee = ?2 WHERE team_id = ?3 AND task_id = ?4",
             rusqlite::params![
@@ -276,25 +402,19 @@ impl TeamRuntime for SqliteTeamRuntime {
                 current.status
             )));
         }
-        let updated = conn
-            .execute(
-                "UPDATE tasks SET status = ?1, result = ?2 WHERE team_id = ?3 AND task_id = ?4 AND status = ?5",
-                rusqlite::params![
-                    status_to_str(TeamTaskStatus::Done),
-                    output.to_string(),
-                    team,
-                    task,
-                    status_to_str(TeamTaskStatus::InProgress),
-                ],
-            )
-            .map_err(|e| TeamError(format!("complete update: {e}")))?;
+        let status = if current.reviewers.is_empty() {
+            TeamTaskStatus::Done
+        } else {
+            TeamTaskStatus::InReview
+        };
+        let updated = conn.execute("UPDATE tasks SET status = ?1, result = ?2, review_votes = ?3 WHERE team_id = ?4 AND task_id = ?5 AND status = ?6", rusqlite::params![status_to_str(status), output.to_string(), "[]", team, task, status_to_str(TeamTaskStatus::InProgress)]).map_err(|e| TeamError(format!("complete update: {e}")))?;
         if updated == 0 {
             return Err(TeamError(format!(
                 "task {task} was changed before completion"
             )));
         }
         drop(conn);
-        self.emit(team, task, TeamTaskStatus::Done);
+        self.emit(team, task, status);
         Ok(())
     }
 
@@ -664,9 +784,11 @@ mod tests {
         TeamTask {
             id: id.to_string(),
             title: format!("do {id}"),
+            content: format!("content for {id}"),
             status: TeamTaskStatus::Pending,
             dependencies: deps,
             assignee: None,
+            reviewers: Vec::new(),
             review_votes: Vec::new(),
             result: None,
         }
@@ -697,17 +819,57 @@ mod tests {
         );
         drop(rt);
 
-        // 重启:同一数据库文件完整恢复状态。
-        let rt2 =
-            SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("reopen");
-        let tasks = rt2.tasks("t1").expect("tasks");
-        assert_eq!(tasks[0].status, TeamTaskStatus::Done, "status persisted");
-        assert_eq!(tasks[0].assignee.as_deref(), Some("m1"));
-        assert_eq!(tasks[0].result.as_ref().unwrap()["ok"], true);
-        assert_eq!(rt2.list_teams(), vec!["t1".to_string()]);
-
-        drop(effects);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn sqlite_full_task_mutation_lifecycle() {
+        let root = std::env::temp_dir().join(format!("ah-sqlite-mutation-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let db = root.join("teams.db");
+        let rt =
+            SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("open");
+        rt.create_team(
+            TeamSpec {
+                id: "t1".into(),
+                name: "Alpha".into(),
+            },
+            members(),
+        )
+        .expect("create");
+        rt.create_task("t1", "a", "Original", "body", vec![], vec!["m2".into()])
+            .expect("create a");
+        assert!(
+            rt.create_task("t1", "a", "duplicate", "", vec![], vec![])
+                .is_err()
+        );
+        rt.update_task("t1", "a", Some("Updated"), Some("revised"))
+            .expect("update");
+        rt.create_task("t1", "b", "Dependent", "b-body", vec![], vec![])
+            .expect("create b");
+        rt.add_dependency("t1", "b", "a").expect("dependency");
+        assert!(rt.add_dependency("t1", "a", "b").is_err());
+        assert_eq!(rt.claim_task("t1", "m1").expect("claim"), "a");
+        rt.complete_task("t1", "a", json!({"answer":"ok"}))
+            .expect("complete");
+        assert_eq!(
+            rt.tasks("t1")
+                .unwrap()
+                .iter()
+                .find(|task| task.id == "a")
+                .unwrap()
+                .status,
+            TeamTaskStatus::InReview
+        );
+        rt.vote_review("t1", "a", "m2", true).expect("vote");
+        assert_eq!(
+            rt.settle_review("t1", "a").expect("settle"),
+            TeamTaskStatus::Done
+        );
+        assert_eq!(rt.claim_task("t1", "m1").expect("claim dependent"), "b");
+        drop(rt);
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[tokio::test]

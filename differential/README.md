@@ -19,7 +19,8 @@ fixtures/                      语言中立 fixture(仓库根)
   prompt_attachment.json        PromptAttachment CRUD/filter/expiry differential
   runtime_model_switching.json TaskPlanningRail 运行时模型切换 differential
   team_inbox_format.json       ExternalTeamClient 入站消息/任务看板格式 differential
-  team_inbox_fetch.json        ExternalTeamClient fetch mark-read/watch differential
+  task_lifecycle.json         TaskManager create/claim/update/dependency/review differential
+  subagents.json              Browser capability catalog differential
 references/                    Rust baseline(仅由 Rust 生成)
 differential/                  可选 Python 辅助审计脚本
   run_python.py                可选 Python reference runner(驱动真实 openjiuwen)
@@ -38,9 +39,10 @@ cargo test -p ah-app --test rust_contract
 AGENT_CORE_ROOT=/path/to/agent-core \
 PYTHON=/path/to/python3.11 \
 bash differential/run.sh
-# 仅运行 Rails、GoalManager、PromptAttachment、模型切换与 team inbox 差分
+# 仅运行任务 mutation/handoff 生命周期差分
 AGENT_CORE_ROOT=/path/to/agent-core \
-bash differential/run.sh llm_retry tool_retry task_completion task_planning goal_manager prompt_attachment runtime_model_switching team_inbox_format team_inbox_fetch
+PYTHON=/path/to/python3.11 \
+bash differential/run.sh task_lifecycle
 ```
 CI 的 `rails-differential` job 使用固定的 agent-core commit,执行上述四个
 LLM Rails seam;GoalManager、PromptAttachment 与 runtime model switching 可按需运行。

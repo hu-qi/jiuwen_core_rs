@@ -110,6 +110,15 @@ pub struct Experience {
     pub saved_ms: u64,
 }
 
+/// 一次完整 evolving 闭环的 durable 结果。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct EvolutionRun {
+    pub trajectory: Trajectory,
+    pub evaluation: Evaluation,
+    pub refinements: Vec<Refinement>,
+    pub experience: Experience,
+}
+
 #[async_trait]
 pub trait EvolvingRuntime: Seam {
     /// 从会话事件日志抽取轨迹(真实解析:工具调用配对结果、迭代预算、完成标志)。
@@ -140,7 +149,38 @@ pub trait EvolvingRuntime: Seam {
 
     /// 检索与任务相关的经验(任务标题包含查询词)。
     fn search_experiences(&self, query: &str) -> Result<Vec<Experience>, EvolvingError>;
+
+    /// 执行 extract → evaluate → optimize → persist 的完整闭环。
+    async fn evolve_session(
+        &self,
+        task: &str,
+        session_id: &str,
+    ) -> Result<EvolutionRun, EvolvingError> {
+        let trajectory = self.extract_session(task, session_id)?;
+        let evaluation = self.evaluate(&trajectory).await?;
+        let refinements = self.optimize(&trajectory, &evaluation).await?;
+        let saved_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0);
+        let experience = Experience {
+            id: format!("exp-{session_id}-{saved_ms}"),
+            task: task.to_string(),
+            verdict: evaluation.verdict,
+            score: evaluation.score,
+            issues: evaluation.issues.clone(),
+            saved_ms,
+        };
+        self.save_experience(&experience)?;
+        Ok(EvolutionRun {
+            trajectory,
+            evaluation,
+            refinements,
+            experience,
+        })
+    }
 }
+
 // ---------------------------------------------------------------------------
 // 进化更新契约(对齐 agent_evolving/types.py + protocols.py)
 // ---------------------------------------------------------------------------

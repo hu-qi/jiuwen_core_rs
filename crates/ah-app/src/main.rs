@@ -141,6 +141,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .invoke("search_knowledge", json!({ "query": "agent framework" }))
         .await?;
     println!("[retrieval] hits: {}", hits["count"]);
+    let vector_hits = registry
+        .invoke(
+            "search_knowledge",
+            json!({ "query": "agent framework", "mode": "vector" }),
+        )
+        .await?;
+    println!("[retrieval-vector] hits: {}", vector_hits["count"]);
 
     // agent-loop(会话驱动)
     let _step_listener = ctx.on::<AgentStep>(|step| {

@@ -235,9 +235,11 @@ async fn reference_teams_lifecycle() {
             ah_contracts::teams::TeamTask {
                 id: "a".into(),
                 title: "do a".into(),
+                content: "content".into(),
                 status: ah_contracts::teams::TeamTaskStatus::Pending,
                 dependencies: vec![],
                 assignee: None,
+                reviewers: vec![],
                 review_votes: vec![],
                 result: None,
             },
@@ -265,6 +267,183 @@ async fn reference_teams_lifecycle() {
     settle("teams", &outcome);
     drop(effects);
     let _ = std::fs::remove_dir_all(&root);
+}
+// ---------- task_lifecycle (Python/Rust differential) ----------
+
+#[test]
+fn reference_task_lifecycle() {
+    let fixture = load_fixture("task_lifecycle");
+    let root = root_for("task-lifecycle");
+    let ctx = Context::new();
+    let mut plugins = base_plugins(&root);
+    plugins.push(Arc::new(ah_plugins_agent_control::AgentControlPlugin));
+    plugins.push(Arc::new(ah_plugins_subagent::SubagentPlugin));
+    plugins.push(Arc::new(ah_plugins_queue::QueuePlugin::new(
+        root.join("queue"),
+    )));
+    plugins.push(Arc::new(ah_plugins_teams::TeamsPlugin));
+    let effects = mount(&ctx, plugins);
+    let teams = ctx.service::<dyn TeamRuntime>(&TEAMS).expect("teams");
+    teams
+        .create_team(
+            ah_contracts::teams::TeamSpec {
+                id: "task-team".into(),
+                name: "Task Team".into(),
+            },
+            vec![
+                ah_contracts::teams::TeamMemberSpec {
+                    id: "m1".into(),
+                    name: "m1".into(),
+                    role: "dev".into(),
+                },
+                ah_contracts::teams::TeamMemberSpec {
+                    id: "m2".into(),
+                    name: "m2".into(),
+                    role: "reviewer".into(),
+                },
+            ],
+        )
+        .expect("create team");
+    let status = |task: &ah_contracts::teams::TeamTask| match task.status {
+        ah_contracts::teams::TeamTaskStatus::Done => "completed",
+        ah_contracts::teams::TeamTaskStatus::InProgress => "in_progress",
+        ah_contracts::teams::TeamTaskStatus::InReview => "in_review",
+        ah_contracts::teams::TeamTaskStatus::Pending => "pending",
+        ah_contracts::teams::TeamTaskStatus::Failed => "failed",
+    };
+    let task_view = |task: &ah_contracts::teams::TeamTask| json!({"id": task.id, "title": task.title, "content": task.content, "status": status(task), "assignee": task.assignee});
+    let mut cases = Vec::new();
+    for case in fixture["cases"].as_array().unwrap() {
+        let mut operations = Vec::new();
+        for op in case["operations"].as_array().unwrap() {
+            match op["op"].as_str().unwrap() {
+                "create" => {
+                    let result = teams.create_task(
+                        "task-team",
+                        op["task_id"].as_str().unwrap(),
+                        op["title"].as_str().unwrap(),
+                        op["content"].as_str().unwrap(),
+                        vec![],
+                        op["reviewers"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|v| v.as_str().unwrap().to_string())
+                            .collect(),
+                    );
+                    operations.push(json!({"name":"create", "ok":result.is_ok(), "status":result.as_ref().ok().map(|task| status(task))}));
+                }
+                "update" => {
+                    let result = teams.update_task(
+                        "task-team",
+                        op["task_id"].as_str().unwrap(),
+                        Some(op["title"].as_str().unwrap()),
+                        Some(op["content"].as_str().unwrap()),
+                    );
+                    operations.push(json!({"name":"update", "ok":result.is_ok()}));
+                }
+                "dependency" | "dependency_cycle" => {
+                    let result = teams.add_dependency(
+                        "task-team",
+                        op["task_id"].as_str().unwrap(),
+                        op["depends_on"][0].as_str().unwrap(),
+                    );
+                    operations.push(json!({"name":op["op"], "ok":result.is_ok()}));
+                }
+                "claim" => {
+                    let result = teams.claim_task("task-team", op["member"].as_str().unwrap());
+                    operations.push(json!({"name":"claim", "ok":result.is_ok()}));
+                }
+                "complete" => {
+                    let task_id = op["task_id"].as_str().unwrap();
+                    let result = teams.complete_task("task-team", task_id, op["output"].clone());
+                    let task = teams
+                        .tasks("task-team")
+                        .unwrap()
+                        .into_iter()
+                        .find(|task| task.id == task_id)
+                        .unwrap();
+                    operations.push(
+                        json!({"name":"complete", "ok":result.is_ok(), "status":status(&task)}),
+                    );
+                }
+                "review" => {
+                    let task_id = op["task_id"].as_str().unwrap();
+                    let vote = teams.vote_review(
+                        "task-team",
+                        task_id,
+                        op["member"].as_str().unwrap(),
+                        op["decision"].as_str().unwrap() == "pass",
+                    );
+                    let result =
+                        vote.and_then(|_| teams.settle_review("task-team", task_id).map(|_| ()));
+                    let task = teams
+                        .tasks("task-team")
+                        .unwrap()
+                        .into_iter()
+                        .find(|task| task.id == task_id)
+                        .unwrap();
+                    operations.push(
+                        json!({"name":"review", "ok":result.is_ok(), "status":status(&task)}),
+                    );
+                }
+                _ => panic!("unknown task operation"),
+            }
+        }
+        let tasks = teams.tasks("task-team").unwrap();
+        operations.push(
+            json!({"name":"final", "tasks":tasks.iter().map(task_view).collect::<Vec<_>>() }),
+        );
+        cases.push(json!({"name":case["name"], "operations":operations}));
+    }
+    settle(
+        "task_lifecycle",
+        &json!({"seam":"task_lifecycle", "cases":cases}),
+    );
+    drop(effects);
+    let _ = std::fs::remove_dir_all(root);
+}
+
+// ---------- subagents browser capabilities differential ----------
+
+#[test]
+fn reference_subagents_browser_capabilities() {
+    let fixture = load_fixture("subagents");
+    let known = [
+        "core", "pdf", "vision", "devtools", "config", "network", "storage", "testing",
+    ];
+    let mut cases = Vec::new();
+    for case in fixture["cases"].as_array().unwrap() {
+        let mut requested = Vec::new();
+        for value in case["requested"].as_array().unwrap() {
+            let name = value.as_str().unwrap().to_string();
+            if !name.is_empty() && !requested.contains(&name) {
+                requested.push(name);
+            }
+        }
+        let rejected = requested
+            .iter()
+            .filter(|name| !known.contains(&name.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        let selected = std::iter::once("core".to_string())
+            .chain(
+                requested
+                    .iter()
+                    .filter(|name| known.contains(&name.as_str()) && name.as_str() != "core")
+                    .cloned(),
+            )
+            .collect::<Vec<_>>();
+        let valid_requested = requested
+            .iter()
+            .filter(|name| known.contains(&name.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        let allowed = ah_plugins_subagents::browser_tools_for_capabilities(&valid_requested)
+            .expect("capabilities");
+        cases.push(json!({"name":case["name"], "requested":requested, "selected":selected, "rejected":rejected, "allowed":allowed}));
+    }
+    settle("subagents", &json!({"seam":"subagents", "cases":cases}));
 }
 
 // ---------- evolving ----------

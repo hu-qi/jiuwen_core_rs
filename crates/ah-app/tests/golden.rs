@@ -521,9 +521,11 @@ fn team_task(id: &str, title: &str, deps: Vec<String>) -> TeamTask {
     TeamTask {
         id: id.to_string(),
         title: title.to_string(),
+        content: format!("content for {id}"),
         status: TeamTaskStatus::Pending,
         dependencies: deps,
         assignee: None,
+        reviewers: Vec::new(),
         review_votes: Vec::new(),
         result: None,
     }
@@ -608,6 +610,9 @@ async fn rsi_golden() {
     plugins.push(Arc::new(ah_plugins_evolving::EvolvingPlugin::new(
         root.join("evolving"),
     )));
+    plugins.push(Arc::new(ah_plugins_operator::OperatorPlugin));
+    plugins.push(Arc::new(ah_plugins_optimizer::OptimizerPlugin));
+    plugins.push(Arc::new(ah_plugins_evolving::UpdaterPlugin));
     plugins.push(Arc::new(ah_plugins_rsi::RsiPlugin::new(root.join("rsi"))));
     let effects = mount(&ctx, plugins);
     let rsi = ctx.service::<dyn RsiRuntime>(&RSI).expect("rsi");

@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "name": "create_claim_update_dependency_review",
+      "operations": [
+        {
+          "name": "create",
+          "ok": true,
+          "status": "pending"
+        },
+        {
+          "name": "create",
+          "ok": false,
+          "status": null
+        },
+        {
+          "name": "update",
+          "ok": true
+        },
+        {
+          "name": "create",
+          "ok": true,
+          "status": "pending"
+        },
+        {
+          "name": "dependency",
+          "ok": true
+        },
+        {
+          "name": "claim",
+          "ok": true
+        },
+        {
+          "name": "complete",
+          "ok": true,
+          "status": "in_review"
+        },
+        {
+          "name": "review",
+          "ok": true,
+          "status": "completed"
+        },
+        {
+          "name": "dependency_cycle",
+          "ok": false
+        },
+        {
+          "name": "claim",
+          "ok": true
+        },
+        {
+          "name": "final",
+          "tasks": [
+            {
+              "assignee": "m1",
+              "content": "revised",
+              "id": "a",
+              "status": "completed",
+              "title": "Updated"
+            },
+            {
+              "assignee": "m1",
+              "content": "b-body",
+              "id": "b",
+              "status": "in_progress",
+              "title": "Dependent"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "seam": "task_lifecycle"
+}

@@ -14,3 +14,4 @@ tokio = { version = "1", features = ["rt", "macros"] }
 
 [dev-dependencies]
 ah-plugins-tools = { workspace = true }
+ah-plugins-store = { workspace = true }

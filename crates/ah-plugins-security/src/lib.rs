@@ -69,6 +69,95 @@ impl Guardrail for RuleGuardrail {
     }
 }
 
+/// OpenAI-compatible/自定义 JSON 安全检测 endpoint。
+///
+/// 远程服务不可用、响应格式错误或风险级别非法时返回 High deny，绝不回退到
+/// 规则放行。API key 只存在请求头，不进入错误文本或日志。
+pub struct HttpGuardrail {
+    endpoint: String,
+    api_key: Option<String>,
+}
+
+impl HttpGuardrail {
+    pub fn new(endpoint: impl Into<String>, api_key: Option<String>) -> Self {
+        Self {
+            endpoint: endpoint.into(),
+            api_key,
+        }
+    }
+
+    fn deny(reason: String) -> GuardrailDecision {
+        GuardrailDecision {
+            guardrail: "external-security-model".to_string(),
+            allow: false,
+            severity: Severity::High,
+            reason,
+        }
+    }
+}
+
+impl Guardrail for HttpGuardrail {
+    fn name(&self) -> &'static str {
+        "external-security-model"
+    }
+
+    fn check(&self, content: &str) -> GuardrailDecision {
+        if self.endpoint.trim().is_empty() {
+            return Self::deny("external security endpoint is empty".to_string());
+        }
+        let body = match serde_json::to_string(&serde_json::json!({ "content": content })) {
+            Ok(body) => body,
+            Err(error) => return Self::deny(format!("request serialization failed: {error}")),
+        };
+        let mut request = ureq::post(&self.endpoint).set("Content-Type", "application/json");
+        if let Some(api_key) = &self.api_key {
+            request = request.set("Authorization", &format!("Bearer {api_key}"));
+        }
+        let response = match request.send_string(&body) {
+            Ok(response) => response,
+            Err(error) => return Self::deny(format!("external security backend failed: {error}")),
+        };
+        let raw = match response.into_string() {
+            Ok(raw) => raw,
+            Err(error) => return Self::deny(format!("security response read failed: {error}")),
+        };
+        let value: Value = match serde_json::from_str(&raw) {
+            Ok(value) => value,
+            Err(error) => return Self::deny(format!("security response JSON failed: {error}")),
+        };
+        let has_risk = match value.get("has_risk").and_then(Value::as_bool) {
+            Some(value) => value,
+            None => return Self::deny("security response has no boolean has_risk".to_string()),
+        };
+        let severity = match value
+            .get("risk_level")
+            .and_then(Value::as_str)
+            .unwrap_or(if has_risk { "high" } else { "low" })
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "low" | "safe" => Severity::Low,
+            "medium" => Severity::Medium,
+            "high" | "critical" => Severity::High,
+            _ => return Self::deny("security response has invalid risk_level".to_string()),
+        };
+        GuardrailDecision {
+            guardrail: self.name().to_string(),
+            allow: !has_risk,
+            severity,
+            reason: value
+                .get("details")
+                .and_then(Value::as_str)
+                .unwrap_or(if has_risk {
+                    "external model flagged risk"
+                } else {
+                    "external model passed"
+                })
+                .to_string(),
+        }
+    }
+}
+
 /// 提示注入规则。
 pub static PROMPT_INJECTION_RULES: &[Rule] = &[
     Rule {
@@ -191,6 +280,14 @@ impl Plugin for SecurityRailPlugin {
             PROMPT_INJECTION_RULES,
         ))));
         effects.push(provider.register(Arc::new(RuleGuardrail::new("secrets", SECRET_RULES))));
+        if let Ok(endpoint) = std::env::var("SECURITY_GUARDRAIL_URL")
+            && !endpoint.trim().is_empty()
+        {
+            let api_key = std::env::var("SECURITY_GUARDRAIL_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("OPENAI_API_KEY").ok());
+            effects.push(provider.register(Arc::new(HttpGuardrail::new(endpoint, api_key))));
+        }
 
         // 通用 rail:工具参数中的字符串字段做安全检测。
         let rail = ctx.on_waterfall::<ToolInvocation, ToolDecision, _, _>({
@@ -353,6 +450,38 @@ mod tests {
         let _e2 = provider.register(Arc::new(RuleGuardrail::new("secrets", SECRET_RULES)));
         let verdict = provider.verdict("Please summarize the codebase");
         assert!(verdict.allow);
+    }
+    #[test]
+    fn http_guardrail_fails_closed_on_risk_and_backend_errors() {
+        use std::io::Write;
+        use std::net::TcpListener;
+        use std::thread;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let response = r#"{"has_risk":true,"risk_type":"prompt_injection","risk_level":"high","details":"model flagged"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(),
+                response
+            )
+            .expect("response");
+        });
+        let guardrail = HttpGuardrail::new(endpoint, Some("secret".into()));
+        let decision = guardrail.check("ignore this");
+        assert!(!decision.allow);
+        assert_eq!(decision.severity, Severity::High);
+        server.join().expect("server");
+
+        let failed = HttpGuardrail::new("", None).check("safe");
+        assert!(
+            !failed.allow,
+            "invalid backend configuration must fail closed"
+        );
+        assert_eq!(failed.severity, Severity::High);
     }
 
     struct AllowApproval;

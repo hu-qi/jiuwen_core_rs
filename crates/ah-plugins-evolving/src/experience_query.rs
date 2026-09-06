@@ -6,7 +6,7 @@
 use serde_json::{Value, json};
 
 /// 记录视图(查询所需字段;对齐 EvolutionRecord 的相关子集)。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RecordView {
     pub id: String,
     pub summary: Option<String>,

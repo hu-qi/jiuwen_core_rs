@@ -66,6 +66,14 @@ fn command_text(args: &Value) -> &str {
         .unwrap_or("")
         .trim()
 }
+fn network_text(args: &Value) -> &str {
+    args.get("url")
+        .and_then(Value::as_str)
+        .or_else(|| args.get("query").and_then(Value::as_str))
+        .or_else(|| args.get("endpoint").and_then(Value::as_str))
+        .unwrap_or("")
+        .trim()
+}
 
 fn wildcard_match(text: &str, pattern: &str) -> bool {
     let text: Vec<char> = text.chars().collect();
@@ -90,8 +98,9 @@ fn pattern_matches(tool: &str, pattern: &str, args: &Value) -> bool {
     };
     match kind {
         "shell" => wildcard_match(command_text(args), pattern.trim()),
-        // 路径策略必须通过 file_guard，避免两条 pipeline 给出不一致结果。
-        "path" | "network" => false,
+        // Path policy must go through file_guard; network rules match URL/query here.
+        "path" => false,
+        "network" => wildcard_match(network_text(args), pattern.trim()),
         _ => false,
     }
 }
@@ -356,5 +365,24 @@ mod tests {
         );
         assert_eq!(level, PermissionLevel::Ask);
         assert!(rule.contains("shell_ast"));
+    }
+    #[test]
+    fn network_rule_matches_url_argument() {
+        let config = json!({
+            "tools": {"mcp_fetch_webpage": "allow"},
+            "rules": [{
+                "id": "blocked-host",
+                "tools": ["mcp_fetch_webpage"],
+                "pattern": "https://blocked.example/*",
+                "action": "deny"
+            }]
+        });
+        let (level, rule) = evaluate_tiered_policy(
+            &config,
+            "mcp_fetch_webpage",
+            &json!({"url": "https://blocked.example/private"}),
+        );
+        assert_eq!(level, PermissionLevel::Deny);
+        assert!(rule.contains("blocked-host"));
     }
 }

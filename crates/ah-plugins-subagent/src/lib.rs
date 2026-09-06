@@ -14,7 +14,7 @@ use ah_contracts::llm::{ModelProvider, ModelRequest, ToolSchema};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
-use ah_contracts::session::{SessionEventKind, SessionManager};
+use ah_contracts::session::{SessionEventKind, SessionLog, SessionManager};
 use ah_contracts::subagent::{SubagentError, SubagentResult, SubagentRuntime, SubagentSpec};
 use ah_contracts::tools::{Tool, ToolError, ToolRegistry};
 use ah_hub::context::Context;
@@ -80,6 +80,23 @@ impl LocalSubagentRuntime {
                 }
             } => Err(SubagentError(format!("subagent {}", control_message(interrupt.state(session_id))))),
         }
+    }
+    fn record_control_event(&self, session: &dyn SessionLog, session_id: &str) {
+        let Some(interrupt) = &self.interrupt else {
+            return;
+        };
+        let control = interrupt.state(session_id);
+        if control == AgentControl::Continue {
+            return;
+        }
+        let _ = session.append(
+            match control {
+                AgentControl::Interrupt => SessionEventKind::AgentInterrupted,
+                AgentControl::Cancel => SessionEventKind::AgentCanceled,
+                AgentControl::Continue => SessionEventKind::AgentStep,
+            },
+            json!({ "error": control_message(control) }),
+        );
     }
 }
 
@@ -222,7 +239,7 @@ impl SubagentRuntime for LocalSubagentRuntime {
             } else {
                 session.derive_messages()
             };
-            let response = self
+            let response = match self
                 .race_control(
                     &spec.id,
                     self.llm.chat(ModelRequest {
@@ -231,8 +248,14 @@ impl SubagentRuntime for LocalSubagentRuntime {
                         ..Default::default()
                     }),
                 )
-                .await?
-                .map_err(|e| SubagentError(format!("model error: {e}")))?;
+                .await
+            {
+                Ok(result) => result.map_err(|e| SubagentError(format!("model error: {e}")))?,
+                Err(error) => {
+                    self.record_control_event(session.as_ref(), &spec.id);
+                    return Err(error);
+                }
+            };
 
             if response.tool_calls.is_empty() {
                 session
@@ -282,13 +305,20 @@ impl SubagentRuntime for LocalSubagentRuntime {
                         Vec::new(),
                     )
                 } else {
-                    match self
+                    let tool_result = match self
                         .race_control(
                             &spec.id,
                             self.tools.invoke(&call.name, call.arguments.clone()),
                         )
-                        .await?
+                        .await
                     {
+                        Ok(result) => result,
+                        Err(error) => {
+                            self.record_control_event(session.as_ref(), &spec.id);
+                            return Err(error);
+                        }
+                    };
+                    match tool_result {
                         Ok(value) => {
                             let images = image_attachments(&value);
                             ("completed", value.to_string(), images)
@@ -478,6 +508,28 @@ mod tests {
         let effects = ctx.mount_all(plugins).expect("mount");
         (ctx, effects)
     }
+    struct SlowModel;
+
+    impl Seam for SlowModel {}
+
+    #[async_trait]
+    impl ah_contracts::llm::ModelProvider for SlowModel {
+        fn name(&self) -> &'static str {
+            "slow-test-model"
+        }
+
+        async fn chat(
+            &self,
+            _request: ah_contracts::llm::ModelRequest,
+        ) -> Result<ah_contracts::llm::ModelResponse, ah_contracts::llm::ModelError> {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            Ok(ah_contracts::llm::ModelResponse {
+                content: "finished".into(),
+                tool_calls: Vec::new(),
+                reasoning_content: None,
+            })
+        }
+    }
 
     #[test]
     fn tool_image_outputs_are_extracted_for_session_projection() {
@@ -600,6 +652,54 @@ mod tests {
         );
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
+    }
+    #[tokio::test]
+    async fn interruption_during_model_call_is_recorded() {
+        let root = std::env::temp_dir().join(format!("ah-subagent-race-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let interrupt = ctx
+            .service::<dyn InterruptRuntime>(&INTERRUPT)
+            .expect("interrupt");
+        let manager = ctx
+            .service::<dyn SessionManager>(&SESSION_MANAGER)
+            .expect("manager");
+        let tools = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let runtime = LocalSubagentRuntime {
+            llm: StdArc::new(SlowModel),
+            tools,
+            manager: manager.clone(),
+            context: None,
+            token_budget: 8192,
+            interrupt: Some(interrupt.clone()),
+        };
+        let task = tokio::spawn(async move {
+            runtime
+                .run(SubagentSpec {
+                    id: "interrupted-child".into(),
+                    task: "wait for interruption".into(),
+                    context: None,
+                    budget: Some(2),
+                    allowed_tools: None,
+                })
+                .await
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+        interrupt
+            .request("interrupted-child", AgentControl::Interrupt)
+            .await
+            .expect("request interruption");
+        let error = task.await.expect("join").expect_err("interrupted child");
+        assert!(error.0.contains("interrupted"));
+        assert!(
+            manager
+                .open("interrupted-child")
+                .expect("session")
+                .events()
+                .iter()
+                .any(|event| event.kind == SessionEventKind::AgentInterrupted)
+        );
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

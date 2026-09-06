@@ -198,6 +198,7 @@ mod tests {
             StdArc::new(ah_plugins_rsi::RsiPlugin::new(root.join("rsi"))),
             StdArc::new(ah_plugins_operator::OperatorPlugin),
             StdArc::new(ah_plugins_optimizer::OptimizerPlugin),
+            StdArc::new(ah_plugins_evolving::UpdaterPlugin),
             StdArc::new(TrainerPlugin),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");

@@ -1,11 +1,14 @@
 //! 优化经验检索器(对齐 rsi/optimization_experience_learner/learner.py
 //! `ExperienceRetriever` 确定性部分)。
 //!
-//! 索引后端真实落盘:每个 root 下 `index.yaml`(experiences 列表);检索按
+//! 索引后端支持本地 `index.yaml` 与可选的 `BaseKVStore` 外部 ledger;检索按
 //! 状态/优化类型/阶段/角色/候选模块/失败签名/机制类型过滤,按
 //! (confidence, created_at) 降序排序,limit 截断,summary 预算截断。
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use ah_contracts::store::{BaseKVStore, StoreError};
 
 use ah_contracts::rsi_learner::{
     allowed_statuses, bounded_list, confidence_score, entry_matches_query, first_text, truncate,
@@ -43,16 +46,26 @@ impl ExperienceRetrievalQuery {
 /// 索引后端检索器(对齐 `ExperienceRetriever`)。
 pub struct ExperienceRetriever {
     roots: Vec<PathBuf>,
+    external_store: Option<Arc<dyn BaseKVStore>>,
 }
 
 impl ExperienceRetriever {
     pub fn new(roots: Vec<PathBuf>) -> Self {
-        Self { roots }
+        Self {
+            roots,
+            external_store: None,
+        }
+    }
+
+    /// 注入外部经验 ledger;本地 index.yaml 仍作为补充来源。
+    pub fn with_external_store(mut self, store: Arc<dyn BaseKVStore>) -> Self {
+        self.external_store = Some(store);
+        self
     }
 
     /// 检索(对齐 `retrieve`):返回 (matches, metadata)。
     pub fn retrieve(&self, query: &ExperienceRetrievalQuery) -> (Vec<Value>, Value) {
-        if self.roots.is_empty() {
+        if self.roots.is_empty() && self.external_store.is_none() {
             return (
                 vec![],
                 serde_json::json!({
@@ -71,7 +84,20 @@ impl ExperienceRetriever {
             ),
             query.allow_provisional,
         );
-        let entries = self.load_entries();
+        let entries = match self.load_entries() {
+            Ok(entries) => entries,
+            Err(error) => {
+                return (
+                    vec![],
+                    serde_json::json!({
+                        "retrieval_status": "error",
+                        "error": error.to_string(),
+                        "searched_roots": self.roots.iter().map(|r| r.to_string_lossy().to_string()).collect::<Vec<_>>(),
+                        "external_store": self.external_store.is_some(),
+                    }),
+                );
+            }
+        };
         let filtered: Vec<Value> = entries
             .into_iter()
             .filter(|entry| {
@@ -127,6 +153,7 @@ impl ExperienceRetriever {
                     .iter()
                     .map(|r| r.to_string_lossy().to_string())
                     .collect::<Vec<_>>(),
+                "external_store": self.external_store.is_some(),
                 "matched_count": filtered.len(),
                 "returned_count": returned_count,
                 "allowed_statuses": allowed,
@@ -134,20 +161,36 @@ impl ExperienceRetriever {
         )
     }
 
-    /// 加载全部索引条目(对齐 `_load_entries`)。
-    fn load_entries(&self) -> Vec<Value> {
+    /// 加载全部索引条目(本地 index.yaml + 外部 ledger;外部 id 优先去重)。
+    fn load_entries(&self) -> Result<Vec<Value>, StoreError> {
         let mut entries: Vec<Value> = Vec::new();
+        let mut external_ids = std::collections::HashSet::new();
+        if let Some(store) = &self.external_store {
+            for entry in store.scan("rsi:experience:")? {
+                if entry.value.is_object() {
+                    if let Some(id) = entry.value.get("experience_id").and_then(Value::as_str) {
+                        external_ids.insert(id.to_string());
+                    }
+                    entries.push(entry.value);
+                }
+            }
+        }
         for root in &self.roots {
             let index = read_index(&root.join("index.yaml"));
             if let Some(Value::Array(items)) = index.get("experiences") {
                 for item in items {
-                    if item.is_object() {
+                    if item.is_object()
+                        && item
+                            .get("experience_id")
+                            .and_then(Value::as_str)
+                            .is_none_or(|id| !external_ids.contains(id))
+                    {
                         entries.push(item.clone());
                     }
                 }
             }
         }
-        entries
+        Ok(entries)
     }
 }
 
@@ -279,7 +322,46 @@ fn first_mapping(value: Option<&Value>) -> serde_json::Map<String, Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ah_contracts::seam::Seam;
+    use ah_contracts::store::{BaseKVStore, StoreError};
     use serde_json::json;
+    use std::sync::Arc;
+
+    #[derive(Default)]
+    struct MemoryStore(std::sync::Mutex<std::collections::BTreeMap<String, Value>>);
+
+    impl Seam for MemoryStore {}
+
+    impl BaseKVStore for MemoryStore {
+        fn get(&self, key: &str) -> Result<Option<Value>, StoreError> {
+            Ok(self.0.lock().unwrap().get(key).cloned())
+        }
+
+        fn set(&self, key: &str, value: Value) -> Result<(), StoreError> {
+            self.0.lock().unwrap().insert(key.to_string(), value);
+            Ok(())
+        }
+
+        fn delete(&self, key: &str) -> Result<(), StoreError> {
+            self.0.lock().unwrap().remove(key);
+            Ok(())
+        }
+
+        fn scan(&self, prefix: &str) -> Result<Vec<ah_contracts::store::KvEntry>, StoreError> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(key, _)| key.starts_with(prefix))
+                .map(|(key, value)| ah_contracts::store::KvEntry {
+                    key: key.clone(),
+                    value: value.clone(),
+                    updated_ms: 0,
+                })
+                .collect())
+        }
+    }
 
     fn write_yaml(path: &Path, value: &Value) {
         if let Some(parent) = path.parent() {
@@ -372,6 +454,33 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    #[test]
+    fn external_store_entries_are_retrieved_without_local_roots() {
+        let store = Arc::new(MemoryStore::default());
+        store
+            .set(
+                "rsi:experience:exp-external",
+                json!({
+                    "experience_id": "exp-external",
+                    "optimization_type": "prompt",
+                    "stage": "evaluate",
+                    "learning_status": "accepted",
+                    "confidence": "high",
+                    "created_at": "2026-09-06",
+                    "summary": "external ledger entry",
+                    "stage_experience_path": ""
+                }),
+            )
+            .unwrap();
+        let retriever = ExperienceRetriever::new(vec![]).with_external_store(store);
+        let (matches, metadata) =
+            retriever.retrieve(&ExperienceRetrievalQuery::new("prompt", "evaluate"));
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0]["experience_id"], "exp-external");
+        assert_eq!(matches[0]["summary"], "external ledger entry");
+        assert_eq!(metadata["retrieval_status"], "ok");
+        assert_eq!(metadata["external_store"], true);
+    }
     #[test]
     fn empty_roots_returns_empty_status() {
         let retriever = ExperienceRetriever::new(vec![]);

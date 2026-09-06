@@ -8,7 +8,7 @@
 - Rust stable toolchain;
 - git 2.26+;
 - 可选的外部服务或凭据,仅对应 production E2E 需要;
-- production profile 当前还依赖本地 Redis、OpenAI 凭据及部分外部命令,无这些依赖时 `boot()` 必须显式失败;当前实测缺少 OpenAI key 时由 `ah-plugins-openai` 返回明确错误。
+- production profile 当前还依赖本地 Redis、OpenAI 或 DashScope 凭据及部分外部命令,无这些依赖时 `boot()` 必须显式失败;当前实测无任一模型 key 时由 `ah-plugins-openai` 返回明确错误。
 
 ### 本地凭据文件
 
@@ -30,6 +30,59 @@ OPENAI_API_KEY=...
 ```sh
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
+```
+
+也可使用 DashScope 的 OpenAI-compatible Qwen endpoint；存在 OpenAI key 时 OpenAI
+配置优先，否则使用 DashScope:
+
+```sh
+DASHSCOPE_API_KEY=...
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+DASHSCOPE_MODEL=qwen-plus
+```
+
+检索可选使用 OpenAI-compatible 外部 embedding；设置后，摄入和 vector 查询都会
+通过该 endpoint，向量同时写入已注册的 KV store(生产 profile 使用 Redis):
+
+```sh
+EMBEDDING_BASE_URL=https://api.openai.com/v1/embeddings
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_API_KEY=...
+```
+
+外部 embedding 请求或响应失败会作为工具错误返回，不会静默切回本地向量。
+
+也支持阿里云 DashScope 原生 embedding 协议；未设置 `EMBEDDING_BASE_URL` 时，若存在
+`DASHSCOPE_API_KEY`，检索插件自动使用该 provider。endpoint/model 可选覆盖:
+
+DashScope embedding 默认对 `429` 和 `5xx` 做 2 次有界指数退避重试，并将同一 client 的
+请求串行化以限制并发为 1；可用 `DASHSCOPE_MAX_RETRIES` 与 `DASHSCOPE_RETRY_BASE_MS` 调整。
+
+```sh
+DASHSCOPE_API_KEY=...
+DASHSCOPE_EMBEDDING_ENDPOINT=https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding
+DASHSCOPE_EMBEDDING_MODEL=text-embedding-v3
+```
+
+DashScope 请求失败或响应结构/向量非法时显式返回错误，不回退到本地向量。
+
+DashScope 原生 rerank 通过 query-aware seam 使用 query 和候选文档。插件优先读取
+`credentials` seam 的 `dashscope.api_key`，endpoint/model 可由环境变量覆盖：
+
+```sh
+DASHSCOPE_RERANK_ENDPOINT=https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank
+DASHSCOPE_RERANK_MODEL=gte-rerank-v2
+```
+
+请求、响应、结果索引和分数均经过校验；缺少 DashScope 凭据时保留确定性的本地
+hybrid reranker，真实厂商路径需通过 production E2E 验证。
+
+安全策略可选挂载一个外部 JSON guardrail endpoint。响应需包含
+`has_risk`、可选 `risk_type`/`risk_level`/`details`；请求或解析失败会 fail closed:
+
+```sh
+SECURITY_GUARDRAIL_URL=https://security.example.com/v1/check
+SECURITY_GUARDRAIL_API_KEY=...
 ```
 
 生产 Profile 同时挂载 Redis store、Redis queue 和 checkpointer;三者使用同一个 Redis URL。

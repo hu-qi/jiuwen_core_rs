@@ -8,11 +8,12 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use ah_contracts::keys::{MEMORY, TOOLS};
+use ah_contracts::keys::{KV_STORE, MEMORY, TOOLS};
 use ah_contracts::memory::{MemoryError, MemoryProvider, MemoryRecord};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
+use ah_contracts::store::BaseKVStore;
 use ah_contracts::tools::{Tool, ToolError, ToolRegistry};
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
@@ -148,6 +149,103 @@ impl MemoryProvider for JsonFileMemoryProvider {
         }
         self.index.lock().unwrap().remove(key);
         Ok(())
+    }
+}
+
+/// 基于 KV seam 的外部记忆 provider。
+///
+/// 生产 profile 中 KV seam 可由 Redis 等真实后端提供；记忆记录仍使用稳定
+/// JSON 格式，因而可在不改变 memory seam 的情况下切换存储实现。
+pub struct KeyValueMemoryProvider {
+    store: std::sync::Arc<dyn BaseKVStore>,
+}
+
+impl KeyValueMemoryProvider {
+    pub fn new(store: std::sync::Arc<dyn BaseKVStore>) -> Self {
+        Self { store }
+    }
+
+    fn storage_key(key: &str) -> String {
+        format!("memory:{}", encode_memory_key(key))
+    }
+
+    fn decode(entry: &serde_json::Value) -> Option<MemoryRecord> {
+        serde_json::from_value(entry.clone()).ok()
+    }
+}
+
+impl Seam for KeyValueMemoryProvider {}
+
+impl MemoryProvider for KeyValueMemoryProvider {
+    fn store(
+        &self,
+        key: &str,
+        content: &str,
+        tags: Vec<String>,
+    ) -> Result<MemoryRecord, MemoryError> {
+        if key.trim().is_empty() {
+            return Err(MemoryError("memory key must not be empty".to_string()));
+        }
+        let record = MemoryRecord {
+            key: key.to_string(),
+            content: content.to_string(),
+            tags,
+            created_ms: now_ms(),
+        };
+        let value = serde_json::to_value(&record)
+            .map_err(|e| MemoryError(format!("serialize failed: {e}")))?;
+        self.store
+            .set(&Self::storage_key(key), value)
+            .map_err(|e| MemoryError(format!("external memory write failed: {e}")))?;
+        Ok(record)
+    }
+
+    fn retrieve(&self, key: &str) -> Option<MemoryRecord> {
+        self.store
+            .get(&Self::storage_key(key))
+            .ok()
+            .flatten()
+            .and_then(|value| Self::decode(&value))
+    }
+
+    fn search(&self, query: &str) -> Vec<MemoryRecord> {
+        let query = query.to_lowercase();
+        let mut records: Vec<_> = self
+            .store
+            .scan("memory:")
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| Self::decode(&entry.value))
+            .filter(|record| {
+                record.content.to_lowercase().contains(&query)
+                    || record
+                        .tags
+                        .iter()
+                        .any(|tag| tag.to_lowercase().contains(&query))
+            })
+            .collect();
+        records.sort_by(|a, b| a.key.cmp(&b.key));
+        records
+    }
+
+    fn list(&self) -> Vec<MemoryRecord> {
+        let mut records: Vec<_> = self
+            .store
+            .scan("memory:")
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| Self::decode(&entry.value))
+            .collect();
+        records.sort_by(|a, b| a.key.cmp(&b.key));
+        records
+    }
+
+    fn remove(&self, key: &str) -> Result<(), MemoryError> {
+        self.store
+            .delete(&Self::storage_key(key))
+            .map_err(|e| MemoryError(format!("external memory delete failed: {e}")))
     }
 }
 
@@ -317,12 +415,16 @@ impl Plugin for MemoryPlugin {
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
         let provider: std::sync::Arc<dyn MemoryProvider> =
-            std::sync::Arc::new(JsonFileMemoryProvider::open(&self.dir).map_err(|e| {
-                PluginError::Apply {
-                    plugin: self.name(),
-                    message: e.0,
-                }
-            })?);
+            if let Some(store) = ctx.service::<dyn BaseKVStore>(&KV_STORE) {
+                std::sync::Arc::new(KeyValueMemoryProvider::new(store))
+            } else {
+                std::sync::Arc::new(JsonFileMemoryProvider::open(&self.dir).map_err(|e| {
+                    PluginError::Apply {
+                        plugin: self.name(),
+                        message: e.0,
+                    }
+                })?)
+            };
         let mut effects = vec![ctx.register(MEMORY, provider.clone())];
 
         let registry =
@@ -347,6 +449,52 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let provider = JsonFileMemoryProvider::open(&dir).expect("open");
         (provider, dir)
+    }
+    #[test]
+    fn key_value_memory_provider_roundtrips_and_searches() {
+        use ah_contracts::store::{BaseKVStore, KvEntry, StoreError};
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        struct FakeStore(Mutex<HashMap<String, Value>>);
+        impl Seam for FakeStore {}
+        impl BaseKVStore for FakeStore {
+            fn get(&self, key: &str) -> Result<Option<Value>, StoreError> {
+                Ok(self.0.lock().unwrap().get(key).cloned())
+            }
+            fn set(&self, key: &str, value: Value) -> Result<(), StoreError> {
+                self.0.lock().unwrap().insert(key.to_string(), value);
+                Ok(())
+            }
+            fn delete(&self, key: &str) -> Result<(), StoreError> {
+                self.0.lock().unwrap().remove(key);
+                Ok(())
+            }
+            fn scan(&self, prefix: &str) -> Result<Vec<KvEntry>, StoreError> {
+                Ok(self
+                    .0
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|(key, _)| key.starts_with(prefix))
+                    .map(|(key, value)| KvEntry {
+                        key: key.clone(),
+                        value: value.clone(),
+                        updated_ms: 0,
+                    })
+                    .collect())
+            }
+        }
+        let store: Arc<dyn BaseKVStore> = Arc::new(FakeStore(Mutex::new(HashMap::new())));
+        let memory = KeyValueMemoryProvider::new(store);
+        let record = memory
+            .store("user/name", "Alice", vec!["person".into()])
+            .expect("store");
+        assert_eq!(memory.retrieve("user/name"), Some(record));
+        assert_eq!(memory.search("alice").len(), 1);
+        assert_eq!(memory.list().len(), 1);
+        memory.remove("user/name").expect("remove");
+        assert!(memory.retrieve("user/name").is_none());
     }
 
     #[test]
@@ -435,5 +583,36 @@ mod tests {
         reopened.remove("../escape").expect("remove encoded key");
         assert!(reopened.retrieve("../escape").is_none());
         let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn redis_memory_provider_roundtrips_searches_and_removes() {
+        use ah_contracts::store::BaseKVStore;
+        use std::sync::Arc;
+
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".into());
+        let store = match ah_plugins_store::RedisKVStore::open(&redis_url) {
+            Ok(store) => Arc::new(store),
+            Err(error) => {
+                println!("skipping: redis unavailable: {error}");
+                return;
+            }
+        };
+        let memory = KeyValueMemoryProvider::new(store.clone());
+        let key = format!("external-memory-{}", std::process::id());
+        let storage_key = KeyValueMemoryProvider::storage_key(&key);
+        let _ = store.delete(&storage_key);
+
+        let record = memory
+            .store(&key, "Redis-backed memory", vec!["external".into()])
+            .expect("store");
+        assert_eq!(memory.retrieve(&key), Some(record.clone()));
+        assert_eq!(memory.search("redis-backed").len(), 1);
+        assert_eq!(memory.search("external").len(), 1);
+        assert!(memory.list().iter().any(|item| item.key == key));
+
+        memory.remove(&key).expect("remove");
+        assert!(memory.retrieve(&key).is_none());
+        assert!(store.get(&storage_key).expect("get cleanup").is_none());
     }
 }

@@ -14,7 +14,7 @@ use ah_contracts::evolving::{
     Evaluation, EvolvingError, EvolvingRuntime, Experience, Refinement, RefinementTarget,
     StepOutcome, Trajectory, TrajectoryStep, Verdict,
 };
-use ah_contracts::keys::{EVOLVING, LLM, SESSION_MANAGER};
+use ah_contracts::keys::{EVOLVING, KV_STORE, LLM, SESSION_MANAGER};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
@@ -35,7 +35,10 @@ pub mod experience_query;
 pub mod experience_types;
 pub mod from_conv;
 pub mod lifecycle;
+pub mod online_file;
 pub mod online_orchestrator;
+pub use online_orchestrator::{OnlineEvolutionPlugin, OnlineEvolutionRuntime};
+pub use updater::UpdaterPlugin;
 pub mod prompts_sections;
 pub mod protocols;
 pub mod rebuild;
@@ -50,6 +53,7 @@ pub mod tool_metadata;
 pub mod tracker;
 pub mod trainer_progress;
 pub mod trajectory_codec;
+pub mod updater;
 pub mod updates;
 pub mod utils;
 
@@ -59,6 +63,8 @@ pub struct EvolvingRuntimeImpl {
     manager: Arc<dyn SessionManager>,
     /// 经验持久化目录(experiences.jsonl)。
     experience_dir: std::path::PathBuf,
+    /// 可选外部 KV 后端;存在时作为跨进程经验/轨迹索引。
+    external_store: Option<Arc<dyn ah_contracts::store::BaseKVStore>>,
 }
 
 impl EvolvingRuntimeImpl {
@@ -72,11 +78,77 @@ impl EvolvingRuntimeImpl {
             llm,
             manager,
             experience_dir: experience_dir.into(),
+            external_store: None,
         }
+    }
+
+    /// 注入外部 KV；文件仍保留作为本地审计副本。
+    pub fn with_external_store(mut self, store: Arc<dyn ah_contracts::store::BaseKVStore>) -> Self {
+        self.external_store = Some(store);
+        self
     }
 
     fn experience_path(&self) -> std::path::PathBuf {
         self.experience_dir.join("experiences.jsonl")
+    }
+    fn trajectory_path(&self) -> std::path::PathBuf {
+        self.experience_dir.join("trajectories.jsonl")
+    }
+
+    fn save_trajectory(
+        &self,
+        session_id: &str,
+        trajectory: &Trajectory,
+    ) -> Result<(), EvolvingError> {
+        std::fs::create_dir_all(&self.experience_dir)
+            .map_err(|e| EvolvingError(format!("create trajectory dir: {e}")))?;
+        let line = serde_json::to_string(trajectory)
+            .map_err(|e| EvolvingError(format!("serialize trajectory: {e}")))?;
+        let value = serde_json::to_value(trajectory)
+            .map_err(|e| EvolvingError(format!("serialize external trajectory: {e}")))?;
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.trajectory_path())
+            .map_err(|e| EvolvingError(format!("open trajectory file: {e}")))?;
+        writeln!(file, "{line}").map_err(|e| EvolvingError(format!("append trajectory: {e}")))?;
+        if let Some(store) = &self.external_store {
+            store
+                .set(&format!("evolving:trajectory:{session_id}"), value)
+                .map_err(|e| EvolvingError(format!("persist trajectory in external store: {e}")))?;
+        }
+        Ok(())
+    }
+
+    pub fn load_trajectories(&self) -> Result<Vec<Trajectory>, EvolvingError> {
+        if let Some(store) = &self.external_store {
+            let entries = store
+                .scan("evolving:trajectory:")
+                .map_err(|e| EvolvingError(format!("scan external trajectories: {e}")))?;
+            if !entries.is_empty() {
+                return entries
+                    .into_iter()
+                    .map(|entry| {
+                        serde_json::from_value(entry.value).map_err(|e| {
+                            EvolvingError(format!("parse external trajectory {}: {e}", entry.key))
+                        })
+                    })
+                    .collect();
+            }
+        }
+        let path = self.trajectory_path();
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| EvolvingError(format!("read trajectories: {e}")))?;
+        text.lines()
+            .map(|line| {
+                serde_json::from_str(line)
+                    .map_err(|e| EvolvingError(format!("parse trajectory checkpoint: {e}")))
+            })
+            .collect()
     }
 }
 
@@ -220,7 +292,9 @@ impl EvolvingRuntime for EvolvingRuntimeImpl {
             .open(session_id)
             .map_err(|e| EvolvingError(format!("open session {session_id}: {e}")))?;
         let events = log.events();
-        self.extract_trajectory(task, &events)
+        let trajectory = self.extract_trajectory(task, &events)?;
+        self.save_trajectory(session_id, &trajectory)?;
+        Ok(trajectory)
     }
 
     async fn evaluate(&self, trajectory: &Trajectory) -> Result<Evaluation, EvolvingError> {
@@ -540,10 +614,32 @@ impl EvolvingRuntime for EvolvingRuntimeImpl {
             .map_err(|e| EvolvingError(format!("open experience file: {e}")))?;
         use std::io::Write;
         writeln!(file, "{line}").map_err(|e| EvolvingError(format!("append experience: {e}")))?;
+        if let Some(store) = &self.external_store {
+            let value = serde_json::to_value(experience)
+                .map_err(|e| EvolvingError(format!("serialize external experience: {e}")))?;
+            store
+                .set(&format!("evolving:experience:{}", experience.id), value)
+                .map_err(|e| EvolvingError(format!("persist experience in external store: {e}")))?;
+        }
         Ok(())
     }
 
     fn load_experiences(&self) -> Result<Vec<Experience>, EvolvingError> {
+        if let Some(store) = &self.external_store {
+            let entries = store
+                .scan("evolving:experience:")
+                .map_err(|e| EvolvingError(format!("scan external experiences: {e}")))?;
+            if !entries.is_empty() {
+                return entries
+                    .into_iter()
+                    .map(|entry| {
+                        serde_json::from_value(entry.value).map_err(|e| {
+                            EvolvingError(format!("parse external experience {}: {e}", entry.key))
+                        })
+                    })
+                    .collect();
+            }
+        }
         let path = self.experience_path();
         if !path.exists() {
             return Ok(vec![]);
@@ -609,11 +705,12 @@ impl Plugin for EvolvingPlugin {
                 plugin: self.name(),
                 message: "session-manager seam not registered".to_string(),
             })?;
-        let runtime: Arc<dyn EvolvingRuntime> = Arc::new(EvolvingRuntimeImpl::new(
-            llm,
-            manager,
-            self.experience_dir.clone(),
-        ));
+        let runtime = EvolvingRuntimeImpl::new(llm, manager, self.experience_dir.clone());
+        let runtime = match ctx.service::<dyn ah_contracts::store::BaseKVStore>(&KV_STORE) {
+            Some(store) => runtime.with_external_store(store),
+            None => runtime,
+        };
+        let runtime: Arc<dyn EvolvingRuntime> = Arc::new(runtime);
         Ok(vec![ctx.register(EVOLVING, runtime)])
     }
 }
@@ -623,6 +720,7 @@ mod tests {
     use super::*;
     use ah_contracts::keys::EVOLVING;
     use ah_contracts::session::SessionLog;
+    use ah_contracts::store::BaseKVStore;
     use ah_hub::plugin::DynPlugin;
     use std::sync::Arc as StdArc;
 
@@ -738,6 +836,30 @@ mod tests {
         assert_eq!(traj.steps[1].budget_used, 2);
         assert!(traj.steps[2].tool.is_none());
 
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn evolve_session_persists_trajectory_and_experience() {
+        let root = std::env::temp_dir().join(format!("ah-evolve-loop-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let manager = ctx
+            .service::<dyn SessionManager>(&SESSION_MANAGER)
+            .expect("manager");
+        let log = manager.create("loop").expect("create");
+        clean_session(log.as_ref());
+        let runtime = ctx
+            .service::<dyn EvolvingRuntime>(&EVOLVING)
+            .expect("evolving");
+        let run = runtime
+            .evolve_session("list workspace", "loop")
+            .await
+            .expect("evolve session");
+        assert!(run.trajectory.finished);
+        assert_eq!(run.experience.task, "list workspace");
+        assert!(root.join("evolving/trajectories.jsonl").exists());
+        assert_eq!(runtime.load_experiences().expect("experiences").len(), 1);
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -900,5 +1022,157 @@ mod tests {
 
         drop(reopened.1);
         let _ = std::fs::remove_dir_all(&root);
+    }
+    #[derive(Default)]
+    struct MemoryStore(std::sync::Mutex<std::collections::BTreeMap<String, Value>>);
+
+    impl Seam for MemoryStore {}
+
+    impl ah_contracts::store::BaseKVStore for MemoryStore {
+        fn get(&self, key: &str) -> Result<Option<Value>, ah_contracts::store::StoreError> {
+            Ok(self.0.lock().unwrap().get(key).cloned())
+        }
+
+        fn set(&self, key: &str, value: Value) -> Result<(), ah_contracts::store::StoreError> {
+            self.0.lock().unwrap().insert(key.to_string(), value);
+            Ok(())
+        }
+
+        fn delete(&self, key: &str) -> Result<(), ah_contracts::store::StoreError> {
+            self.0.lock().unwrap().remove(key);
+            Ok(())
+        }
+
+        fn scan(
+            &self,
+            prefix: &str,
+        ) -> Result<Vec<ah_contracts::store::KvEntry>, ah_contracts::store::StoreError> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(key, _)| key.starts_with(prefix))
+                .map(|(key, value)| ah_contracts::store::KvEntry {
+                    key: key.clone(),
+                    value: value.clone(),
+                    updated_ms: 0,
+                })
+                .collect())
+        }
+    }
+
+    #[test]
+    fn external_kv_store_persists_and_loads_experience() {
+        let root = std::env::temp_dir().join(format!("ah-evolve-kv-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let llm = ctx.service::<dyn ModelProvider>(&LLM).expect("llm");
+        let manager = ctx
+            .service::<dyn SessionManager>(&SESSION_MANAGER)
+            .expect("manager");
+        let store = StdArc::new(MemoryStore::default());
+        let runtime = EvolvingRuntimeImpl::new(llm, manager, root.join("evolving"))
+            .with_external_store(store.clone());
+        let trajectory = Trajectory {
+            task: "persist through kv".to_string(),
+            steps: vec![],
+            finished: true,
+        };
+        runtime
+            .save_trajectory("session-1", &trajectory)
+            .expect("save external trajectory");
+        assert!(
+            store
+                .get("evolving:trajectory:session-1")
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(runtime.load_trajectories().unwrap(), vec![trajectory]);
+        runtime
+            .save_experience(&Experience {
+                id: "external-1".to_string(),
+                task: "persist through kv".to_string(),
+                verdict: Verdict::Pass,
+                score: 0.9,
+                issues: vec![],
+                saved_ms: 1,
+            })
+            .expect("save external");
+        assert!(
+            store
+                .get("evolving:experience:external-1")
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(runtime.load_experiences().unwrap().len(), 1);
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+    #[test]
+    fn redis_external_store_persists_trajectory_and_experience() {
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".into());
+        let store = match ah_plugins_store::RedisKVStore::open(&redis_url) {
+            Ok(store) => StdArc::new(store),
+            Err(error) => {
+                println!("skipping: redis unavailable: {error}");
+                return;
+            }
+        };
+        let root = std::env::temp_dir().join(format!("ah-evolve-redis-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (ctx, effects) = build_ctx(&root);
+        let llm = ctx.service::<dyn ModelProvider>(&LLM).expect("llm");
+        let manager = ctx
+            .service::<dyn SessionManager>(&SESSION_MANAGER)
+            .expect("manager");
+        let runtime = EvolvingRuntimeImpl::new(llm, manager, root.join("evolving"))
+            .with_external_store(store.clone());
+        let session_id = format!("redis-session-{}", std::process::id());
+        let experience_id = format!("redis-experience-{}", std::process::id());
+        let trajectory_key = format!("evolving:trajectory:{session_id}");
+        let experience_key = format!("evolving:experience:{experience_id}");
+        let _ = store.delete(&trajectory_key);
+        let _ = store.delete(&experience_key);
+
+        runtime
+            .save_trajectory(
+                &session_id,
+                &Trajectory {
+                    task: "redis persistence".into(),
+                    steps: vec![],
+                    finished: true,
+                },
+            )
+            .expect("save trajectory");
+        runtime
+            .save_experience(&Experience {
+                id: experience_id.clone(),
+                task: "redis persistence".into(),
+                verdict: Verdict::Pass,
+                score: 1.0,
+                issues: vec![],
+                saved_ms: 1,
+            })
+            .expect("save experience");
+        assert!(
+            store
+                .get(&trajectory_key)
+                .expect("trajectory get")
+                .is_some()
+        );
+        assert!(
+            store
+                .get(&experience_key)
+                .expect("experience get")
+                .is_some()
+        );
+        assert_eq!(runtime.load_trajectories().unwrap().len(), 1);
+        assert_eq!(runtime.load_experiences().unwrap().len(), 1);
+
+        let _ = store.delete(&trajectory_key);
+        let _ = store.delete(&experience_key);
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
     }
 }

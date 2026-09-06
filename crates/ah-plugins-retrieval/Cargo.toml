@@ -12,6 +12,8 @@ async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "macros"] }
+ureq = { version = "2.12", default-features = false, features = ["tls"] }
 
 [dev-dependencies]
 ah-plugins-tools = { workspace = true }
+ah-plugins-store = { workspace = true }

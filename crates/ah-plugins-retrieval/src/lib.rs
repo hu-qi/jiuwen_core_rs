@@ -1,20 +1,21 @@
 //! # ah-plugins-retrieval
 //!
-//! 真实本地知识库检索:文档分块 + 词法统计(BM25 风格)+ 本地确定性向量
-//! (哈希 n-gram TF embedding + 余弦相似度),JSON 持久化。
-//! 提供 retrieval seam + ingest_knowledge/search_knowledge 两个真实工具,
-//! 让 agent 能通过工具调用检索(过工具执行管线,rails 同样生效)。
-//! 外部模型 embedding(OpenAI/本地模型)留待后续,文档注明。
+//! 真实知识库检索:文档分块 + BM25 风格词法统计 + 余弦向量检索。
+//! 文档正文仍以 JSON 持久化；当 context 注册 KV seam 时，向量记录同步写入
+//! `retrieval-vector:*` 外部索引。embedding 默认使用确定性本地向量，也支持
+//! 通过 `credentials` seam 的 `dashscope.*` 凭据、`DASHSCOPE_*` 环境变量，或
+//! `EMBEDDING_BASE_URL`/`EMBEDDING_MODEL` 使用真实外部 embedding 服务。
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use ah_contracts::keys::{RETRIEVAL, TOOLS};
+use ah_contracts::keys::{KV_STORE, RETRIEVAL, TOOLS};
 use ah_contracts::prelude::Effect;
 use ah_contracts::retrieval::{RetrievalError, RetrievalHit, RetrievalProvider};
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
+use ah_contracts::store::BaseKVStore;
 use ah_contracts::tools::{Tool, ToolError, ToolRegistry};
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
@@ -76,6 +77,19 @@ fn features(text: &str) -> Vec<String> {
     feats
 }
 
+/// embedding backend:本地确定性或外部 HTTP 实现。
+pub trait EmbeddingBackend: Send + Sync {
+    fn embed(&self, text: &str) -> Result<Vec<f64>, RetrievalError>;
+}
+
+struct LocalEmbeddingBackend;
+
+impl EmbeddingBackend for LocalEmbeddingBackend {
+    fn embed(&self, text: &str) -> Result<Vec<f64>, RetrievalError> {
+        Ok(embed(text))
+    }
+}
+
 /// 确定性本地 embedding:哈希特征到 [0, DIM) 的 TF 权重稠密向量。
 fn embed(text: &str) -> Vec<f64> {
     let mut vector = vec![0.0f64; EMBED_DIM];
@@ -126,15 +140,49 @@ fn chunk_text(text: &str) -> Vec<String> {
     chunks
 }
 
-/// 真实本地检索 provider:dir/{doc_id}.json 持久化。
+fn encode_index_part(value: &str) -> String {
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn vector_key(doc_id: &str, chunk_index: usize) -> String {
+    format!(
+        "retrieval-vector:{}:{chunk_index}",
+        encode_index_part(doc_id)
+    )
+}
+
+/// 检索 provider:文档正文保存在本地,向量可选地保存在 KV-backed 外部索引。
 pub struct LocalRetrievalProvider {
     dir: PathBuf,
     docs: Mutex<HashMap<String, DocFile>>,
+    embedder: std::sync::Arc<dyn EmbeddingBackend>,
+    vector_store: Option<std::sync::Arc<dyn BaseKVStore>>,
 }
 
 impl LocalRetrievalProvider {
-    /// 打开(或创建)知识库目录;恢复已有文档。
+    /// 打开(或创建)知识库目录;默认使用本地确定性 embedding。
     pub fn open(dir: impl Into<PathBuf>) -> Result<Self, RetrievalError> {
+        Self::open_with_embedder_and_store(dir, std::sync::Arc::new(LocalEmbeddingBackend), None)
+    }
+
+    /// 打开知识库并注入 embedding backend。
+    pub fn open_with_embedder(
+        dir: impl Into<PathBuf>,
+        embedder: std::sync::Arc<dyn EmbeddingBackend>,
+    ) -> Result<Self, RetrievalError> {
+        Self::open_with_embedder_and_store(dir, embedder, None)
+    }
+
+    /// 打开知识库并启用可选的外部 KV 向量索引。
+    pub fn open_with_embedder_and_store(
+        dir: impl Into<PathBuf>,
+        embedder: std::sync::Arc<dyn EmbeddingBackend>,
+        vector_store: Option<std::sync::Arc<dyn BaseKVStore>>,
+    ) -> Result<Self, RetrievalError> {
         let dir = dir.into();
         std::fs::create_dir_all(&dir)
             .map_err(|e| RetrievalError(format!("create retrieval dir failed: {e}")))?;
@@ -154,11 +202,92 @@ impl LocalRetrievalProvider {
         Ok(Self {
             dir,
             docs: Mutex::new(docs),
+            embedder,
+            vector_store,
         })
     }
 
     fn path_for(&self, doc_id: &str) -> PathBuf {
         self.dir.join(format!("{doc_id}.json"))
+    }
+    fn persist_external_vectors(
+        &self,
+        doc_id: &str,
+        chunks: &[Chunk],
+    ) -> Result<(), RetrievalError> {
+        let Some(store) = &self.vector_store else {
+            return Ok(());
+        };
+        let prefix = format!("retrieval-vector:{}:", encode_index_part(doc_id));
+        let old = store
+            .scan(&prefix)
+            .map_err(|e| RetrievalError(format!("vector index scan failed: {e}")))?;
+        for entry in old {
+            store
+                .delete(&entry.key)
+                .map_err(|e| RetrievalError(format!("vector index delete failed: {e}")))?;
+        }
+        for (index, chunk) in chunks.iter().enumerate() {
+            store
+                .set(
+                    &vector_key(doc_id, index),
+                    json!({ "doc_id": doc_id, "chunk_index": index, "embedding": chunk.embedding }),
+                )
+                .map_err(|e| RetrievalError(format!("vector index write failed: {e}")))?;
+        }
+        Ok(())
+    }
+
+    fn external_vector(
+        &self,
+        doc_id: &str,
+        chunk_index: usize,
+        local_chunk: &Chunk,
+    ) -> Result<Vec<f64>, RetrievalError> {
+        let Some(store) = &self.vector_store else {
+            return if local_chunk.embedding.is_empty() {
+                self.embedder.embed(&local_chunk.text)
+            } else {
+                Ok(local_chunk.embedding.clone())
+            };
+        };
+        let value = store
+            .get(&vector_key(doc_id, chunk_index))
+            .map_err(|e| RetrievalError(format!("vector index read failed: {e}")))?
+            .ok_or_else(|| {
+                RetrievalError(format!(
+                    "vector index entry missing for {doc_id}:{chunk_index}"
+                ))
+            })?;
+        value
+            .get("embedding")
+            .and_then(Value::as_array)
+            .ok_or_else(|| RetrievalError("vector index entry has no embedding".to_string()))?
+            .iter()
+            .map(|value| {
+                value
+                    .as_f64()
+                    .filter(|number| number.is_finite())
+                    .ok_or_else(|| {
+                        RetrievalError("vector index contains invalid number".to_string())
+                    })
+            })
+            .collect()
+    }
+    fn remove_external_vectors(&self, doc_id: &str) -> Result<(), RetrievalError> {
+        let Some(store) = &self.vector_store else {
+            return Ok(());
+        };
+        let prefix = format!("retrieval-vector:{}:", encode_index_part(doc_id));
+        let entries = store
+            .scan(&prefix)
+            .map_err(|e| RetrievalError(format!("vector index scan failed: {e}")))?;
+        for entry in entries {
+            store
+                .delete(&entry.key)
+                .map_err(|e| RetrievalError(format!("vector index delete failed: {e}")))?;
+        }
+        Ok(())
     }
 
     /// IDF:log(1 + N/df)。
@@ -185,25 +314,27 @@ impl Seam for LocalRetrievalProvider {}
 
 impl RetrievalProvider for LocalRetrievalProvider {
     fn ingest(&self, doc_id: &str, text: &str, metadata: Value) -> Result<(), RetrievalError> {
-        let chunks = chunk_text(text)
+        let chunks: Vec<Chunk> = chunk_text(text)
             .into_iter()
-            .map(|text| Chunk {
-                tokens: {
-                    let mut map: HashMap<String, u32> = HashMap::new();
-                    for term in tokenize(&text) {
-                        *map.entry(term).or_insert(0) += 1;
-                    }
-                    map
-                },
-                embedding: embed(&text),
-                text,
+            .map(|text| {
+                let mut tokens: HashMap<String, u32> = HashMap::new();
+                for term in tokenize(&text) {
+                    *tokens.entry(term).or_insert(0) += 1;
+                }
+                let embedding = self.embedder.embed(&text)?;
+                Ok(Chunk {
+                    text,
+                    tokens,
+                    embedding,
+                })
             })
-            .collect();
+            .collect::<Result<_, RetrievalError>>()?;
         let doc = DocFile {
             doc_id: doc_id.to_string(),
             chunks,
             metadata,
         };
+        self.persist_external_vectors(doc_id, &doc.chunks)?;
         let text = serde_json::to_string(&doc)
             .map_err(|e| RetrievalError(format!("serialize failed: {e}")))?;
         std::fs::write(self.path_for(doc_id), text)
@@ -252,20 +383,23 @@ impl RetrievalProvider for LocalRetrievalProvider {
     }
 
     fn retrieve_vector(&self, query: &str, k: usize) -> Vec<RetrievalHit> {
+        self.retrieve_vector_checked(query, k).unwrap_or_default()
+    }
+
+    fn retrieve_vector_checked(
+        &self,
+        query: &str,
+        k: usize,
+    ) -> Result<Vec<RetrievalHit>, RetrievalError> {
         let docs = self.docs.lock().unwrap().clone();
         if docs.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
-        let query_vec = self.embedding(query);
+        let query_vec = self.embedder.embed(query)?;
         let mut scored: Vec<RetrievalHit> = Vec::new();
         for doc in docs.values() {
-            for chunk in &doc.chunks {
-                // 旧文档(无向量)补算;向量来自确定性 embedding。
-                let chunk_vec = if chunk.embedding.is_empty() {
-                    embed(&chunk.text)
-                } else {
-                    chunk.embedding.clone()
-                };
+            for (chunk_index, chunk) in doc.chunks.iter().enumerate() {
+                let chunk_vec = self.external_vector(&doc.doc_id, chunk_index, chunk)?;
                 let score = cosine(&query_vec, &chunk_vec);
                 if score > 0.0 {
                     scored.push(RetrievalHit {
@@ -282,14 +416,19 @@ impl RetrievalProvider for LocalRetrievalProvider {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         scored.truncate(k);
-        scored
+        Ok(scored)
     }
 
     fn embedding(&self, text: &str) -> Vec<f64> {
-        embed(text)
+        self.embedding_checked(text).unwrap_or_default()
+    }
+
+    fn embedding_checked(&self, text: &str) -> Result<Vec<f64>, RetrievalError> {
+        self.embedder.embed(text)
     }
 
     fn remove(&self, doc_id: &str) -> Result<(), RetrievalError> {
+        self.remove_external_vectors(doc_id)?;
         let path = self.path_for(doc_id);
         if path.exists() {
             std::fs::remove_file(&path)
@@ -303,6 +442,242 @@ impl RetrievalProvider for LocalRetrievalProvider {
         let mut ids: Vec<String> = self.docs.lock().unwrap().keys().cloned().collect();
         ids.sort();
         ids
+    }
+}
+
+/// 阿里云 DashScope 文本 embedding 客户端。
+///
+/// 使用 DashScope 原生 `/api/v1/services/embeddings/text-embedding/text-embedding`
+/// 协议；请求、HTTP 状态、JSON 结构和向量数值错误均显式返回，不回退本地向量。
+pub struct DashScopeEmbeddingClient {
+    endpoint: String,
+    model: String,
+    api_key: String,
+    max_retries: usize,
+    retry_base_delay: std::time::Duration,
+    request_lock: std::sync::Mutex<()>,
+}
+
+impl DashScopeEmbeddingClient {
+    const DEFAULT_ENDPOINT: &'static str =
+        "https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding";
+    const DEFAULT_MODEL: &'static str = "text-embedding-v3";
+
+    pub fn new(
+        endpoint: impl Into<String>,
+        model: impl Into<String>,
+        api_key: impl Into<String>,
+    ) -> Result<Self, RetrievalError> {
+        let endpoint = endpoint.into();
+        let model = model.into();
+        let api_key = api_key.into();
+        if endpoint.trim().is_empty() || model.trim().is_empty() || api_key.trim().is_empty() {
+            return Err(RetrievalError(
+                "dashscope endpoint, model and api key are required".to_string(),
+            ));
+        }
+        Ok(Self {
+            endpoint,
+            model,
+            api_key,
+            max_retries: 2,
+            retry_base_delay: std::time::Duration::from_millis(100),
+            request_lock: std::sync::Mutex::new(()),
+        })
+    }
+
+    /// 配置 429/5xx 的有界指数退避重试。
+    pub fn with_retry_policy(
+        mut self,
+        max_retries: usize,
+        retry_base_delay: std::time::Duration,
+    ) -> Self {
+        self.max_retries = max_retries;
+        self.retry_base_delay = retry_base_delay;
+        self
+    }
+
+    /// 从 `DASHSCOPE_API_KEY` 构建；endpoint/model 支持环境变量覆盖。
+    pub fn from_env() -> Option<Self> {
+        let api_key = std::env::var("DASHSCOPE_API_KEY").ok()?;
+        let client = Self::new(
+            std::env::var("DASHSCOPE_EMBEDDING_ENDPOINT")
+                .unwrap_or_else(|_| Self::DEFAULT_ENDPOINT.to_string()),
+            std::env::var("DASHSCOPE_EMBEDDING_MODEL")
+                .unwrap_or_else(|_| Self::DEFAULT_MODEL.to_string()),
+            api_key,
+        )
+        .ok()?;
+        let max_retries = std::env::var("DASHSCOPE_MAX_RETRIES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(client.max_retries);
+        let retry_base_delay = std::env::var("DASHSCOPE_RETRY_BASE_MS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(std::time::Duration::from_millis)
+            .unwrap_or(client.retry_base_delay);
+        Some(client.with_retry_policy(max_retries, retry_base_delay))
+    }
+
+    pub fn embed(&self, input: &str) -> Result<Vec<f64>, RetrievalError> {
+        let body = serde_json::to_string(&json!({
+            "model": self.model,
+            "input": { "texts": [input] },
+        }))
+        .map_err(|e| RetrievalError(format!("DashScope request serialization failed: {e}")))?;
+        let _request_guard = self.request_lock.lock().unwrap();
+        let mut attempt = 0usize;
+        let response = loop {
+            let result = ureq::post(&self.endpoint)
+                .set("Authorization", &format!("Bearer {}", self.api_key))
+                .set("Content-Type", "application/json")
+                .set("X-DashScope-Async", "disable")
+                .send_string(&body);
+            match result {
+                Ok(response) => break response,
+                Err(ureq::Error::Status(status, _))
+                    if attempt < self.max_retries && (status == 429 || status >= 500) =>
+                {
+                    let delay = self
+                        .retry_base_delay
+                        .saturating_mul(1_u32 << attempt.min(10));
+                    if !delay.is_zero() {
+                        std::thread::sleep(delay);
+                    }
+                    attempt += 1;
+                }
+                Err(error) => {
+                    return Err(RetrievalError(format!(
+                        "DashScope embedding request failed after {} retries: {error}",
+                        attempt
+                    )));
+                }
+            }
+        };
+        let response_body = response
+            .into_string()
+            .map_err(|e| RetrievalError(format!("DashScope response read failed: {e}")))?;
+        let value: Value = serde_json::from_str(&response_body)
+            .map_err(|e| RetrievalError(format!("DashScope response JSON failed: {e}")))?;
+        let values = value
+            .get("output")
+            .and_then(|output| output.get("embeddings"))
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("embedding"))
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                RetrievalError("DashScope response has no embedding vector".to_string())
+            })?;
+        if values.is_empty() {
+            return Err(RetrievalError(
+                "DashScope response vector is empty".to_string(),
+            ));
+        }
+        values
+            .iter()
+            .map(|value| {
+                let number = value.as_f64().ok_or_else(|| {
+                    RetrievalError("DashScope vector contains non-number".to_string())
+                })?;
+                if number.is_finite() {
+                    Ok(number)
+                } else {
+                    Err(RetrievalError(
+                        "DashScope vector contains non-finite number".to_string(),
+                    ))
+                }
+            })
+            .collect()
+    }
+}
+
+impl EmbeddingBackend for DashScopeEmbeddingClient {
+    fn embed(&self, text: &str) -> Result<Vec<f64>, RetrievalError> {
+        DashScopeEmbeddingClient::embed(self, text)
+    }
+}
+
+/// OpenAI-compatible 外部 embedding 客户端。
+///
+/// 该客户端只负责真实 HTTP 请求与响应校验；网络、HTTP、JSON 和维度错误均
+/// 显式返回，不会退回本地哈希向量。
+pub struct HttpEmbeddingClient {
+    endpoint: String,
+    model: String,
+    api_key: Option<String>,
+}
+
+impl HttpEmbeddingClient {
+    pub fn new(
+        endpoint: impl Into<String>,
+        model: impl Into<String>,
+        api_key: Option<String>,
+    ) -> Self {
+        Self {
+            endpoint: endpoint.into(),
+            model: model.into(),
+            api_key,
+        }
+    }
+
+    pub fn embed(&self, input: &str) -> Result<Vec<f64>, RetrievalError> {
+        if self.endpoint.trim().is_empty() || self.model.trim().is_empty() {
+            return Err(RetrievalError(
+                "embedding endpoint and model are required".to_string(),
+            ));
+        }
+        let body = serde_json::to_string(&json!({ "input": input, "model": self.model }))
+            .map_err(|e| RetrievalError(format!("embedding request serialization failed: {e}")))?;
+        let mut request = ureq::post(&self.endpoint).set("Content-Type", "application/json");
+        if let Some(api_key) = &self.api_key {
+            request = request.set("Authorization", &format!("Bearer {api_key}"));
+        }
+        let response = request
+            .send_string(&body)
+            .map_err(|e| RetrievalError(format!("embedding request failed: {e}")))?;
+        let response_body = response
+            .into_string()
+            .map_err(|e| RetrievalError(format!("embedding response read failed: {e}")))?;
+        let value: Value = serde_json::from_str(&response_body)
+            .map_err(|e| RetrievalError(format!("embedding response JSON failed: {e}")))?;
+        let values = value
+            .get("data")
+            .and_then(Value::as_array)
+            .and_then(|data| data.first())
+            .and_then(|item| item.get("embedding"))
+            .or_else(|| value.get("embedding"))
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                RetrievalError("embedding response has no embedding vector".to_string())
+            })?;
+        if values.is_empty() {
+            return Err(RetrievalError(
+                "embedding response vector is empty".to_string(),
+            ));
+        }
+        values
+            .iter()
+            .map(|value| {
+                let number = value.as_f64().ok_or_else(|| {
+                    RetrievalError("embedding vector contains non-number".to_string())
+                })?;
+                if number.is_finite() {
+                    Ok(number)
+                } else {
+                    Err(RetrievalError(
+                        "embedding vector contains non-finite number".to_string(),
+                    ))
+                }
+            })
+            .collect()
+    }
+}
+
+impl EmbeddingBackend for HttpEmbeddingClient {
+    fn embed(&self, text: &str) -> Result<Vec<f64>, RetrievalError> {
+        HttpEmbeddingClient::embed(self, text)
     }
 }
 
@@ -398,11 +773,65 @@ impl Tool for SearchKnowledgeTool {
             .and_then(Value::as_str)
             .unwrap_or("bm25");
         let hits = match mode {
-            "vector" => self.retrieval.retrieve_vector(query, k),
+            "vector" => self
+                .retrieval
+                .retrieve_vector_checked(query, k)
+                .map_err(|e| ToolError(format!("vector search failed: {e}")))?,
             _ => self.retrieval.retrieve(query, k),
         };
         Ok(json!({ "mode": mode, "count": hits.len(), "hits": hits }))
     }
+}
+
+struct DashScopeSettings {
+    endpoint: String,
+    model: String,
+    api_key: String,
+}
+
+fn dashscope_credentials(
+    provider: Option<&dyn ah_contracts::credentials::CredentialProvider>,
+) -> Option<DashScopeSettings> {
+    let api_key = provider?.get("dashscope.api_key")?.value;
+    let endpoint = provider
+        .and_then(|provider| provider.get("dashscope.base_url"))
+        .map(|credential| credential.value)
+        .unwrap_or_else(|| DashScopeEmbeddingClient::DEFAULT_ENDPOINT.to_string());
+    let model = provider
+        .and_then(|provider| provider.get("dashscope.model"))
+        .map(|credential| credential.value)
+        .unwrap_or_else(|| DashScopeEmbeddingClient::DEFAULT_MODEL.to_string());
+    Some(DashScopeSettings {
+        endpoint,
+        model,
+        api_key,
+    })
+}
+
+fn configured_embedder(ctx: &Context) -> std::sync::Arc<dyn EmbeddingBackend> {
+    let credentials = ctx.service::<dyn ah_contracts::credentials::CredentialProvider>(
+        &ah_contracts::keys::CREDENTIALS,
+    );
+    if let Some(config) = dashscope_credentials(credentials.as_deref())
+        && let Ok(client) =
+            DashScopeEmbeddingClient::new(config.endpoint, config.model, config.api_key)
+    {
+        return std::sync::Arc::new(client);
+    }
+    if let Ok(endpoint) = std::env::var("EMBEDDING_BASE_URL")
+        && !endpoint.trim().is_empty()
+    {
+        let model = std::env::var("EMBEDDING_MODEL")
+            .unwrap_or_else(|_| "text-embedding-3-small".to_string());
+        let api_key = std::env::var("EMBEDDING_API_KEY")
+            .ok()
+            .or_else(|| std::env::var("OPENAI_API_KEY").ok());
+        return std::sync::Arc::new(HttpEmbeddingClient::new(endpoint, model, api_key));
+    }
+    if let Some(client) = DashScopeEmbeddingClient::from_env() {
+        return std::sync::Arc::new(client);
+    }
+    std::sync::Arc::new(LocalEmbeddingBackend)
 }
 
 /// 检索插件:提供 retrieval seam,并注册 ingest_knowledge/search_knowledge 工具。
@@ -430,13 +859,18 @@ impl Plugin for RetrievalPlugin {
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
-        let provider: std::sync::Arc<dyn RetrievalProvider> =
-            std::sync::Arc::new(LocalRetrievalProvider::open(&self.dir).map_err(|e| {
-                PluginError::Apply {
-                    plugin: self.name(),
-                    message: e.0,
-                }
-            })?);
+        let vector_store = ctx.service::<dyn BaseKVStore>(&KV_STORE);
+        let provider: std::sync::Arc<dyn RetrievalProvider> = std::sync::Arc::new(
+            LocalRetrievalProvider::open_with_embedder_and_store(
+                &self.dir,
+                configured_embedder(ctx),
+                vector_store,
+            )
+            .map_err(|e| PluginError::Apply {
+                plugin: self.name(),
+                message: e.0,
+            })?,
+        );
         let mut effects = vec![ctx.register(RETRIEVAL, provider.clone())];
 
         let registry =
@@ -464,6 +898,71 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let provider = LocalRetrievalProvider::open(&dir).expect("open");
         (provider, dir)
+    }
+    #[test]
+    fn external_vector_index_survives_reopen_and_remove() {
+        use ah_contracts::store::{BaseKVStore, KvEntry, StoreError};
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        struct FakeStore(Mutex<HashMap<String, Value>>);
+        impl Seam for FakeStore {}
+        impl BaseKVStore for FakeStore {
+            fn get(&self, key: &str) -> Result<Option<Value>, StoreError> {
+                Ok(self.0.lock().unwrap().get(key).cloned())
+            }
+            fn set(&self, key: &str, value: Value) -> Result<(), StoreError> {
+                self.0.lock().unwrap().insert(key.to_string(), value);
+                Ok(())
+            }
+            fn delete(&self, key: &str) -> Result<(), StoreError> {
+                self.0.lock().unwrap().remove(key);
+                Ok(())
+            }
+            fn scan(&self, prefix: &str) -> Result<Vec<KvEntry>, StoreError> {
+                Ok(self
+                    .0
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|(key, _)| key.starts_with(prefix))
+                    .map(|(key, value)| KvEntry {
+                        key: key.clone(),
+                        value: value.clone(),
+                        updated_ms: 0,
+                    })
+                    .collect())
+            }
+        }
+
+        let store: Arc<dyn BaseKVStore> = Arc::new(FakeStore(Mutex::new(HashMap::new())));
+        let dir =
+            std::env::temp_dir().join(format!("ah-retrieval-external-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let provider = LocalRetrievalProvider::open_with_embedder_and_store(
+            &dir,
+            Arc::new(LocalEmbeddingBackend),
+            Some(store.clone()),
+        )
+        .expect("open");
+        provider
+            .ingest("doc", "Rust vector storage", json!({}))
+            .expect("ingest");
+        assert_eq!(store.scan("retrieval-vector:").unwrap().len(), 1);
+        drop(provider);
+        let reopened = LocalRetrievalProvider::open_with_embedder_and_store(
+            &dir,
+            Arc::new(LocalEmbeddingBackend),
+            Some(store.clone()),
+        )
+        .expect("reopen");
+        assert_eq!(
+            reopened.retrieve_vector_checked("vector", 1).unwrap().len(),
+            1
+        );
+        reopened.remove("doc").expect("remove");
+        assert!(store.scan("retrieval-vector:").unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -639,4 +1138,267 @@ mod tests {
         drop(effects);
         let _ = std::fs::remove_dir_all(&dir);
     }
+    #[test]
+    fn dashscope_credentials_are_resolved_from_seam() {
+        use ah_contracts::credentials::{Credential, CredentialError, CredentialProvider};
+
+        struct StaticCredentials;
+        impl Seam for StaticCredentials {}
+        impl CredentialProvider for StaticCredentials {
+            fn get(&self, name: &str) -> Option<Credential> {
+                let value = match name {
+                    "dashscope.api_key" => "credential-key",
+                    "dashscope.base_url" => "http://credential-endpoint",
+                    "dashscope.model" => "credential-model",
+                    _ => return None,
+                };
+                Some(Credential {
+                    name: name.to_string(),
+                    value: value.to_string(),
+                    source: "test".to_string(),
+                })
+            }
+            fn set(&self, _: &str, _: &str, _: &str) -> Result<Credential, CredentialError> {
+                unreachable!()
+            }
+            fn list(&self) -> Vec<Credential> {
+                vec![]
+            }
+            fn remove(&self, _: &str) -> Result<(), CredentialError> {
+                unreachable!()
+            }
+        }
+
+        let config = dashscope_credentials(Some(&StaticCredentials)).expect("config");
+        assert_eq!(config.endpoint, "http://credential-endpoint");
+        assert_eq!(config.model, "credential-model");
+        assert_eq!(config.api_key, "credential-key");
+    }
+}
+#[test]
+fn http_embedding_client_parses_openai_compatible_response() {
+    use std::io::Write;
+    use std::net::TcpListener;
+    use std::thread;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+    let endpoint = format!("http://{}/v1/embeddings", listener.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept");
+        let mut request = [0_u8; 2048];
+        let _ = std::io::Read::read(&mut stream, &mut request);
+        let body = r#"{"data":[{"embedding":[0.25,-0.5,1.0]}]}"#;
+        write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).expect("response");
+    });
+    let client = HttpEmbeddingClient::new(endpoint, "test-model", Some("secret".into()));
+    assert_eq!(
+        client.embed("hello").expect("embedding"),
+        vec![0.25, -0.5, 1.0]
+    );
+    server.join().expect("server");
+}
+
+#[test]
+fn dashscope_embedding_client_posts_native_request_and_parses_response() {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::thread;
+
+    assert!(DashScopeEmbeddingClient::new("", "model", "key").is_err());
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let (sender, receiver) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept");
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 4096];
+        loop {
+            let size = stream.read(&mut buffer).expect("request");
+            assert!(size > 0, "request closed before body");
+            request.extend_from_slice(&buffer[..size]);
+            let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n")
+            else {
+                continue;
+            };
+            let headers = String::from_utf8_lossy(&request[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| line.strip_prefix("Content-Length: "))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .expect("content length");
+            if request.len() >= header_end + 4 + content_length {
+                break;
+            }
+        }
+        sender
+            .send(String::from_utf8_lossy(&request).into_owned())
+            .expect("capture request");
+        let body = r#"{"output":{"embeddings":[{"embedding":[0.125,-0.25,0.5],"text_index":0}]}}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .expect("response");
+    });
+    let client =
+        DashScopeEmbeddingClient::new(endpoint, "text-embedding-v3", "secret").expect("client");
+    assert_eq!(
+        client.embed("hello").expect("embedding"),
+        vec![0.125, -0.25, 0.5]
+    );
+    let request = receiver.recv().expect("request capture");
+    assert!(request.contains("Authorization: Bearer secret"));
+
+    assert!(request.contains(r#""model":"text-embedding-v3""#));
+    assert!(request.contains(r#""texts":["hello"]"#));
+    server.join().expect("server");
+}
+#[test]
+fn dashscope_embedding_client_retries_transient_status() {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use std::thread;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let calls = Arc::new(AtomicUsize::new(0));
+    let server_calls = calls.clone();
+    let server = thread::spawn(move || {
+        for call in 0..2 {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 4096];
+            loop {
+                let size = stream.read(&mut buffer).expect("request");
+                assert!(size > 0, "request closed before body");
+                request.extend_from_slice(&buffer[..size]);
+                let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n")
+                else {
+                    continue;
+                };
+                let headers = String::from_utf8_lossy(&request[..header_end]);
+                let content_length = headers
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Content-Length: "))
+                    .and_then(|value| value.trim().parse::<usize>().ok())
+                    .expect("content length");
+                if request.len() >= header_end + 4 + content_length {
+                    break;
+                }
+            }
+            server_calls.fetch_add(1, Ordering::SeqCst);
+            let (status, body) = if call == 0 {
+                ("429 Too Many Requests", r#"{"error":"busy"}"#)
+            } else {
+                (
+                    "200 OK",
+                    r#"{"output":{"embeddings":[{"embedding":[1.0]}]}}"#,
+                )
+            };
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .expect("response");
+        }
+    });
+    let client = DashScopeEmbeddingClient::new(endpoint, "text-embedding-v3", "secret")
+        .expect("client")
+        .with_retry_policy(1, std::time::Duration::from_millis(1));
+    assert_eq!(client.embed("hello").expect("retry succeeds"), vec![1.0]);
+    server.join().expect("server");
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+#[test]
+fn external_http_embedding_and_redis_vector_index_roundtrip() {
+    use ah_contracts::store::BaseKVStore;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::Arc;
+    use std::thread;
+
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".into());
+    let redis = match ah_plugins_store::RedisKVStore::open(&redis_url) {
+        Ok(store) => Arc::new(store),
+        Err(error) => {
+            println!("skipping: redis unavailable: {error}");
+            return;
+        }
+    };
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind embedding fixture");
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().expect("embedding request");
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 4096];
+            loop {
+                let size = stream.read(&mut buffer).expect("read embedding request");
+                assert!(size > 0, "embedding request closed before body");
+                request.extend_from_slice(&buffer[..size]);
+                let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n")
+                else {
+                    continue;
+                };
+                let headers = String::from_utf8_lossy(&request[..header_end]);
+                let content_length = headers
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Content-Length: "))
+                    .and_then(|value| value.trim().parse::<usize>().ok())
+                    .expect("content length");
+                if request.len() >= header_end + 4 + content_length {
+                    break;
+                }
+            }
+            let body = r#"{"data":[{"embedding":[1.0,0.0]}]}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .expect("embedding response");
+        }
+    });
+    let dir = std::env::temp_dir().join(format!("ah-retrieval-external-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let provider = LocalRetrievalProvider::open_with_embedder_and_store(
+        &dir,
+        Arc::new(HttpEmbeddingClient::new(endpoint, "fixture", None)),
+        Some(redis.clone()),
+    )
+    .expect("provider");
+    let doc_id = format!("external-{}", std::process::id());
+    provider
+        .ingest(&doc_id, "external vector document", serde_json::json!({}))
+        .expect("ingest");
+    let hits = provider
+        .retrieve_vector_checked("external vector query", 1)
+        .expect("vector search");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].doc_id, doc_id);
+    assert_eq!(
+        redis
+            .scan(&format!("retrieval-vector:{}:", encode_index_part(&doc_id)))
+            .unwrap()
+            .len(),
+        1
+    );
+    provider.remove(&doc_id).expect("remove");
+    assert!(
+        redis
+            .scan(&format!("retrieval-vector:{}:", encode_index_part(&doc_id)))
+            .unwrap()
+            .is_empty()
+    );
+    server.join().expect("fixture");
+    let _ = std::fs::remove_dir_all(dir);
 }

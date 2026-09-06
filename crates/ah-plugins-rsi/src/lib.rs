@@ -10,9 +10,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use ah_contracts::evolving::{EvolvingRuntime, RefinementTarget, Verdict};
-use ah_contracts::keys::{EVOLVING, LLM, RSI, SUBAGENT};
+use ah_contracts::evolving::{Evaluation, EvolvingRuntime, RefinementTarget, Verdict};
+use ah_contracts::keys::{EVOLVING, KV_STORE, LLM, OPERATOR, RSI, SUBAGENT, UPDATER};
 use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
+use ah_contracts::operator::OperatorRegistry;
 use ah_contracts::prelude::Effect;
 use ah_contracts::rsi::{
     GeneratedDataset, RsiCase, RsiCheckpoint, RsiError, RsiReport, RsiRunOutcome, RsiRuntime,
@@ -20,6 +21,7 @@ use ah_contracts::rsi::{
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::subagent::{SubagentRuntime, SubagentSpec};
+use ah_contracts::updater::Updater;
 use ah_hub::context::Context;
 
 pub mod analyzer;
@@ -44,6 +46,11 @@ pub struct RsiRuntimeImpl {
     llm: Option<Arc<dyn ModelProvider>>,
     /// checkpoint 目录(JSONL 文件)。
     dir: PathBuf,
+    /// 可选外部 checkpoint 后端;本地 JSONL 仍作为审计副本。
+    external_store: Option<Arc<dyn ah_contracts::store::BaseKVStore>>,
+    /// 可选 updater seam 与 operator registry,用于把每轮失败反馈变成真实更新。
+    updater: Option<Arc<dyn Updater>>,
+    operators: Option<Arc<dyn OperatorRegistry>>,
 }
 
 impl RsiRuntimeImpl {
@@ -58,13 +65,69 @@ impl RsiRuntimeImpl {
             evolving,
             llm: None,
             dir: dir.into(),
+            external_store: None,
+            updater: None,
+            operators: None,
         }
+    }
+
+    /// 注入外部 KV checkpoint 存储。
+    pub fn with_external_store(mut self, store: Arc<dyn ah_contracts::store::BaseKVStore>) -> Self {
+        self.external_store = Some(store);
+        self
     }
 
     /// 挂载 LLM seam(数据集合成)。
     pub fn with_llm(mut self, llm: Arc<dyn ModelProvider>) -> Self {
         self.llm = Some(llm);
         self
+    }
+    /// 接入共享 updater;未接入时保持仅评测/精化模式。
+    pub fn with_updater(
+        mut self,
+        updater: Arc<dyn Updater>,
+        operators: Arc<dyn OperatorRegistry>,
+    ) -> Self {
+        self.updater = Some(updater);
+        self.operators = Some(operators);
+        self
+    }
+
+    async fn apply_round_updates(&self, report: &RsiReport) -> Result<(), RsiError> {
+        let (Some(updater), Some(registry)) = (&self.updater, &self.operators) else {
+            return Ok(());
+        };
+        let evaluation = Evaluation {
+            verdict: if report.total > 0 && report.passed == report.total {
+                Verdict::Pass
+            } else {
+                Verdict::NeedsWork
+            },
+            score: report.avg_score,
+            strengths: vec![],
+            issues: report.issues.clone(),
+            feedback: report.summary.clone(),
+        };
+        let updates = updater
+            .process(
+                &[],
+                &[evaluation],
+                &ah_contracts::updater::UpdaterConfig::default(),
+            )
+            .map_err(|error| RsiError(format!("generate round update: {error}")))?;
+        for ((operator_id, target), update) in updates {
+            let operator = registry.get(&operator_id).ok_or_else(|| {
+                RsiError(format!("updater operator not registered: {operator_id}"))
+            })?;
+            let result = operator.apply_update(&target, &update);
+            if !result.errors.is_empty() {
+                return Err(RsiError(format!(
+                    "apply round update {operator_id}/{target}: {}",
+                    result.errors.join("; ")
+                )));
+            }
+        }
+        Ok(())
     }
 
     fn checkpoint_path(&self) -> PathBuf {
@@ -325,6 +388,8 @@ impl RsiRuntime for RsiRuntimeImpl {
             .map_err(|e| RsiError(format!("create checkpoint dir: {e}")))?;
         let line = serde_json::to_string(checkpoint)
             .map_err(|e| RsiError(format!("serialize checkpoint: {e}")))?;
+        let value = serde_json::to_value(checkpoint)
+            .map_err(|e| RsiError(format!("serialize external checkpoint: {e}")))?;
         let path = self.checkpoint_path();
         let mut file = std::fs::OpenOptions::new()
             .create(true)
@@ -333,10 +398,24 @@ impl RsiRuntime for RsiRuntimeImpl {
             .map_err(|e| RsiError(format!("open checkpoint: {e}")))?;
         use std::io::Write;
         writeln!(file, "{line}").map_err(|e| RsiError(format!("write checkpoint: {e}")))?;
+        if let Some(store) = &self.external_store {
+            store
+                .set("rsi:checkpoint:latest", value)
+                .map_err(|e| RsiError(format!("persist checkpoint in external store: {e}")))?;
+        }
         Ok(())
     }
 
     fn load_checkpoint(&self) -> Result<Option<RsiCheckpoint>, RsiError> {
+        if let Some(store) = &self.external_store
+            && let Some(value) = store
+                .get("rsi:checkpoint:latest")
+                .map_err(|e| RsiError(format!("load checkpoint from external store: {e}")))?
+        {
+            return serde_json::from_value(value)
+                .map(Some)
+                .map_err(|e| RsiError(format!("parse external checkpoint: {e}")));
+        }
         let path = self.checkpoint_path();
         if !path.exists() {
             return Ok(None);
@@ -403,7 +482,8 @@ impl RsiRuntime for RsiRuntimeImpl {
         if rounds == 0 {
             return Ok(vec![]);
         }
-        let cases = self.generate_dataset(seed_tasks, 3)?;
+        let generated = self.generate_dataset_llm(seed_tasks, 3).await?;
+        let cases = generated.cases;
         let mut prompt = task_prompt.to_string();
         let mut reports: Vec<RsiReport> = Vec::new();
         for round in 1..=rounds {
@@ -415,6 +495,7 @@ impl RsiRuntime for RsiRuntimeImpl {
                 continue;
             }
             let report = self.evaluate_round(round, &cases, &prompt).await?;
+            self.apply_round_updates(&report).await?;
             prompt = self.refine_task(&report, &prompt).await?;
             self.save_checkpoint(&RsiCheckpoint {
                 round,
@@ -450,7 +531,7 @@ impl Plugin for RsiPlugin {
     }
 
     fn inject(&self) -> Vec<ServiceKey> {
-        vec![SUBAGENT, EVOLVING]
+        vec![SUBAGENT, EVOLVING, UPDATER, OPERATOR]
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
@@ -471,6 +552,15 @@ impl Plugin for RsiPlugin {
         if let Some(llm) = ctx.service::<dyn ModelProvider>(&LLM) {
             runtime = runtime.with_llm(llm);
         }
+        if let Some(store) = ctx.service::<dyn ah_contracts::store::BaseKVStore>(&KV_STORE) {
+            runtime = runtime.with_external_store(store);
+        }
+        if let (Some(updater), Some(operators)) = (
+            ctx.service::<dyn Updater>(&UPDATER),
+            ctx.service::<dyn OperatorRegistry>(&OPERATOR),
+        ) {
+            runtime = runtime.with_updater(updater, operators);
+        }
         let runtime: Arc<dyn RsiRuntime> = Arc::new(runtime);
         Ok(vec![ctx.register(RSI, runtime)])
     }
@@ -481,9 +571,56 @@ mod tests {
     use super::*;
     use ah_contracts::keys::{RSI, SESSION_MANAGER};
     use ah_contracts::session::{SessionEventKind, SessionManager};
+    use ah_contracts::store::BaseKVStore;
     use ah_hub::plugin::DynPlugin;
     use serde_json::json;
     use std::sync::Arc as StdArc;
+
+    #[derive(Default)]
+    struct MemoryStore(std::sync::Mutex<std::collections::BTreeMap<String, serde_json::Value>>);
+
+    impl ah_contracts::seam::Seam for MemoryStore {}
+
+    impl BaseKVStore for MemoryStore {
+        fn get(
+            &self,
+            key: &str,
+        ) -> Result<Option<serde_json::Value>, ah_contracts::store::StoreError> {
+            Ok(self.0.lock().unwrap().get(key).cloned())
+        }
+
+        fn set(
+            &self,
+            key: &str,
+            value: serde_json::Value,
+        ) -> Result<(), ah_contracts::store::StoreError> {
+            self.0.lock().unwrap().insert(key.to_string(), value);
+            Ok(())
+        }
+
+        fn delete(&self, key: &str) -> Result<(), ah_contracts::store::StoreError> {
+            self.0.lock().unwrap().remove(key);
+            Ok(())
+        }
+
+        fn scan(
+            &self,
+            prefix: &str,
+        ) -> Result<Vec<ah_contracts::store::KvEntry>, ah_contracts::store::StoreError> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(key, _)| key.starts_with(prefix))
+                .map(|(key, value)| ah_contracts::store::KvEntry {
+                    key: key.clone(),
+                    value: value.clone(),
+                    updated_ms: 0,
+                })
+                .collect())
+        }
+    }
 
     fn build_ctx(root: &std::path::Path) -> (Context, Vec<Effect>) {
         let ctx = Context::new();
@@ -501,6 +638,9 @@ mod tests {
             StdArc::new(ah_plugins_evolving::EvolvingPlugin::new(
                 root.join("evolving"),
             )),
+            StdArc::new(ah_plugins_operator::OperatorPlugin),
+            StdArc::new(ah_plugins_optimizer::OptimizerPlugin),
+            StdArc::new(ah_plugins_evolving::UpdaterPlugin),
             StdArc::new(RsiPlugin::new(root.join("rsi"))),
         ];
         let effects = ctx.mount_all(plugins).expect("mount");
@@ -655,6 +795,93 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    #[test]
+    fn external_kv_checkpoint_survives_local_file_removal() {
+        let root = std::env::temp_dir().join(format!("ah-rsi-kv-{}", std::process::id()));
+        let (ctx, effects) = build_ctx(&root);
+        let subagent = ctx
+            .service::<dyn SubagentRuntime>(&SUBAGENT)
+            .expect("subagent");
+        let evolving = ctx
+            .service::<dyn EvolvingRuntime>(&EVOLVING)
+            .expect("evolving");
+        let store = StdArc::new(MemoryStore::default());
+        let runtime = RsiRuntimeImpl::new(subagent, evolving, root.join("rsi-external"))
+            .with_external_store(store.clone());
+        let checkpoint = RsiCheckpoint {
+            round: 7,
+            cases: vec![RsiCase {
+                id: "external-case".into(),
+                task: "persist checkpoint".into(),
+                expected: None,
+            }],
+            task_prompt: "prompt from external store".into(),
+            updated_at_ms: 77,
+        };
+        runtime
+            .save_checkpoint(&checkpoint)
+            .expect("save checkpoint");
+        assert!(store.get("rsi:checkpoint:latest").unwrap().is_some());
+        std::fs::remove_file(runtime.checkpoint_path()).expect("remove local checkpoint");
+
+        let loaded = runtime
+            .load_checkpoint()
+            .expect("load checkpoint")
+            .expect("checkpoint");
+        assert_eq!(loaded, checkpoint);
+
+        drop(effects);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn redis_external_checkpoint_survives_local_file_removal() {
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".into());
+        let store = match ah_plugins_store::RedisKVStore::open(&redis_url) {
+            Ok(store) => StdArc::new(store),
+            Err(error) => {
+                println!("skipping: redis unavailable: {error}");
+                return;
+            }
+        };
+        let root = std::env::temp_dir().join(format!("ah-rsi-redis-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (ctx, effects) = build_ctx(&root);
+        let subagent = ctx
+            .service::<dyn SubagentRuntime>(&SUBAGENT)
+            .expect("subagent");
+        let evolving = ctx
+            .service::<dyn EvolvingRuntime>(&EVOLVING)
+            .expect("evolving");
+        let runtime = RsiRuntimeImpl::new(subagent, evolving, root.join("rsi-external"))
+            .with_external_store(store.clone());
+        let checkpoint = RsiCheckpoint {
+            round: 9,
+            cases: vec![RsiCase {
+                id: "redis-case".into(),
+                task: "redis checkpoint".into(),
+                expected: None,
+            }],
+            task_prompt: "redis checkpoint prompt".into(),
+            updated_at_ms: 99,
+        };
+        store
+            .delete("rsi:checkpoint:latest")
+            .expect("cleanup before");
+        runtime
+            .save_checkpoint(&checkpoint)
+            .expect("save checkpoint");
+        assert!(store.get("rsi:checkpoint:latest").unwrap().is_some());
+        std::fs::remove_file(runtime.checkpoint_path()).expect("remove local checkpoint");
+        assert_eq!(runtime.load_checkpoint().unwrap(), Some(checkpoint));
+        store
+            .delete("rsi:checkpoint:latest")
+            .expect("cleanup after");
+        drop(effects);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
     #[tokio::test]
     async fn refine_task_uses_real_worst_trajectory() {
         let root = std::env::temp_dir().join(format!("ah-rsi-refine-{}", std::process::id()));
@@ -799,6 +1026,9 @@ mod tests {
                 root.join("evolving2"),
             )),
             StdArc::new(RsiPlugin::new(root.join("rsi2"))),
+            StdArc::new(ah_plugins_operator::OperatorPlugin),
+            StdArc::new(ah_plugins_optimizer::OptimizerPlugin),
+            StdArc::new(ah_plugins_evolving::UpdaterPlugin),
         ];
         let effects2 = ctx2.mount_all(plugins2).expect("mount2");
         let rsi2 = ctx2.service::<dyn RsiRuntime>(&RSI).expect("rsi2");

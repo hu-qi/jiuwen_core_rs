@@ -37,16 +37,32 @@ pub struct OpenAiConfig {
 }
 
 impl OpenAiConfig {
-    /// 从环境变量构建:OPENAI_API_KEY(必须)、OPENAI_BASE_URL、OPENAI_MODEL;
-    /// OPENAI_BASE_URL 以 `/responses` 结尾时使用 Responses API。
-    /// key 缺失返回 None(调用方据此选择不挂载本插件)。
+    /// 从环境变量构建 OpenAI 或 DashScope OpenAI-compatible provider;
+    /// 优先使用 OPENAI_API_KEY,否则使用 DASHSCOPE_API_KEY。
+    /// OPENAI_BASE_URL/OPENAI_MODEL 与 DASHSCOPE_BASE_URL/DASHSCOPE_MODEL
+    /// 分别控制对应 provider;未设置时使用各自默认地址和模型。
     pub fn from_env() -> Option<Self> {
-        let api_key = std::env::var("OPENAI_API_KEY").ok()?;
+        if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
+            return Some(Self {
+                base_url: std::env::var("OPENAI_BASE_URL")
+                    .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
+                api_key: Some(api_key),
+                model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string()),
+                timeout: Duration::from_secs(60),
+            });
+        }
+        Self::from_dashscope_env()
+    }
+
+    /// 从 DashScope OpenAI-compatible 环境变量构建 Qwen provider。
+    pub fn from_dashscope_env() -> Option<Self> {
+        let api_key = std::env::var("DASHSCOPE_API_KEY").ok()?;
         Some(Self {
-            base_url: std::env::var("OPENAI_BASE_URL")
-                .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
+            base_url: std::env::var("DASHSCOPE_BASE_URL").unwrap_or_else(|_| {
+                "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string()
+            }),
             api_key: Some(api_key),
-            model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string()),
+            model: std::env::var("DASHSCOPE_MODEL").unwrap_or_else(|_| "qwen-plus".to_string()),
             timeout: Duration::from_secs(60),
         })
     }
@@ -62,22 +78,42 @@ impl OpenAiConfig {
     /// 环境变量读取逻辑与 [Self::from_env] 完全一致(向后兼容);
     /// credentials seam 是更优先的来源。
     pub fn from_env_with_credentials(credentials: Option<&dyn CredentialProvider>) -> Option<Self> {
-        let api_key = credentials
+        let openai_key = credentials
             .and_then(|c| c.get("openai.api_key"))
             .map(|c| c.value)
-            .or_else(|| std::env::var("OPENAI_API_KEY").ok())?;
+            .or_else(|| std::env::var("OPENAI_API_KEY").ok());
+        if let Some(api_key) = openai_key {
+            return Some(Self {
+                base_url: credentials
+                    .and_then(|c| c.get("openai.base_url"))
+                    .map(|c| c.value)
+                    .or_else(|| std::env::var("OPENAI_BASE_URL").ok())
+                    .unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
+                api_key: Some(api_key),
+                model: credentials
+                    .and_then(|c| c.get("openai.model"))
+                    .map(|c| c.value)
+                    .or_else(|| std::env::var("OPENAI_MODEL").ok())
+                    .unwrap_or_else(|| "gpt-4o-mini".to_string()),
+                timeout: Duration::from_secs(60),
+            });
+        }
+        let api_key = credentials
+            .and_then(|c| c.get("dashscope.api_key"))
+            .map(|c| c.value)
+            .or_else(|| std::env::var("DASHSCOPE_API_KEY").ok())?;
         Some(Self {
             base_url: credentials
-                .and_then(|c| c.get("openai.base_url"))
+                .and_then(|c| c.get("dashscope.base_url"))
                 .map(|c| c.value)
-                .or_else(|| std::env::var("OPENAI_BASE_URL").ok())
-                .unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
+                .or_else(|| std::env::var("DASHSCOPE_BASE_URL").ok())
+                .unwrap_or_else(|| "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string()),
             api_key: Some(api_key),
             model: credentials
-                .and_then(|c| c.get("openai.model"))
+                .and_then(|c| c.get("dashscope.model"))
                 .map(|c| c.value)
-                .or_else(|| std::env::var("OPENAI_MODEL").ok())
-                .unwrap_or_else(|| "gpt-4o-mini".to_string()),
+                .or_else(|| std::env::var("DASHSCOPE_MODEL").ok())
+                .unwrap_or_else(|| "qwen-plus".to_string()),
             timeout: Duration::from_secs(60),
         })
     }
@@ -916,7 +952,7 @@ impl ModelProvider for OpenAiModelProvider {
 ///
 /// 配置来源:
 /// - [OpenAiPlugin::new][]:显式固定配置(调用方自行解析);
-/// - [OpenAiPlugin::from_env][]:仅环境变量(OPENAI_API_KEY 等,向后兼容);
+/// - [OpenAiPlugin::from_env][]:环境变量(OPENAI_* 或 DASHSCOPE_*);
 /// - [OpenAiPlugin::from_env_with_credentials][]:构造时从 credentials seam
 ///   + 环境变量解析(credentials 优先);
 /// - [OpenAiPlugin::lazy][]:apply 时先查 credentials seam,再 fallback 环境变量;
@@ -934,7 +970,7 @@ impl OpenAiPlugin {
         }
     }
 
-    /// 从环境变量构建;无 OPENAI_API_KEY 时返回 None(向后兼容)。
+    /// 从环境变量构建;无 OPENAI_API_KEY 与 DASHSCOPE_API_KEY 时返回 None。
     pub fn from_env() -> Option<Self> {
         OpenAiConfig::from_env().map(|config| Self {
             config: Some(config),
@@ -951,7 +987,7 @@ impl OpenAiPlugin {
         })
     }
 
-    /// 惰性解析:apply 时先查 credentials seam,再 fallback 到环境变量。
+    /// 惰性解析:apply 时先查 credentials seam,再 fallback 到 OPENAI_* 或 DASHSCOPE_*。
     /// 无可用 key 时 apply 显式失败(不静默降级)。
     pub fn lazy() -> Self {
         Self { config: None }
@@ -976,8 +1012,7 @@ impl Plugin for OpenAiPlugin {
                 OpenAiConfig::from_env_with_credentials(credentials.as_deref()).ok_or_else(|| {
                     PluginError::Apply {
                         plugin: self.name(),
-                        message: "no API key: credentials seam (openai.api_key) and OPENAI_API_KEY env both unavailable"
-                            .to_string(),
+                        message: "no API key: credentials seam (openai.api_key/dashscope.api_key) and OPENAI_API_KEY/DASHSCOPE_API_KEY env both unavailable".to_string(),
                     }
                 })?
             }
@@ -1490,8 +1525,25 @@ mod tests {
 
     #[test]
     fn config_from_env_without_any_key_returns_none() {
-        let _guard = env_guard(&[("OPENAI_API_KEY", None)]);
+        let _guard = env_guard(&[("OPENAI_API_KEY", None), ("DASHSCOPE_API_KEY", None)]);
         assert!(OpenAiConfig::from_env_with_credentials(None).is_none());
+    }
+
+    #[test]
+    fn config_from_env_uses_dashscope_openai_compatible_defaults() {
+        let _guard = env_guard(&[
+            ("OPENAI_API_KEY", None),
+            ("DASHSCOPE_API_KEY", Some("dash-key")),
+            ("DASHSCOPE_BASE_URL", None),
+            ("DASHSCOPE_MODEL", None),
+        ]);
+        let config = OpenAiConfig::from_env_with_credentials(None).expect("DashScope key present");
+        assert_eq!(config.api_key.as_deref(), Some("dash-key"));
+        assert_eq!(
+            config.base_url,
+            "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        );
+        assert_eq!(config.model, "qwen-plus");
     }
 
     #[test]
@@ -1613,7 +1665,11 @@ mod tests {
     #[tokio::test]
     async fn lazy_plugin_apply_fails_explicitly_without_any_key() {
         // 无 credentials、无 OPENAI_API_KEY:apply 必须显式失败,不静默降级。
-        let _guard = env_guard(&[("OPENAI_API_KEY", None), ("AH_OPENAI_NO_KEY", None)]);
+        let _guard = env_guard(&[
+            ("OPENAI_API_KEY", None),
+            ("DASHSCOPE_API_KEY", None),
+            ("AH_OPENAI_NO_KEY", None),
+        ]);
         let ctx = Context::new();
         let plugin: DynPlugin = Arc::new(OpenAiPlugin::lazy());
         let error = ctx.mount(&plugin).expect_err("apply must fail without key");

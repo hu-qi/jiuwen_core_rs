@@ -20,3 +20,6 @@ ah-plugins-sysop = { workspace = true }
 ah-plugins-session-log = { workspace = true }
 ah-plugins-subagent = { workspace = true }
 ah-plugins-evolving = { workspace = true }
+ah-plugins-operator = { workspace = true }
+ah-plugins-optimizer = { workspace = true }
+ah-plugins-store = { workspace = true }

@@ -32,7 +32,7 @@ use ah_plugins_controller::ControllerPlugin;
 use ah_plugins_credentials::CredentialsPlugin;
 use ah_plugins_data_loader::DataLoaderPlugin;
 use ah_plugins_dataset_curator::DatasetCuratorPlugin;
-use ah_plugins_evolving::EvolvingPlugin;
+use ah_plugins_evolving::{EvolvingPlugin, OnlineEvolutionPlugin, UpdaterPlugin};
 use ah_plugins_experience_scorer::ExperienceScorerPlugin;
 use ah_plugins_external::ExternalCliPlugin;
 use ah_plugins_external::ExternalClientPlugin;
@@ -137,7 +137,7 @@ use ah_plugins_worktree::WorktreePlugin;
 /// 插件目录:名称 → 插件对象。
 ///
 /// - ah-plugins-openai 惰性解析配置:apply 时先查 credentials seam
-///   (openai.api_key),再 fallback 到 OPENAI_API_KEY 环境变量;
+///   (openai.api_key/dashscope.api_key),再 fallback 到 OPENAI_* 或 DASHSCOPE_* 环境变量;
 ///   两者都无 key 时挂载显式失败(不静默降级)。
 fn redis_url() -> String {
     std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".to_string())
@@ -261,6 +261,10 @@ pub fn plugin_catalog(
         (
             "ah-plugins-evolving",
             Arc::new(EvolvingPlugin::new(workspace_root.join("evolving"))) as DynPlugin,
+        ),
+        (
+            "ah-plugins-online-evolution",
+            Arc::new(OnlineEvolutionPlugin::new(workspace_root.join("skills"))) as DynPlugin,
         ),
         (
             "ah-plugins-rsi",
@@ -557,6 +561,7 @@ pub fn plugin_catalog(
             "ah-plugins-optimizer",
             Arc::new(OptimizerPlugin) as DynPlugin,
         ),
+        ("ah-plugins-updater", Arc::new(UpdaterPlugin) as DynPlugin),
         (
             "ah-plugins-symphony",
             Arc::new(SymphonyPlugin::new(workspace_root.join("symphony"))) as DynPlugin,
@@ -858,10 +863,18 @@ const ENV_FILE_CONTROLLED_VARS: &[&str] = &[
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
     "OPENAI_MODEL",
+    "DASHSCOPE_API_KEY",
+    "DASHSCOPE_BASE_URL",
+    "DASHSCOPE_MODEL",
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_BASE_URL",
     "ANTHROPIC_MODEL",
     "REDIS_URL",
+    "EMBEDDING_BASE_URL",
+    "EMBEDDING_MODEL",
+    "EMBEDDING_API_KEY",
+    "SECURITY_GUARDRAIL_URL",
+    "SECURITY_GUARDRAIL_API_KEY",
 ];
 
 fn clear_env_file_controlled_vars() {

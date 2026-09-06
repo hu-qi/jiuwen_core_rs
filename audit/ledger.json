@@ -10,34 +10,652 @@
     "percentage_policy": "percentages are status shares, not weighted capability completion"
   },
   "work_packages": [
-    {"id":"P0-01","phase":"P0","domain":"governance","title":"Rust-only contract fixture runner","status":"done","implementation":["crates/ah-app/tests/rust_contract.rs","fixtures/session.json","fixtures/tools.json","fixtures/controller.json","fixtures/agent_loop.json","fixtures/workflow.json","fixtures/application.json"],"verification":["cargo test -p ah-app --test rust_contract"],"production":"not applicable","differential":"Rust-only acceptance; no Python runtime or runner dependency"},
-    {"id":"P0-02","phase":"P0","domain":"governance","title":"Production profile static composition","status":"done","implementation":["crates/ah-app/tests/static_composition.rs","crates/ah-app/src/lib.rs"],"verification":["cargo test -p ah-app --test static_composition","cargo test -p ah-app --test mock_gate"],"production":"catalog and profile composition verified; real external boot separate","differential":"not applicable"},
-    {"id":"P0-03","phase":"P0","domain":"production","title":"Production boot smoke","status":"done","implementation":["crates/ah-app/src/lib.rs","crates/ah-app/tests/production_boot.rs","crates/ah-plugins-checkpointer/src/redis_store.rs","crates/ah-plugins-openai/src/lib.rs"],"verification":["AH_PRODUCTION_SMOKE=1 AH_ENV_FILE=$PWD/.env cargo test --offline -p ah-app --test production_boot -- --nocapture","production smoke passed: real Redis KV roundtrip, Redis queue publish/consume, Redis checkpointer creation, OpenAI chat/stream and ApplicationRuntime::invoke"],"production":"production profile boots without mock and invokes real Redis-backed services plus real OpenAI-compatible provider","differential":"not verified"},
-    {"id":"P0-04","phase":"P0","domain":"governance","title":"Atomic mount failure verification","status":"done","implementation":["crates/ah-hub/src/context.rs"],"verification":["ah-hub context mount rollback tests"],"production":"not applicable","differential":"not applicable"},
-    {"id":"P0-05","phase":"P0","domain":"governance","title":"Unified audit data source","status":"done","implementation":["audit/ledger.json","crates/ah-app/src/audit.rs","crates/ah-app/src/bin/audit-ledger.rs","docs/generated/audit-summary.md"],"verification":["cargo test --offline -p ah-app --lib audit::tests","cargo run --offline -p ah-app --bin audit-ledger -- audit/ledger.json docs/generated/audit-summary.md","generated summary reports 26 packages with 12 done, 13 partial, 1 missing"],"production":"not applicable","differential":"not applicable"},
-    {"id":"P0-06","phase":"P0","domain":"governance","title":"Documentation and CI fact alignment","status":"done","implementation":["docs/ROADMAP.md","docs/capability-map.md","docs/testing.md",".github/workflows/ci.yml"],"verification":["current working-tree review"],"production":"not applicable","differential":"status boundaries documented"},
-
-    {"id":"P1-01","phase":"P1","domain":"agent","title":"Host consumes dyn AgentLoopRuntime","status":"done","implementation":["crates/ah-app/src/lib.rs","crates/ah-contracts/src/agent.rs"],"verification":["application and CLI compile against runtime seam"],"production":"dev application smoke passed","differential":"not verified"},
-    {"id":"P1-02","phase":"P1","domain":"agent","title":"Structured runtime errors and statistics","status":"done","implementation":["crates/ah-contracts/src/agent.rs","crates/ah-plugins-agent-loop/src/lib.rs"],"verification":["agent result and failure tests"],"production":"dev application smoke passed","differential":"not verified"},
-    {"id":"P1-03","phase":"P1","domain":"agent","title":"Timeout cancel interrupt propagation","status":"done","implementation":["crates/ah-plugins-agent-loop/src/lib.rs","crates/ah-plugins-agent-control/src/lib.rs"],"verification":["in-flight model/tool cancellation tests"],"production":"not verified with all external providers","differential":"not verified for first six seams"},
-    {"id":"P1-04","phase":"P1","domain":"session","title":"Session and checkpoint recovery","status":"done","implementation":["crates/ah-plugins-session-log/src/lib.rs","crates/ah-plugins-agent-loop/src/lib.rs"],"verification":["session recovery, cross-process append/claim and tool recovery tests"],"production":"local durable JSONL verified","differential":"not verified"},
-    {"id":"P1-05","phase":"P1","domain":"application","title":"Complete application binding","status":"done","implementation":["crates/ah-contracts/src/agent.rs","crates/ah-plugins-agent-loop/src/lib.rs","crates/ah-plugins-application/src/lib.rs","crates/ah-app/tests/production_boot.rs","crates/ah-app/tests/differential.rs","references/application.json"],"verification":["ah-plugins-application tests (18 passed)","streams_workflow_through_application_runtime passed","reference_application_controller_contracts passed","production_profile_exercises_p1_application_controller_workflow passed with local OpenAI-compatible fixture and Redis","memory context isolation passed"],"production":"prod.toml composition, ApplicationRuntime invoke and stream exercised by production-p1 smoke","differential":"Rust-only contract/reference evidence; Python runtime is not a product dependency"},
-    {"id":"P1-06","phase":"P1","domain":"controller","title":"Complete controller behavior","status":"done","implementation":["crates/ah-contracts/src/controller.rs","crates/ah-plugins-controller/src/lib.rs","crates/ah-plugins-controller/Cargo.toml","crates/ah-plugins-application/src/lib.rs","crates/ah-app/tests/production_boot.rs","crates/ah-app/tests/differential.rs","references/controller.json"],"verification":["ah-plugins-controller tests (28 passed)","pending scheduler runs sessions concurrently through dyn Controller::run_pending","loads_version_two_snapshot_with_v1_task_shape passed","production controller create/register/run_pending/restart restore passed"],"production":"prod.toml controller seam mounted and exercised with task executor, durable snapshot and restart in production-p1 smoke","differential":"Rust-only reference and contract evidence; Python controller is historical specification only"},
-    {"id":"P1-07","phase":"P1","domain":"workflow","title":"Workflow streaming execution","status":"done","implementation":["crates/ah-contracts/src/workflow.rs","crates/ah-plugins-workflow/src/lib.rs","crates/ah-plugins-stream/src/lib.rs","crates/ah-app/tests/production_boot.rs"],"verification":["ah-plugins-workflow tests (19 passed)","checkpointed_stream_rejects_corrupt_checkpoint_records passed","checkpointed_stream_reuses_nodes_and_emits_resume_chunks passed","streams_workflow_through_application_runtime passed","production workflow stream emits deltas/node/final in order through local OpenAI-compatible fixture"],"production":"prod.toml workflow stream path exercised by production-p1 smoke; checkpoint and resume behavior covered by focused Rust tests","differential":"Rust-only contract/reference evidence"},
-    {"id":"P1-08","phase":"P1","domain":"governance","title":"Plugin dependency isolation CI","status":"done","implementation":["crates/ah-app/tests/plugin_isolation.rs"],"verification":["cargo test -p ah-app --test plugin_isolation"],"production":"production dependency graph checked","differential":"not applicable"},
-    {"id":"P1-09","phase":"P1","domain":"lifecycle","title":"Normal shutdown resource release","status":"done","implementation":["crates/ah-plugins-external/src/lib.rs","crates/ah-plugins-mcp/src/lib.rs"],"verification":["shutdown and mount rollback tests"],"production":"local process/socket cleanup verified","differential":"not verified"},
-    {"id":"P1-10","phase":"P1","domain":"governance","title":"Versioned serialization contracts","status":"done","implementation":["crates/ah-contracts/src/session.rs","crates/ah-contracts/src/transport.rs","crates/ah-plugins-session-log/src/lib.rs","crates/ah-plugins-controller/src/lib.rs","crates/ah-plugins-workflow/src/lib.rs","crates/ah-plugins-transport/src/lib.rs"],"verification":["session version and corruption tests","loads_version_two_snapshot_with_v1_task_shape passed","workflow checkpoint version header and legacy record loading passed","checkpointed_stream_rejects_corrupt_checkpoint_records passed","unknown snapshot/checkpoint versions remain explicitly rejected","JSON-RPC request and response version rejection/id validation tests passed"],"production":"session/controller/workflow version contracts exercised in production-p1 smoke; external JSON-RPC is explicitly JSON-RPC 2.0-only and rejects unknown versions","differential":"Rust-only migration and protocol tests; no Python dependency"},
-
-    {"id":"P2-01","phase":"P2","domain":"tools","title":"Common tool parity","status":"done","implementation":["crates/ah-plugins-sysop/src/fs.rs","crates/ah-plugins-sysop/src/tools.rs","crates/ah-plugins-common-tools/src/lib.rs","crates/ah-plugins-memory/src/lib.rs","crates/ah-plugins-rails/src/lib.rs","crates/ah-app/tests/rust_contract.rs","crates/ah-app/tests/golden.rs","crates/ah-app/tests/production_boot.rs","fixtures/tools.json"],"verification":["cargo test --offline -p ah-plugins-common-tools","cargo test --offline -p ah-plugins-memory","cargo test --offline -p ah-plugins-sysop rejects_writing_through_symlinked_file","cargo test --offline -p ah-plugins-rails path_guard_blocks_escapes_but_allows_safe","cargo test --offline -p ah-app --test golden tools_golden","cargo test --offline -p ah-app --test rust_contract rust_contract_tools_fixture","cargo test --offline -p ah-app --test production_boot production_profile_exercises_p1_application_controller_workflow -- --ignored --nocapture","cargo clippy --workspace --all-targets --offline -- -D warnings"],"production":"production-p1 smoke passed against prod.toml with real Redis KV/queue/checkpointer, local OpenAI-compatible HTTP fixture, and all six deterministic tool capabilities; browser/LSP and other external-process tools remain separately dependency-bound","differential":"tools are explicitly not-comparable to agent-core Python at the current seam: Python uses different ToolOutput/SysOperation/session/backend contracts; Python differential remains non-authoritative and is not claimed"},
-    {"id":"P2-02","phase":"P2","domain":"rails","title":"Rails and security policy","status":"partial","implementation":["crates/ah-contracts/src/agent.rs","crates/ah-contracts/src/prompt_attachment.rs","crates/ah-contracts/src/model_catalog.rs","crates/ah-plugins-rails/src/lib.rs","crates/ah-plugins-security/src/lib.rs","crates/ah-plugins-security/src/tiered_policy.rs","crates/ah-plugins-prompt-attachment/src/lib.rs","crates/ah-plugins-agent-loop/src/lib.rs","crates/ah-plugins-agent-control/src/lib.rs","crates/ah-plugins-workflow/src/lib.rs","crates/ah-app/src/lib.rs","profiles/dev.toml","profiles/prod.toml","fixtures/goal_manager.json","fixtures/prompt_attachment.json","fixtures/runtime_model_switching.json","differential/run_python.py","references/goal_manager.json","references/prompt_attachment.json","references/runtime_model_switching.json"],"verification":["cargo test --offline -p ah-plugins-rails -p ah-plugins-prompt-attachment -p ah-app (109 passed)","cargo test --offline -p ah-plugins-agent-control --lib callback_checkpoint_can_request_cancellation (1 passed)","cargo test --offline -p ah-plugins-agent-loop --lib cancellation_callback_stops_after_model_checkpoint (1 passed)","cargo test --offline -p ah-plugins-workflow --lib llm_node_drains_bounded_stream_before_awaiting_producer (1 passed)","cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml (boot and end-to-end smoke passed)","AH_ENV_FILE=.env cargo run --offline -p ah-app --bin ah-app -- profiles/prod.toml (full boot, real model chat/stream, agent, workflow and remaining demo paths passed)","AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core bash differential/run.sh llm_retry tool_retry task_completion task_planning (26 matched; 0 known divergence; 0 mismatch)","AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py goal_manager + python differential/compare.py goal_manager (2 matched; 0 known divergence; 0 mismatch)","AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_goal_manager -- --nocapture (reference generated)","AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py prompt_attachment + python differential/compare.py prompt_attachment (1 matched; 0 known divergence; 0 mismatch)","cargo test --offline -p ah-app --test differential reference_prompt_attachment (1 passed)","AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py runtime_model_switching + python differential/compare.py runtime_model_switching (2 matched; 0 known divergence; 0 mismatch)","AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_runtime_model_switching (1 passed)"],"production":"prod.toml with the repository .env completed the full deterministic application demo in 249.23 seconds; real OpenAI-compatible chat and stream, agent/tool, workflow, telemetry and symphony paths passed","differential":"Python reference agent-core@aeb88cd8 and Rust reference compared successfully: Rails 26 cases matched, GoalManager 2 cases matched, PromptAttachment lifecycle 1 case matched, and runtime model switching 2 cases matched; total 31 matched, 0 known divergence, 0 mismatch. Rust cancellation callback checkpoint has a focused test, but agent-core Python has no equivalent callback-control seam, so no Python differential is claimed"},
-    {"id":"P2-03","phase":"P2","domain":"context","title":"Context engine","status":"done","implementation":["crates/ah-plugins-context/src/lib.rs","crates/ah-plugins-context/Cargo.toml","crates/ah-app/src/lib.rs","profiles/prod.toml"],"verification":["cargo test --offline -p ah-plugins-context --lib","cargo test --offline -p ah-plugins-agent-loop","cargo test --offline -p ah-app --test static_composition --test dev_boot","cargo test --offline --workspace"],"production":"dev boot and static dev/prod composition passed; prompt attachments are injected only into the model window","differential":"Python round/dialogue differential not run"},
-    {"id":"P2-04","phase":"P2","domain":"subagents","title":"Subagents","status":"partial","implementation":["crates/ah-contracts/src/llm.rs","crates/ah-contracts/src/mcp.rs","crates/ah-contracts/src/session.rs","crates/ah-plugins-openai/src/lib.rs","crates/ah-plugins-anthropic/src/lib.rs","crates/ah-plugins-session-log/src/lib.rs","crates/ah-plugins-agent-loop/src/lib.rs","crates/ah-plugins-mcp/src/client.rs","crates/ah-plugins-mcp/src/lib.rs","crates/ah-plugins-subagents/src/lib.rs","crates/ah-app/src/lib.rs","profiles/dev.toml","profiles/prod.toml","docs/config-catalog.md","docs/ROADMAP.md","docs/capability-map.md"],"verification":["cargo test --offline -p ah-plugins-mcp -p ah-plugins-subagents (19 passed)","cargo test --offline -p ah-contracts -p ah-plugins-mcp --lib --tests (245 passed; 0 failed)","cargo test --offline -p ah-plugins-openai -p ah-plugins-anthropic --lib (284 passed; 0 failed)","adb version (36.0.0)","adb devices (daemon started; no device attached)","Rust fake MCP stdio server initialize/list_tools/call_tool protocol smoke passed"],"production":"Rust browser proxy and Android ADB paths are implemented and locally protocol-tested; actual Playwright MCP process was attempted with npx but package startup did not reach protocol readiness, and no Android device is attached","differential":"Python browser/mobile factory behavior is represented at the Rust protocol boundary; high-level Python-only rails/probes/uiautomator2 lifecycle remain unclaimed as fully differential-verified"},
-    {"id":"P2-05","phase":"P2","domain":"teams","title":"Multi-agent and messager","status":"partial","implementation":["crates/ah-contracts/src/messager.rs","crates/ah-plugins-messager/src/lib.rs","crates/ah-plugins-teams/src/lib.rs","crates/ah-plugins-teams/src/sqlite.rs","crates/ah-plugins-external/src/client.rs","crates/ah-plugins-external-format/src/lib.rs","crates/ah-app/src/lib.rs","crates/ah-app/tests/differential.rs","profiles/dev.toml","profiles/prod.toml","fixtures/team_inbox_format.json","fixtures/team_inbox_fetch.json","differential/run_python.py","references/team_inbox_format.json","references/team_inbox_fetch.json"],"verification":["cargo test --offline -p ah-plugins-messager (3 passed; P2P same-process, cross-process, PUB/SUB lifecycle)","cargo test --offline -p ah-plugins-teams --lib (17 passed; task state guard, queue, team message, and task-event messager paths)","cargo test --offline -p ah-plugins-external --lib watch_ (2 passed; MESSAGE/TASK notification, empty inbox suppression, cancellation unsubscribe)","cargo test --offline -p ah-app --test static_composition --test dev_boot (5 passed)","TZ=UTC AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py team_inbox_format + python differential/compare.py team_inbox_format (4 matched; 0 known divergence; 0 mismatch)","TZ=UTC AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_team_inbox_format (1 passed)","AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py team_inbox_fetch + python differential/compare.py team_inbox_fetch (3 matched; 0 known divergence; 0 mismatch)","AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_team_inbox_fetch (1 passed; fetch mark-read and watch cancellation)","cargo fmt --all --check"],"production":"libzmq-backed ROUTER/DEALER P2P and PUB/SUB transport passes TCP cross-process and broadcast tests; InMemoryTeamRuntime and SqliteTeamRuntime use team-message messager and publish legacy task events when the seam is registered, while ExternalTeamClient watch uses session-scoped MESSAGE/TASK topics plus legacy team-message/task topics and cleans subscriptions on cancellation","differential":"Python reference agent-core@aeb88cd8 and Rust external client/format implementations matched inbox fetch mark-read behavior, watch callback cancellation cleanup, ordinary/template/human messages, and task-board filtering in 7 cases; full Python team handoff/task mutation lifecycle remains unverified. Rust team runtimes now reject completion outside in_progress and preserve result payloads"},
-    {"id":"P2-06","phase":"P2","domain":"retrieval","title":"Production retrieval and memory backends","status":"partial","implementation":["crates/ah-plugins-retrieval/src/lib.rs","crates/ah-plugins-memory/src/lib.rs"],"verification":["local retrieval and memory tests"],"production":"external embedding/vector/memory E2E pending","differential":"not verified"},
-
-    {"id":"P3-01","phase":"P3","domain":"evolving","title":"Agent evolving LLM loop","status":"partial","implementation":["crates/ah-plugins-evolving/src/lib.rs"],"verification":["deterministic evolution tests"],"production":"LLM-driven loop pending","differential":"not verified"},
-    {"id":"P3-02","phase":"P3","domain":"rsi","title":"RSI orchestration","status":"partial","implementation":["crates/ah-plugins-rsi/src/lib.rs","crates/ah-plugins-rsi-single-harness/src/lib.rs"],"verification":["deterministic RSI tests"],"production":"full external orchestration pending","differential":"not verified"},
-    {"id":"P3-03","phase":"P3","domain":"external","title":"External infrastructure","status":"partial","implementation":["crates/ah-plugins-store/src/lib.rs","crates/ah-plugins-queue/src/lib.rs","crates/ah-plugins-checkpointer/src/lib.rs"],"verification":["local protocol and configuration tests"],"production":"Redis/Pulsar/ES/GaussDB/Milvus/remote sandbox/OTel verification pending","differential":"not verified"},
-    {"id":"P3-04","phase":"P3","domain":"providers","title":"Vendor-specific providers","status":"missing","implementation":[],"verification":[],"production":"not implemented","differential":"not applicable"}
+    {
+      "id": "P0-01",
+      "phase": "P0",
+      "domain": "governance",
+      "title": "Rust-only contract fixture runner",
+      "status": "done",
+      "implementation": [
+        "crates/ah-app/tests/rust_contract.rs",
+        "fixtures/session.json",
+        "fixtures/tools.json",
+        "fixtures/controller.json",
+        "fixtures/agent_loop.json",
+        "fixtures/workflow.json",
+        "fixtures/application.json"
+      ],
+      "verification": [
+        "cargo test -p ah-app --test rust_contract"
+      ],
+      "production": "not applicable",
+      "differential": "Rust-only acceptance; no Python runtime or runner dependency"
+    },
+    {
+      "id": "P0-02",
+      "phase": "P0",
+      "domain": "governance",
+      "title": "Production profile static composition",
+      "status": "done",
+      "implementation": [
+        "crates/ah-app/tests/static_composition.rs",
+        "crates/ah-app/src/lib.rs"
+      ],
+      "verification": [
+        "cargo test -p ah-app --test static_composition",
+        "cargo test -p ah-app --test mock_gate"
+      ],
+      "production": "catalog and profile composition verified; real external boot separate",
+      "differential": "not applicable"
+    },
+    {
+      "id": "P0-03",
+      "phase": "P0",
+      "domain": "production",
+      "title": "Production boot smoke",
+      "status": "done",
+      "implementation": [
+        "crates/ah-app/src/lib.rs",
+        "crates/ah-app/tests/production_boot.rs",
+        "crates/ah-plugins-checkpointer/src/redis_store.rs",
+        "crates/ah-plugins-openai/src/lib.rs"
+      ],
+      "verification": [
+        "AH_PRODUCTION_SMOKE=1 AH_ENV_FILE=$PWD/.env cargo test --offline -p ah-app --test production_boot -- --nocapture",
+        "production smoke passed: real Redis KV roundtrip, Redis queue publish/consume, Redis checkpointer creation, OpenAI chat/stream and ApplicationRuntime::invoke"
+      ],
+      "production": "production profile boots without mock and invokes real Redis-backed services plus real OpenAI-compatible provider",
+      "differential": "not verified"
+    },
+    {
+      "id": "P0-04",
+      "phase": "P0",
+      "domain": "governance",
+      "title": "Atomic mount failure verification",
+      "status": "done",
+      "implementation": [
+        "crates/ah-hub/src/context.rs"
+      ],
+      "verification": [
+        "ah-hub context mount rollback tests"
+      ],
+      "production": "not applicable",
+      "differential": "not applicable"
+    },
+    {
+      "id": "P0-05",
+      "phase": "P0",
+      "domain": "governance",
+      "title": "Unified audit data source",
+      "status": "done",
+      "implementation": [
+        "audit/ledger.json",
+        "crates/ah-app/src/audit.rs",
+        "crates/ah-app/src/bin/audit-ledger.rs",
+        "docs/generated/audit-summary.md"
+      ],
+      "verification": [
+        "cargo test --offline -p ah-app --lib audit::tests",
+        "cargo run --offline -p ah-app --bin audit-ledger -- audit/ledger.json docs/generated/audit-summary.md",
+        "generated summary reports 26 packages with 12 done, 13 partial, 1 missing"
+      ],
+      "production": "not applicable",
+      "differential": "not applicable"
+    },
+    {
+      "id": "P0-06",
+      "phase": "P0",
+      "domain": "governance",
+      "title": "Documentation and CI fact alignment",
+      "status": "done",
+      "implementation": [
+        "docs/ROADMAP.md",
+        "docs/capability-map.md",
+        "docs/testing.md",
+        ".github/workflows/ci.yml"
+      ],
+      "verification": [
+        "current working-tree review"
+      ],
+      "production": "not applicable",
+      "differential": "status boundaries documented"
+    },
+    {
+      "id": "P1-01",
+      "phase": "P1",
+      "domain": "agent",
+      "title": "Host consumes dyn AgentLoopRuntime",
+      "status": "done",
+      "implementation": [
+        "crates/ah-app/src/lib.rs",
+        "crates/ah-contracts/src/agent.rs"
+      ],
+      "verification": [
+        "application and CLI compile against runtime seam"
+      ],
+      "production": "dev application smoke passed",
+      "differential": "not verified"
+    },
+    {
+      "id": "P1-02",
+      "phase": "P1",
+      "domain": "agent",
+      "title": "Structured runtime errors and statistics",
+      "status": "done",
+      "implementation": [
+        "crates/ah-contracts/src/agent.rs",
+        "crates/ah-plugins-agent-loop/src/lib.rs"
+      ],
+      "verification": [
+        "agent result and failure tests"
+      ],
+      "production": "dev application smoke passed",
+      "differential": "not verified"
+    },
+    {
+      "id": "P1-03",
+      "phase": "P1",
+      "domain": "agent",
+      "title": "Timeout cancel interrupt propagation",
+      "status": "done",
+      "implementation": [
+        "crates/ah-plugins-agent-loop/src/lib.rs",
+        "crates/ah-plugins-agent-control/src/lib.rs"
+      ],
+      "verification": [
+        "in-flight model/tool cancellation tests"
+      ],
+      "production": "not verified with all external providers",
+      "differential": "not verified for first six seams"
+    },
+    {
+      "id": "P1-04",
+      "phase": "P1",
+      "domain": "session",
+      "title": "Session and checkpoint recovery",
+      "status": "done",
+      "implementation": [
+        "crates/ah-plugins-session-log/src/lib.rs",
+        "crates/ah-plugins-agent-loop/src/lib.rs"
+      ],
+      "verification": [
+        "session recovery, cross-process append/claim and tool recovery tests"
+      ],
+      "production": "local durable JSONL verified",
+      "differential": "not verified"
+    },
+    {
+      "id": "P1-05",
+      "phase": "P1",
+      "domain": "application",
+      "title": "Complete application binding",
+      "status": "done",
+      "implementation": [
+        "crates/ah-contracts/src/agent.rs",
+        "crates/ah-plugins-agent-loop/src/lib.rs",
+        "crates/ah-plugins-application/src/lib.rs",
+        "crates/ah-app/tests/production_boot.rs",
+        "crates/ah-app/tests/differential.rs",
+        "references/application.json"
+      ],
+      "verification": [
+        "ah-plugins-application tests (18 passed)",
+        "streams_workflow_through_application_runtime passed",
+        "reference_application_controller_contracts passed",
+        "production_profile_exercises_p1_application_controller_workflow passed with local OpenAI-compatible fixture and Redis",
+        "memory context isolation passed"
+      ],
+      "production": "prod.toml composition, ApplicationRuntime invoke and stream exercised by production-p1 smoke",
+      "differential": "Rust-only contract/reference evidence; Python runtime is not a product dependency"
+    },
+    {
+      "id": "P1-06",
+      "phase": "P1",
+      "domain": "controller",
+      "title": "Complete controller behavior",
+      "status": "done",
+      "implementation": [
+        "crates/ah-contracts/src/controller.rs",
+        "crates/ah-plugins-controller/src/lib.rs",
+        "crates/ah-plugins-controller/Cargo.toml",
+        "crates/ah-plugins-application/src/lib.rs",
+        "crates/ah-app/tests/production_boot.rs",
+        "crates/ah-app/tests/differential.rs",
+        "references/controller.json"
+      ],
+      "verification": [
+        "ah-plugins-controller tests (28 passed)",
+        "pending scheduler runs sessions concurrently through dyn Controller::run_pending",
+        "loads_version_two_snapshot_with_v1_task_shape passed",
+        "production controller create/register/run_pending/restart restore passed"
+      ],
+      "production": "prod.toml controller seam mounted and exercised with task executor, durable snapshot and restart in production-p1 smoke",
+      "differential": "Rust-only reference and contract evidence; Python controller is historical specification only"
+    },
+    {
+      "id": "P1-07",
+      "phase": "P1",
+      "domain": "workflow",
+      "title": "Workflow streaming execution",
+      "status": "done",
+      "implementation": [
+        "crates/ah-contracts/src/workflow.rs",
+        "crates/ah-plugins-workflow/src/lib.rs",
+        "crates/ah-plugins-stream/src/lib.rs",
+        "crates/ah-app/tests/production_boot.rs"
+      ],
+      "verification": [
+        "ah-plugins-workflow tests (19 passed)",
+        "checkpointed_stream_rejects_corrupt_checkpoint_records passed",
+        "checkpointed_stream_reuses_nodes_and_emits_resume_chunks passed",
+        "streams_workflow_through_application_runtime passed",
+        "production workflow stream emits deltas/node/final in order through local OpenAI-compatible fixture"
+      ],
+      "production": "prod.toml workflow stream path exercised by production-p1 smoke; checkpoint and resume behavior covered by focused Rust tests",
+      "differential": "Rust-only contract/reference evidence"
+    },
+    {
+      "id": "P1-08",
+      "phase": "P1",
+      "domain": "governance",
+      "title": "Plugin dependency isolation CI",
+      "status": "done",
+      "implementation": [
+        "crates/ah-app/tests/plugin_isolation.rs"
+      ],
+      "verification": [
+        "cargo test -p ah-app --test plugin_isolation"
+      ],
+      "production": "production dependency graph checked",
+      "differential": "not applicable"
+    },
+    {
+      "id": "P1-09",
+      "phase": "P1",
+      "domain": "lifecycle",
+      "title": "Normal shutdown resource release",
+      "status": "done",
+      "implementation": [
+        "crates/ah-plugins-external/src/lib.rs",
+        "crates/ah-plugins-mcp/src/lib.rs"
+      ],
+      "verification": [
+        "shutdown and mount rollback tests"
+      ],
+      "production": "local process/socket cleanup verified",
+      "differential": "not verified"
+    },
+    {
+      "id": "P1-10",
+      "phase": "P1",
+      "domain": "governance",
+      "title": "Versioned serialization contracts",
+      "status": "done",
+      "implementation": [
+        "crates/ah-contracts/src/session.rs",
+        "crates/ah-contracts/src/transport.rs",
+        "crates/ah-plugins-session-log/src/lib.rs",
+        "crates/ah-plugins-controller/src/lib.rs",
+        "crates/ah-plugins-workflow/src/lib.rs",
+        "crates/ah-plugins-transport/src/lib.rs"
+      ],
+      "verification": [
+        "session version and corruption tests",
+        "loads_version_two_snapshot_with_v1_task_shape passed",
+        "workflow checkpoint version header and legacy record loading passed",
+        "checkpointed_stream_rejects_corrupt_checkpoint_records passed",
+        "unknown snapshot/checkpoint versions remain explicitly rejected",
+        "JSON-RPC request and response version rejection/id validation tests passed"
+      ],
+      "production": "session/controller/workflow version contracts exercised in production-p1 smoke; external JSON-RPC is explicitly JSON-RPC 2.0-only and rejects unknown versions",
+      "differential": "Rust-only migration and protocol tests; no Python dependency"
+    },
+    {
+      "id": "P2-01",
+      "phase": "P2",
+      "domain": "tools",
+      "title": "Common tool parity",
+      "status": "done",
+      "implementation": [
+        "crates/ah-plugins-sysop/src/fs.rs",
+        "crates/ah-plugins-sysop/src/tools.rs",
+        "crates/ah-plugins-common-tools/src/lib.rs",
+        "crates/ah-plugins-memory/src/lib.rs",
+        "crates/ah-plugins-rails/src/lib.rs",
+        "crates/ah-app/tests/rust_contract.rs",
+        "crates/ah-app/tests/golden.rs",
+        "crates/ah-app/tests/production_boot.rs",
+        "fixtures/tools.json"
+      ],
+      "verification": [
+        "cargo test --offline -p ah-plugins-common-tools",
+        "cargo test --offline -p ah-plugins-memory",
+        "cargo test --offline -p ah-plugins-sysop rejects_writing_through_symlinked_file",
+        "cargo test --offline -p ah-plugins-rails path_guard_blocks_escapes_but_allows_safe",
+        "cargo test --offline -p ah-app --test golden tools_golden",
+        "cargo test --offline -p ah-app --test rust_contract rust_contract_tools_fixture",
+        "cargo test --offline -p ah-app --test production_boot production_profile_exercises_p1_application_controller_workflow -- --ignored --nocapture",
+        "cargo clippy --workspace --all-targets --offline -- -D warnings"
+      ],
+      "production": "production-p1 smoke passed against prod.toml with real Redis KV/queue/checkpointer, local OpenAI-compatible HTTP fixture, and all six deterministic tool capabilities; browser/LSP and other external-process tools remain separately dependency-bound",
+      "differential": "tools are explicitly not-comparable to agent-core Python at the current seam: Python uses different ToolOutput/SysOperation/session/backend contracts; Python differential remains non-authoritative and is not claimed"
+    },
+    {
+      "id": "P2-02",
+      "phase": "P2",
+      "domain": "rails",
+      "title": "Rails and security policy",
+      "status": "partial",
+      "implementation": [
+        "crates/ah-contracts/src/agent.rs",
+        "crates/ah-contracts/src/prompt_attachment.rs",
+        "crates/ah-contracts/src/model_catalog.rs",
+        "crates/ah-plugins-rails/src/lib.rs",
+        "crates/ah-plugins-security/src/lib.rs",
+        "crates/ah-plugins-security/src/tiered_policy.rs",
+        "crates/ah-plugins-prompt-attachment/src/lib.rs",
+        "crates/ah-plugins-agent-loop/src/lib.rs",
+        "crates/ah-plugins-agent-control/src/lib.rs",
+        "crates/ah-plugins-workflow/src/lib.rs",
+        "crates/ah-app/src/lib.rs",
+        "profiles/dev.toml",
+        "profiles/prod.toml",
+        "fixtures/goal_manager.json",
+        "fixtures/prompt_attachment.json",
+        "fixtures/runtime_model_switching.json",
+        "differential/run_python.py",
+        "references/goal_manager.json",
+        "references/prompt_attachment.json",
+        "references/runtime_model_switching.json"
+      ],
+      "verification": [
+        "cargo test --offline -p ah-plugins-rails -p ah-plugins-prompt-attachment -p ah-app (109 passed)",
+        "cargo test --offline -p ah-plugins-agent-control --lib callback_checkpoint_can_request_cancellation (1 passed)",
+        "cargo test --offline -p ah-plugins-agent-loop --lib cancellation_callback_stops_after_model_checkpoint (1 passed)",
+        "cargo test --offline -p ah-plugins-workflow --lib llm_node_drains_bounded_stream_before_awaiting_producer (1 passed)",
+        "cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml (boot and end-to-end smoke passed)",
+        "AH_ENV_FILE=.env cargo run --offline -p ah-app --bin ah-app -- profiles/prod.toml (full boot, real model chat/stream, agent, workflow and remaining demo paths passed)",
+        "AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core bash differential/run.sh llm_retry tool_retry task_completion task_planning (26 matched; 0 known divergence; 0 mismatch)",
+        "AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py goal_manager + python differential/compare.py goal_manager (2 matched; 0 known divergence; 0 mismatch)",
+        "AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_goal_manager -- --nocapture (reference generated)",
+        "AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py prompt_attachment + python differential/compare.py prompt_attachment (1 matched; 0 known divergence; 0 mismatch)",
+        "cargo test --offline -p ah-app --test differential reference_prompt_attachment (1 passed)",
+        "AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py runtime_model_switching + python differential/compare.py runtime_model_switching (2 matched; 0 known divergence; 0 mismatch)",
+        "AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_runtime_model_switching (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-security cargo test --offline -p ah-plugins-security --lib network_rule_matches_url_argument (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-security cargo test --offline -p ah-plugins-security --lib (26 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-security cargo clippy --offline -p ah-plugins-security --lib --tests -- -D warnings (passed)",
+        "cargo fmt --all --check (passed)"
+      ],
+      "production": "prod.toml with the repository .env completed the full deterministic application demo; real OpenAI-compatible chat and stream, agent/tool, workflow, telemetry and symphony paths passed; tiered network URL/query policy matching now has regression coverage",
+      "differential": "Python reference agent-core@aeb88cd8 and Rust reference compared successfully: Rails 26 cases matched, GoalManager 2 cases matched, PromptAttachment lifecycle 1 case matched, and runtime model switching 2 cases matched; total 31 matched, 0 known divergence, 0 mismatch. Rust cancellation callback checkpoint has a focused test, but agent-core Python has no equivalent callback-control seam, so no Python differential is claimed"
+    },
+    {
+      "id": "P2-03",
+      "phase": "P2",
+      "domain": "context",
+      "title": "Context engine",
+      "status": "done",
+      "implementation": [
+        "crates/ah-plugins-context/src/lib.rs",
+        "crates/ah-plugins-context/Cargo.toml",
+        "crates/ah-app/src/lib.rs",
+        "profiles/prod.toml"
+      ],
+      "verification": [
+        "cargo test --offline -p ah-plugins-context --lib",
+        "cargo test --offline -p ah-plugins-agent-loop",
+        "cargo test --offline -p ah-app --test static_composition --test dev_boot",
+        "cargo test --offline --workspace"
+      ],
+      "production": "dev boot and static dev/prod composition passed; prompt attachments are injected only into the model window",
+      "differential": "Python round/dialogue differential not run"
+    },
+    {
+      "id": "P2-04",
+      "phase": "P2",
+      "domain": "subagents",
+      "title": "Subagents",
+      "status": "partial",
+      "implementation": [
+        "crates/ah-contracts/src/llm.rs",
+        "crates/ah-contracts/src/mcp.rs",
+        "crates/ah-contracts/src/session.rs",
+        "crates/ah-plugins-openai/src/lib.rs",
+        "crates/ah-plugins-anthropic/src/lib.rs",
+        "crates/ah-plugins-session-log/src/lib.rs",
+        "crates/ah-plugins-agent-loop/src/lib.rs",
+        "crates/ah-plugins-mcp/src/client.rs",
+        "crates/ah-plugins-mcp/src/lib.rs",
+        "crates/ah-plugins-subagent/src/lib.rs",
+        "crates/ah-plugins-subagents/src/lib.rs",
+        "crates/ah-app/src/lib.rs",
+        "profiles/dev.toml",
+        "profiles/prod.toml",
+        "docs/config-catalog.md",
+        "docs/ROADMAP.md",
+        "docs/capability-map.md",
+        "crates/ah-app/tests/differential.rs",
+        "fixtures/subagents.json",
+        "references/subagents.json",
+        "differential/run_python.py"
+      ],
+      "verification": [
+        "cargo test --offline -p ah-plugins-mcp -p ah-plugins-subagents (19 passed)",
+        "cargo test --offline -p ah-contracts -p ah-plugins-mcp --lib --tests (245 passed; 0 failed)",
+        "cargo test --offline -p ah-plugins-openai -p ah-plugins-anthropic --lib (284 passed; 0 failed)",
+        "adb version (36.0.0)",
+        "adb devices (10AC5Z0FL1000NL attached and online)",
+        "adb -s 10AC5Z0FL1000NL shell getprop ro.product.model (V2199A)",
+        "adb -s 10AC5Z0FL1000NL exec-out screencap -p (92463 bytes)",
+        "Rust fake MCP stdio server initialize/list_tools/call_tool protocol smoke passed",
+        "CARGO_TARGET_DIR=/tmp/ah-target-subagents cargo test --offline -p ah-plugins-subagent --lib interruption_during_model_call_is_recorded (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-subagents cargo test --offline -p ah-plugins-subagent --lib (6 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-subagents cargo clippy --offline -p ah-plugins-subagent --lib --tests -- -D warnings (passed)",
+        "cargo fmt --all --check (passed)",
+        "cargo test --offline -p ah-app --test differential reference_subagents_browser_capabilities (passed)"
+      ],
+      "production": "Rust browser proxy and Android ADB paths are implemented and locally protocol-tested; an online Android device is attached and health/screenshot smoke passed; subagent model-call interruption now records AgentInterrupted/AgentCanceled in the session log; full Python lifecycle rails and interactive application-specific mobile flow remain unverified",
+      "differential": "agent-core@aeb88cd8 browser capability resolver: 3 matched, 0 known divergence, 0 mismatch; core/pdf/vision allowlists, duplicate normalization, and unknown capability rejection are covered"
+    },
+    {
+      "id": "P2-05",
+      "phase": "P2",
+      "domain": "teams",
+      "title": "Multi-agent and messager",
+      "status": "done",
+      "implementation": [
+        "crates/ah-contracts/src/messager.rs",
+        "crates/ah-plugins-messager/src/lib.rs",
+        "crates/ah-plugins-teams/src/lib.rs",
+        "crates/ah-plugins-teams/src/sqlite.rs",
+        "crates/ah-plugins-external/src/client.rs",
+        "crates/ah-plugins-external-format/src/lib.rs",
+        "crates/ah-app/src/lib.rs",
+        "crates/ah-app/tests/differential.rs",
+        "profiles/dev.toml",
+        "profiles/prod.toml",
+        "fixtures/team_inbox_format.json",
+        "fixtures/team_inbox_fetch.json",
+        "differential/run_python.py",
+        "references/team_inbox_format.json",
+        "references/team_inbox_fetch.json",
+        "crates/ah-contracts/src/teams.rs",
+        "crates/ah-app/tests/differential.rs",
+        "fixtures/task_lifecycle.json",
+        "references/task_lifecycle.json",
+        "differential/run_python.py"
+      ],
+      "verification": [
+        "cargo test --offline -p ah-plugins-messager (3 passed; P2P same-process, cross-process, PUB/SUB lifecycle)",
+        "cargo test --offline -p ah-plugins-teams --lib (19 passed; task state guard, queue, team message, and task-event messager paths)",
+        "cargo test --offline -p ah-plugins-external --lib watch_ (2 passed; MESSAGE/TASK notification, empty inbox suppression, cancellation unsubscribe)",
+        "cargo test --offline -p ah-app --test static_composition --test dev_boot (5 passed)",
+        "TZ=UTC AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py team_inbox_format + python differential/compare.py team_inbox_format (4 matched; 0 known divergence; 0 mismatch)",
+        "TZ=UTC AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_team_inbox_format (1 passed)",
+        "AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py team_inbox_fetch + python differential/compare.py team_inbox_fetch (3 matched; 0 known divergence; 0 mismatch)",
+        "AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_team_inbox_fetch (1 passed; fetch mark-read and watch cancellation)",
+        "cargo fmt --all --check",
+        "cargo test --offline -p ah-plugins-teams --lib (19 passed)",
+        "cargo test --offline -p ah-app --test differential reference_task_lifecycle (passed)",
+        "python differential/run_python.py task_lifecycle + python differential/compare.py task_lifecycle (1 matched, 0 mismatch)"
+      ],
+      "production": "local SQLite mutation lifecycle verified; external multi-process handoff remains separately covered by messager/external tests",
+      "differential": "agent-core@aeb88cd8 task create/claim/update/dependency/review lifecycle: 1 matched, 0 known divergence, 0 mismatch"
+    },
+    {
+      "id": "P2-06",
+      "phase": "P2",
+      "domain": "retrieval",
+      "title": "Production retrieval and memory backends",
+      "status": "partial",
+      "implementation": [
+        "crates/ah-plugins-retrieval/src/lib.rs",
+        "crates/ah-plugins-retrieval/Cargo.toml",
+        "crates/ah-plugins-memory/src/lib.rs",
+        "crates/ah-plugins-store/src/redis_store.rs",
+        "crates/ah-plugins-queue/src/redis_queue.rs",
+        "crates/ah-app/src/main.rs"
+      ],
+      "verification": [
+        "CARGO_TARGET_DIR=/tmp/ah-target-retrieval cargo test --offline -p ah-plugins-retrieval --lib external_http_embedding_and_redis_vector_index_roundtrip (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-retrieval cargo test --offline -p ah-plugins-retrieval --lib (13 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-retrieval-tls cargo test --offline -p ah-plugins-retrieval --lib (13 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-retrieval-tls cargo clippy --offline -p ah-plugins-retrieval --lib --tests -- -D warnings (passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-memory cargo test --offline -p ah-plugins-memory --lib redis_memory_provider_roundtrips_searches_and_removes (1 passed against Docker Redis)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-memory cargo test --offline -p ah-plugins-memory --lib (6 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-memory cargo clippy --offline -p ah-plugins-memory --lib --tests -- -D warnings (passed)",
+        "cargo test -p ah-plugins-store --lib redis_kv_roundtrip_with_scan_and_delete (1 passed against Docker Redis)",
+        "cargo test -p ah-plugins-queue --lib redis_queue_publish_consume_backlog_and_channels (1 passed against Docker Redis)",
+        "docker exec cc-redis redis-cli ping (PONG)",
+        "AH_ENV_FILE=$PWD/.env cargo run --offline -q -p ah-app --bin ah-app -- profiles/prod.toml (production boot, real embedding ingest/vector search, 1 vector hit)"
+      ],
+      "production": "Production profile booted with the configured OpenAI-compatible embedding service and real Redis-backed vector index; application ingest and vector search both returned one hit, and external JSON memory also passed against Docker Redis; other vendor embedding protocols remain pending",
+      "differential": "not verified"
+    },
+    {
+      "id": "P3-01",
+      "phase": "P3",
+      "domain": "evolving",
+      "title": "Agent evolving LLM loop",
+      "status": "partial",
+      "implementation": [
+        "crates/ah-plugins-evolving/src/lib.rs",
+        "crates/ah-plugins-evolving/src/online_orchestrator.rs",
+        "crates/ah-plugins-evolving/src/online_file.rs",
+        "crates/ah-plugins-evolving/src/updates.rs",
+        "crates/ah-plugins-evolving/src/checkpoint_types.rs"
+      ],
+      "verification": [
+        "cargo test -p ah-plugins-evolving --lib evolve_session_persists_trajectory_and_experience (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib external_kv_store_persists_and_loads_experience (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib redis_external_store_persists_trajectory_and_experience (1 passed against Docker Redis)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib execute_updates_with_registry_applies_real_operator (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib orchestrator_runs_update_preview_and_stages_request (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib file_evolution_manager_persists_log_and_skill_atomically (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib file_store_renders_script_target_and_index_link (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib file_manager_restores_pending_change_after_reopen (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib (184 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo clippy --offline -p ah-plugins-evolving --lib --tests -- -D warnings (passed)",
+        "cargo fmt --all --check (passed)",
+        "deterministic evolving module tests"
+      ],
+      "production": "LLM judge/optimizer、durable trajectory/experience JSONL paths、Redis-backed external trajectory/experience persistence、OperatorRegistry update execution、online evolution orchestration、file-backed evolution log/SKILL.md persistence、script assets、pending snapshot recovery and formal ServiceKey/app/profile wiring are implemented and focused-tested; real vendor LLM production E2E remains pending",
+      "differential": "not verified"
+    },
+    {
+      "id": "P3-02",
+      "phase": "P3",
+      "domain": "rsi",
+      "title": "RSI orchestration",
+      "status": "partial",
+      "implementation": [
+        "crates/ah-plugins-rsi/src/lib.rs",
+        "crates/ah-plugins-rsi/Cargo.toml",
+        "crates/ah-plugins-rsi-single-harness/src/lib.rs",
+        "crates/ah-plugins-member-optimizer/src/lib.rs",
+        "crates/ah-plugins-evolving/src/updater.rs",
+        "crates/ah-contracts/src/updater.rs",
+        "crates/ah-contracts/src/keys.rs",
+        "crates/ah-app/src/lib.rs",
+        "profiles/dev.toml",
+        "profiles/prod.toml"
+      ],
+      "verification": [
+        "cargo test -p ah-plugins-rsi --lib run_rounds_produces_reports_and_checkpoints (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-rsi cargo test --offline -p ah-plugins-rsi --lib external_kv_checkpoint_survives_local_file_removal (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-rsi cargo test --offline -p ah-plugins-rsi --lib redis_external_checkpoint_survives_local_file_removal (1 passed against Docker Redis)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-rsi cargo test --offline -p ah-plugins-rsi --lib external_store_entries_are_retrieved_without_local_roots (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-rsi cargo test --offline -p ah-plugins-rsi --lib (22 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-rsi cargo clippy --offline -p ah-plugins-rsi --lib --tests -- -D warnings (passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib updater (5 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-contracts cargo test --offline -p ah-contracts --lib updater (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-app cargo test --offline -p ah-app --test static_composition (4 passed)",
+        "deterministic RSI and member optimizer tests"
+      ],
+      "production": "RSI LLM dataset generation、real subagent execution、evolving evaluation/refinement、JSONL and Redis-backed external checkpoint resume、external ledger retrieval、member optimizer、shared updater seam/provider，以及 RSI run_rounds 每轮经 OperatorRegistry 应用 updater 更新已 focused-tested;真实外部 LLM production E2E remain pending",
+      "differential": "not verified"
+    },
+    {
+      "id": "P3-03",
+      "phase": "P3",
+      "domain": "external",
+      "title": "External infrastructure",
+      "status": "partial",
+      "implementation": [
+        "crates/ah-plugins-store/src/lib.rs",
+        "crates/ah-plugins-store/src/redis_store.rs",
+        "crates/ah-plugins-store/src/pg_store.rs",
+        "crates/ah-plugins-queue/src/lib.rs",
+        "crates/ah-plugins-queue/src/redis_queue.rs",
+        "crates/ah-plugins-checkpointer/src/lib.rs",
+        "crates/ah-plugins-checkpointer/src/redis_store.rs",
+        "crates/ah-plugins-telemetry/src/lib.rs"
+      ],
+      "verification": [
+        "docker exec cc-redis redis-cli ping (PONG)",
+        "cargo test -p ah-plugins-store --lib redis_kv_roundtrip_with_scan_and_delete (1 passed)",
+        "cargo test -p ah-plugins-queue --lib redis_queue_publish_consume_backlog_and_channels (1 passed)",
+        "cargo test -p ah-plugins-telemetry --lib export_otlp_posts_valid_json_to_collector (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-checkpointer cargo test --offline -p ah-plugins-checkpointer --lib redis_store_roundtrips_atomic_claim_prefix_and_pipeline (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-checkpointer cargo test --offline -p ah-plugins-checkpointer --lib (11 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-checkpointer cargo clippy --offline -p ah-plugins-checkpointer --lib --tests -- -D warnings (passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-pg cargo test --offline -p ah-plugins-store --lib pg_kv_roundtrip_with_scan_and_delete (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-pg cargo test --offline -p ah-plugins-store --lib pg_message_store_append_read_channels (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-pg cargo test --offline -p ah-plugins-store --lib (6 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-pg cargo clippy --offline -p ah-plugins-store --lib --tests -- -D warnings (passed)"
+      ],
+      "production": "Docker Redis KV/queue/checkpointer、PostgreSQL KV/message store and local OTLP/JSON collector paths verified; Pulsar, Elasticsearch, GaussDB deployment, Milvus, remote sandbox and external OTLP SDK remain unverified",
+      "differential": "not verified"
+    },
+    {
+      "id": "P3-04",
+      "phase": "P3",
+      "domain": "providers",
+      "title": "Vendor-specific providers",
+      "status": "partial",
+      "implementation": [
+        "crates/ah-plugins-retrieval/src/lib.rs",
+        "crates/ah-plugins-openai/src/lib.rs",
+        "crates/ah-plugins-credentials/src/lib.rs",
+        "crates/ah-plugins-rerank/src/lib.rs",
+        "crates/ah-contracts/src/rerank.rs",
+        "crates/ah-contracts/src/keys.rs",
+        "crates/ah-app/src/lib.rs"
+      ],
+      "verification": [
+        "cargo test -p ah-plugins-retrieval --lib dashscope_embedding_client_posts_native_request_and_parses_response (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-retrieval cargo test --offline -p ah-plugins-retrieval --lib dashscope_embedding_client_retries_transient_status (1 passed)",
+        "cargo test -p ah-plugins-openai --lib config_from_env_ (4 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-rerank cargo test --offline -p ah-plugins-rerank --lib (7 passed; credentials-aware query rerank and concurrency serialization)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-retrieval cargo test --offline -p ah-plugins-retrieval --lib dashscope_credentials_are_resolved_from_seam (1 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-retrieval-tls cargo test --offline -p ah-plugins-retrieval --lib (13 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-retrieval-tls cargo clippy --offline -p ah-plugins-retrieval --lib --tests -- -D warnings (passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-rerank cargo clippy --offline -p ah-plugins-rerank --lib --tests -- -D warnings (passed)",
+        "AH_ENV_FILE=$PWD/.env cargo run --offline -q -p ah-app --bin ah-app -- profiles/prod.toml (configured OpenAI-compatible vendor embedding and vector search returned 1 hit)"
+      ],
+      "production": "Configured OpenAI-compatible vendor embedding credentials and HTTPS/TLS path passed through the production profile into Redis-backed vector ingest/search; DashScope native embedding/reranking and other real vendor credentials remain pending",
+      "differential": "not applicable"
+    }
   ]
 }

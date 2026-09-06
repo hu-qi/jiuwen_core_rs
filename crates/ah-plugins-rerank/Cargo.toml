@@ -8,4 +8,5 @@ description = "Real retrieval reranker: weighted fusion of lexical + vector scor
 [dependencies]
 ah-contracts = { workspace = true }
 ah-hub = { workspace = true }
+ureq = { version = "2.12", default-features = false }
 serde_json = "1"

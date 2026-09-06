@@ -505,6 +505,9 @@ impl Operator for SkillExperienceOperator {
                 .retain(|c| !Arc::ptr_eq(c, &callback));
         })
     }
+    fn apply_update(&self, target: &str, update: &UpdateValue) -> ApplyResult {
+        self.preview_update(target, update)
+    }
 }
 
 impl PreviewableOperator for SkillExperienceOperator {

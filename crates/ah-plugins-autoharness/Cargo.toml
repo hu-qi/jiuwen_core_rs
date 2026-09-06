@@ -22,3 +22,5 @@ ah-plugins-evolving = { workspace = true }
 ah-plugins-rsi = { workspace = true }
 ah-plugins-git = { workspace = true }
 ah-plugins-ci = { workspace = true }
+ah-plugins-operator = { workspace = true }
+ah-plugins-optimizer = { workspace = true }

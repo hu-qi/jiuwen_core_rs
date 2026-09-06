@@ -63,6 +63,10 @@ pub const TEAMS: ServiceKey = ServiceKey::new("teams");
 
 /// `evolving` seam 服务键(轨迹/评估/优化)。
 pub const EVOLVING: ServiceKey = ServiceKey::new("evolving");
+/// `online-evolution` seam 服务键(技能演进在线编排)。
+pub const ONLINE_EVOLUTION: ServiceKey = ServiceKey::new("online-evolution");
+/// `updater` seam 服务键(演进更新编排)。
+pub const UPDATER: ServiceKey = ServiceKey::new("updater");
 
 /// `rsi` seam 服务键(递归自改进管线)。
 pub const RSI: ServiceKey = ServiceKey::new("rsi");
@@ -169,6 +173,7 @@ pub const MEMORY_EVOLVER: ServiceKey = ServiceKey::new("memory-evolver");
 pub const TOKENIZER: ServiceKey = ServiceKey::new("tokenizer");
 pub const RL_STEP: ServiceKey = ServiceKey::new("rl-step");
 pub const RERANK: ServiceKey = ServiceKey::new("rerank");
+pub const QUERY_RERANK: ServiceKey = ServiceKey::new("query-rerank");
 pub const SHARING: ServiceKey = ServiceKey::new("sharing");
 pub const EXPERIENCE_SCORER: ServiceKey = ServiceKey::new("experience-scorer");
 pub const JSON_PARSER: ServiceKey = ServiceKey::new("json-parser");

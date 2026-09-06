@@ -60,3 +60,16 @@ pub trait Reranker: Seam {
         config: &RerankConfig,
     ) -> Result<Vec<RerankedHit>, RerankError>;
 }
+
+/// query-aware rerank Seam:保留原始 query 供外部 reranker 使用。
+///
+/// `Reranker` 的融合 API 为历史兼容接口，不携带 query；外部模型协议必须
+/// 使用本 trait，避免把 query 丢失后伪造 vendor rerank 结果。
+pub trait QueryReranker: Seam {
+    fn rerank_query(
+        &self,
+        query: &str,
+        candidates: &[RetrievalHit],
+        k: usize,
+    ) -> Result<Vec<RerankedHit>, RerankError>;
+}

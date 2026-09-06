@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "seam": "task_lifecycle",
+  "cases": [
+    {
+      "name": "create_claim_update_dependency_review",
+      "operations": [
+        {"op": "create", "task_id": "a", "title": "Original", "content": "body", "reviewers": ["m2"]},
+        {"op": "create", "task_id": "a", "title": "Duplicate", "content": "ignored", "reviewers": []},
+        {"op": "update", "task_id": "a", "title": "Updated", "content": "revised"},
+        {"op": "create", "task_id": "b", "title": "Dependent", "content": "b-body", "reviewers": []},
+        {"op": "dependency", "task_id": "b", "depends_on": ["a"]},
+        {"op": "claim", "task_id": "a", "member": "m1"},
+        {"op": "complete", "task_id": "a", "output": {"answer": "ok"}},
+        {"op": "review", "task_id": "a", "member": "m2", "decision": "pass"},
+        {"op": "dependency_cycle", "task_id": "a", "depends_on": ["b"]},
+        {"op": "claim", "task_id": "b", "member": "m1"}
+      ]
+    }
+  ]
+}

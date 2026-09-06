@@ -95,6 +95,9 @@ def shim_logging() -> None:
     leaf.team_logger = logger
     leaf.logger = logger
     sys.modules["openjiuwen.core.common.logging"] = leaf
+    utils = types.ModuleType("openjiuwen.core.common.logging.utils")
+    utils.set_session_id = lambda _session_id: None
+    sys.modules[utils.__name__] = utils
     _LOADED.add("openjiuwen.core.common.logging")
 
 
@@ -1046,6 +1049,123 @@ def run_goal_manager() -> dict:
     cases = [asyncio.run(_run_goal_manager_case(module, case)) for case in fixture["cases"]]
     return {"seam": "goal_manager", "cases": cases}
 
+async def _run_task_lifecycle_case(case: dict) -> dict:
+    # shim_logging pre-seeds ``openjiuwen``; restore its filesystem path for
+    # the full team package while retaining the lightweight common logger.
+    openjiuwen = sys.modules.get("openjiuwen")
+    if openjiuwen is not None:
+        openjiuwen.__path__ = [str(AGENT_CORE_ROOT / "openjiuwen")]
+    agent_teams = sys.modules.get("openjiuwen.agent_teams")
+    if agent_teams is not None:
+        agent_teams.__path__ = [str(AGENT_CORE_ROOT / "openjiuwen" / "agent_teams")]
+    core = sys.modules.get("openjiuwen.core")
+    if core is not None:
+        core.__path__ = [str(AGENT_CORE_ROOT / "openjiuwen" / "core")]
+    for package, relative in {
+        "openjiuwen.agent_teams": "agent_teams",
+        "openjiuwen.agent_teams.schema": "agent_teams/schema",
+        "openjiuwen.agent_teams.tools": "agent_teams/tools",
+    }.items():
+        module = sys.modules.get(package) or types.ModuleType(package)
+        module.__path__ = [str(AGENT_CORE_ROOT / "openjiuwen" / relative)]
+        sys.modules[package] = module
+    # Mutation parity does not depend on transport/event serialization. Keep
+    # the real task manager and DAO code, but avoid importing the aggregate
+    # messager/workflow package initializers.
+    events = types.ModuleType("openjiuwen.agent_teams.schema.events")
+    class _Event:
+        def __init__(self, **kwargs): self.__dict__.update(kwargs)
+    events.EventMessage = type("EventMessage", (), {"from_event": staticmethod(lambda event: event)})
+    for event_name in ("TaskCancelledEvent", "TaskClaimedEvent", "TaskCompletedEvent", "TaskCreatedEvent", "TaskListDrainedEvent", "TaskPlanRequestEvent", "TaskPlanResponseEvent", "TaskReleasedEvent", "TaskReviewVoteEvent", "TaskRevisionRequestedEvent", "TaskRevokedEvent", "TaskStartedEvent", "TaskSubmittedForReviewEvent", "TaskUnblockedEvent", "TaskUpdatedEvent", "TaskVerifiedEvent"):
+        setattr(events, event_name, _Event)
+    events.TeamTopic = type("TeamTopic", (), {"TASK": type("TaskTopic", (), {"build": staticmethod(lambda *_args: "task")})})
+    sys.modules[events.__name__] = events
+    messager = types.ModuleType("openjiuwen.agent_teams.messager")
+    messager.Messager = object
+    sys.modules[messager.__name__] = messager
+    message_manager = types.ModuleType("openjiuwen.agent_teams.tools.message_manager")
+    message_manager.TeamMessageManager = object
+    sys.modules[message_manager.__name__] = message_manager
+    from unittest.mock import AsyncMock
+
+    from openjiuwen.agent_teams.context import reset_session_id, set_session_id
+    from openjiuwen.agent_teams.schema.status import MemberMode
+    from openjiuwen.agent_teams.tools.database import DatabaseConfig, DatabaseType, TeamDatabase
+    from openjiuwen.agent_teams.tools.task_manager import TeamTaskManager
+    token = set_session_id("task-lifecycle-diff")
+    database = TeamDatabase(DatabaseConfig(db_type=DatabaseType.SQLITE, connection_string=":memory:"))
+    bus = AsyncMock()
+    try:
+        await database.initialize()
+        await database.team.create_team(team_name="task-team", display_name="Task Team", leader_member_name="leader")
+        for member in ("m1", "m2"):
+            await database.member.create_member(
+                member_name=member,
+                team_name="task-team",
+                display_name=member,
+                agent_card="{}",
+                status="BUSY",
+                mode=MemberMode.BUILD_MODE.value,
+            )
+        author = TeamTaskManager(team_name="task-team", member_name="m1", db=database, messager=bus)
+        reviewer = TeamTaskManager(team_name="task-team", member_name="m2", db=database, messager=bus)
+        operations = []
+        for op in case["operations"]:
+            name = op["op"]
+            if name == "create":
+                result = await author.add(title=op["title"], content=op["content"], task_id=op["task_id"])
+                if result.ok and op.get("reviewers"):
+                    await author.set_reviewer(op["task_id"], op["reviewers"])
+                operations.append({"name": "create", "ok": result.ok, "status": (result.task.status if result.ok else None)})
+            elif name == "update":
+                result = await author.update_task(op["task_id"], title=op.get("title"), content=op.get("content"))
+                operations.append({"name": "update", "ok": result.ok})
+            elif name in ("dependency", "dependency_cycle"):
+                result = await author.add_dependencies(op["task_id"], op["depends_on"])
+                operations.append({"name": name, "ok": result.ok})
+            elif name == "claim":
+                result = await author.claim(op["task_id"])
+                operations.append({"name": "claim", "ok": result.ok})
+            elif name == "complete":
+                result = await author.complete(op["task_id"])
+                task = await author.get(op["task_id"])
+                operations.append({"name": "complete", "ok": result.ok, "status": task.status})
+
+            elif name == "review":
+                result = await reviewer.verify_task(op["task_id"], op["decision"])
+                task = await author.get(op["task_id"])
+                operations.append({"name": "review", "ok": result.ok, "status": task.status})
+            else:
+                raise ValueError(f"unknown task operation {name}")
+        tasks = await author.list_tasks()
+        operations.append({"name": "final", "tasks": [{"id": t.task_id, "title": t.title, "content": t.content, "status": t.status, "assignee": t.assignee} for t in tasks]})
+        return {"name": case["name"], "operations": operations}
+    finally:
+        await database.close()
+        reset_session_id(token)
+
+
+def run_task_lifecycle() -> dict:
+    fixture = load_fixture("task_lifecycle")
+    return {"seam": "task_lifecycle", "cases": [asyncio.run(_run_task_lifecycle_case(case)) for case in fixture["cases"]]}
+
+def run_subagents() -> dict:
+    """Drive the real Python browser capability resolver."""
+    module = load_module_file("openjiuwen.harness.tools.browser_move.playwright_runtime.browser_capabilities")
+    fixture = load_fixture("subagents")
+    cases = []
+    for case in fixture["cases"]:
+        resolved = module.resolve_browser_capabilities(case["requested"])
+        cases.append({
+            "name": case["name"],
+            "requested": list(resolved.requested_names),
+            "selected": list(resolved.selected_names),
+            "rejected": list(resolved.rejected_names),
+            "allowed": list(resolved.allowed_tool_names),
+        })
+    return {"seam": "subagents", "cases": cases}
+
+
 def main() -> int:
 
     if not AGENT_CORE_ROOT.exists():
@@ -1070,6 +1190,8 @@ def main() -> int:
         "team_inbox_format": run_team_inbox_format,
         "team_inbox_fetch": run_team_inbox_fetch,
         "goal_manager": run_goal_manager,
+        "task_lifecycle": run_task_lifecycle,
+        "subagents": run_subagents,
     }
     selected = sys.argv[1:] or list(runners)
     for name in selected:

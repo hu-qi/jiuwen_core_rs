@@ -109,6 +109,15 @@ const MOBILE_TOOLS: &[&str] = &[
     "device_health",
 ];
 
+/// Python browser factory 注入、但不属于 capability 分类的高层 helper。
+const BROWSER_RUNTIME_HELPER_TOOLS: &[&str] = &[
+    "browser_probe_interactives",
+    "browser_probe_cards",
+    "browser_batch_interact",
+    "browser_custom_action",
+    "browser_list_custom_actions",
+];
+
 fn profile_for(kind: SubagentKind) -> SubagentProfile {
     let (system_prompt, allowed_tools, default_budget) = match kind {
         SubagentKind::Code => (
@@ -132,12 +141,12 @@ fn profile_for(kind: SubagentKind) -> SubagentProfile {
             20,
         ),
         SubagentKind::Browser => (
-            "You are a browser automation agent. Execute web tasks directly with Playwright tools. Inspect before acting, preserve session continuity, and claim completion only when the requested outcome is evidenced.",
+            "You are a browser automation agent. Preserve browser session continuity, inspect before acting, and only claim completion when the requested outcome is evidenced. Prefer browser_probe_cards for repeated cards/listings and browser_probe_interactives for page controls before broad snapshots. Use browser_batch_interact only for already-grounded deterministic steps; use browser_custom_action only after discovering its contract.",
             BROWSER_TOOLS.to_vec(),
             25,
         ),
         SubagentKind::MobileGui => (
-            "You are an intelligent Android GUI agent. Observe the latest screenshot, ground one coordinate action at a time, and stop only when the requested UI outcome is evidenced.",
+            "You are an Android GUI automation agent. Ground every coordinate action in the latest screenshot, use device_health before risky actions, preserve the requested device_serial, wait for UI settling after mutations, and verify the final state with a fresh screenshot before claiming completion. Return an explicit blocker when no device is reachable.",
             MOBILE_TOOLS.to_vec(),
             30,
         ),
@@ -176,21 +185,22 @@ fn inherited_context(
         "Parent session context (read-only):\n{context}"
     )))
 }
+/// Resolve the task-scoped browser tool allowlist using the trusted catalog.
+pub fn browser_tools_for_capabilities(
+    capabilities: &[String],
+) -> Result<Vec<String>, TypedSubagentError> {
+    validate_browser_capabilities(capabilities)?;
+    Ok(scoped_browser_tools(
+        capabilities,
+        BROWSER_TOOLS
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+    ))
+}
+
 fn scoped_browser_tools(capabilities: &[String], tools: Vec<String>) -> Vec<String> {
-    if capabilities.is_empty() {
-        return tools;
-    }
     let mut selected: Vec<&str> = BROWSER_TOOLS[..24].to_vec();
-    selected.extend([
-        "browser_probe_interactives",
-        "browser_probe_cards",
-        "browser_batch_interact",
-        "browser_custom_action",
-        "browser_list_custom_actions",
-        "browser_cancel_run",
-        "browser_clear_cancel",
-        "browser_runtime_health",
-    ]);
     for capability in capabilities {
         let names: &[&str] = match capability.as_str() {
             "core" => &[],
@@ -334,12 +344,17 @@ impl TypedSubagents for TypedSubagentsImpl {
                 "browser_capabilities are only valid for browser_agent".into(),
             ));
         }
-        if request.kind == SubagentKind::Browser {
-            validate_browser_capabilities(&request.browser_capabilities)?;
-        }
         let profile = profile_for(request.kind);
         let allowed_tools = if request.kind == SubagentKind::Browser {
-            scoped_browser_tools(&request.browser_capabilities, profile.allowed_tools.clone())
+            let mut tools = browser_tools_for_capabilities(&request.browser_capabilities)?;
+            tools.extend(
+                BROWSER_RUNTIME_HELPER_TOOLS
+                    .iter()
+                    .map(|name| (*name).to_string()),
+            );
+            tools.sort();
+            tools.dedup();
+            tools
         } else {
             profile.allowed_tools.clone()
         };
@@ -981,6 +996,7 @@ mod tests {
         let browser_tools = typed.profile(SubagentKind::Browser).unwrap().allowed_tools;
         let core_only = scoped_browser_tools(&["core".into()], browser_tools.clone());
         assert!(!core_only.contains(&"browser_pdf_save".to_string()));
+        assert!(!core_only.contains(&"browser_probe_cards".to_string()));
         let pdf_tools = scoped_browser_tools(&["pdf".into()], browser_tools);
         assert!(pdf_tools.contains(&"browser_pdf_save".to_string()));
         let manager = ctx
@@ -1018,6 +1034,36 @@ mod tests {
             .find(|message| message.role == ah_contracts::llm::ChatRole::System)
             .unwrap();
         assert!(system.content.contains("keep this goal"));
+        let browser = typed
+            .run_request(ah_contracts::subagents::SubagentRequest {
+                kind: SubagentKind::Browser,
+                task: "browse grounded cards".into(),
+                budget: Some(2),
+                parent_session_id: None,
+                browser_capabilities: vec!["core".into()],
+                device_serial: None,
+            })
+            .await
+            .expect("browser run");
+        assert!(browser.answer.contains("mock final answer"));
+        let browser_session = manager
+            .open(&format!(
+                "browser_agent-{}",
+                stable_id("browse grounded cards")
+            ))
+            .unwrap();
+        let browser_system = browser_session
+            .derive_messages()
+            .into_iter()
+            .find(|message| message.role == ah_contracts::llm::ChatRole::System)
+            .unwrap();
+        assert!(browser_system.content.contains("browser_probe_cards"));
+        assert!(
+            browser_system
+                .content
+                .contains("browser_probe_interactives")
+        );
+
         assert!(
             typed
                 .run_request(ah_contracts::subagents::SubagentRequest {

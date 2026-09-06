@@ -36,10 +36,14 @@ pub enum TeamTaskStatus {
 pub struct TeamTask {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub content: String,
     pub status: TeamTaskStatus,
     #[serde(default)]
     pub dependencies: Vec<String>,
     pub assignee: Option<String>,
+    #[serde(default)]
+    pub reviewers: Vec<String>,
     #[serde(default)]
     pub review_votes: Vec<String>,
     pub result: Option<Value>,
@@ -90,6 +94,26 @@ impl std::error::Error for TeamError {}
 pub trait TeamRuntime: Seam {
     fn create_team(&self, spec: TeamSpec, members: Vec<TeamMemberSpec>) -> Result<(), TeamError>;
     fn add_task(&self, team: &str, task: TeamTask) -> Result<(), TeamError>;
+    /// 创建任务；任务初始状态必须是 Pending，重复 ID 必须显式失败。
+    fn create_task(
+        &self,
+        team: &str,
+        id: &str,
+        title: &str,
+        content: &str,
+        dependencies: Vec<String>,
+        reviewers: Vec<String>,
+    ) -> Result<TeamTask, TeamError>;
+    /// 更新任务标题和内容；InReview/Done 任务不可编辑。
+    fn update_task(
+        &self,
+        team: &str,
+        task: &str,
+        title: Option<&str>,
+        content: Option<&str>,
+    ) -> Result<(), TeamError>;
+    /// 向现有任务追加依赖，并拒绝不存在目标、循环和运行中任务。
+    fn add_dependency(&self, team: &str, task: &str, dependency: &str) -> Result<(), TeamError>;
     /// 认领下一个可领任务(依赖须全部 Done);返回任务 id。
     fn claim_task(&self, team: &str, member: &str) -> Result<String, TeamError>;
     fn complete_task(&self, team: &str, task: &str, output: Value) -> Result<(), TeamError>;

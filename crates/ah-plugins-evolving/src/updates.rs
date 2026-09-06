@@ -3,6 +3,7 @@
 //! 纯逻辑:批量更新归一化执行 + 结果聚合。
 
 use ah_contracts::evolving::{ApplyResult, UpdateEffect, UpdateKey, UpdateMode, UpdateValue};
+use ah_contracts::operator::OperatorRegistry;
 use std::collections::BTreeMap;
 
 pub type OperatorApply = Box<dyn Fn(&str, &UpdateValue) -> ApplyResult + Send + Sync>;
@@ -72,6 +73,26 @@ pub fn execute_updates(
     results
 }
 
+/// 经 `OperatorRegistry` 执行一批更新;缺失 operator 保留显式失败结果。
+pub fn execute_updates_with_registry(
+    registry: &dyn OperatorRegistry,
+    updates: &BTreeMap<UpdateKey, Option<serde_json::Value>>,
+) -> Vec<ApplyResult> {
+    let mut operators: BTreeMap<String, OperatorApply> = BTreeMap::new();
+    for (operator_id, _) in updates.keys() {
+        if operators.contains_key(operator_id) {
+            continue;
+        }
+        if let Some(operator) = registry.get(operator_id) {
+            operators.insert(
+                operator_id.clone(),
+                Box::new(move |target, update| operator.apply_update(target, update)),
+            );
+        }
+    }
+    execute_updates(&operators, updates)
+}
+
 /// 聚合应用结果计数(对齐 summarize_apply_results)。
 pub fn summarize_apply_results(results: &[ApplyResult]) -> (usize, usize, usize) {
     let total = results.len();
@@ -85,7 +106,77 @@ mod tests {
     use ah_contracts::evolving::{UpdateEffect, UpdateMode};
     use serde_json::json;
     use std::collections::BTreeMap;
+    #[test]
+    fn execute_updates_with_registry_applies_real_operator() {
+        use ah_contracts::keys::OPERATOR;
+        use ah_contracts::operator::OperatorRegistry;
+        use ah_hub::context::Context;
+        use ah_hub::plugin::DynPlugin;
+        use std::sync::Arc;
 
+        let ctx = Context::new();
+        let effects = ctx
+            .mount_all(vec![
+                Arc::new(ah_plugins_operator::OperatorPlugin) as DynPlugin
+            ])
+            .expect("mount operator");
+        let registry = ctx
+            .service::<dyn OperatorRegistry>(&OPERATOR)
+            .expect("registry");
+        let updates = BTreeMap::from([(
+            ("agent/llm_call".to_string(), "system_prompt".to_string()),
+            Some(json!("updated prompt")),
+        )]);
+
+        let results = execute_updates_with_registry(registry.as_ref(), &updates);
+        assert_eq!(results.len(), 1);
+        assert!(
+            results[0].ok(),
+            "operator update failed: {:?}",
+            results[0].errors
+        );
+        assert_eq!(
+            registry.get("agent/llm_call").unwrap().get_state()["system_prompt"],
+            "updated prompt"
+        );
+        drop(effects);
+    }
+
+    #[test]
+    fn execute_updates_with_registry_routes_skill_experience_preview() {
+        use ah_contracts::keys::OPERATOR;
+        use ah_contracts::operator::OperatorRegistry;
+        use ah_hub::context::Context;
+        use ah_hub::plugin::DynPlugin;
+        use std::sync::Arc;
+
+        let ctx = Context::new();
+        let mut effects = ctx
+            .mount_all(vec![
+                Arc::new(ah_plugins_operator::OperatorPlugin) as DynPlugin
+            ])
+            .expect("mount operator");
+        let registry = ctx
+            .service::<dyn OperatorRegistry>(&OPERATOR)
+            .expect("registry");
+        let skill: Arc<dyn ah_contracts::operator::Operator> =
+            Arc::new(ah_plugins_operator::SkillExperienceOperator::new("sk"));
+        effects.push(registry.register(skill));
+        let updates = BTreeMap::from([(
+            ("skill_experience_sk".to_string(), "experiences".to_string()),
+            Some(json!([{"id": "ev-1", "content": "use checks"}])),
+        )]);
+
+        let results = execute_updates_with_registry(registry.as_ref(), &updates);
+        assert_eq!(results.len(), 1);
+        assert!(results[0].ok(), "preview failed: {:?}", results[0].errors);
+        assert_eq!(results[0].records.len(), 1);
+        assert_eq!(
+            results[0].lifecycle_stage.as_deref(),
+            Some("local_apply_completed")
+        );
+        drop(effects);
+    }
     fn updates() -> BTreeMap<UpdateKey, Option<serde_json::Value>> {
         let mut m = BTreeMap::new();
         m.insert(

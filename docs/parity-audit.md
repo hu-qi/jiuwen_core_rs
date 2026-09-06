@@ -47,13 +47,12 @@
 | harness / kv_cache | 90 | `ah-contracts/src/kv_cache.rs:77/94/131/186` + `ah-plugins-kv-cache/src/lib.rs:21-118` affinity/sticky/session-id 判定 + prefetch/offload/evict 信号 1:1 |
 | core / operator | 100 | **done(第 141 回合)**:`ah-contracts/src/operator.rs:71/96/128` Operator.apply_update 兼容行为(replace/state→set_parameter+前后状态比较,其余显式错误)+ PreviewableOperator(preview_update 抽象 + apply_update 路由预览)+ TunableKind::SkillExperience;`ah-plugins-operator/src/lib.rs:434-548` SkillExperienceOperator(operator_id=skill_experience_{skill},tunables experiences/kind skill_experience/path content/preview_update 目标+mode/effect 校验→records+lifecycle_stage=local_apply_completed+metadata.skill_name/set_parameter 通知消费方/get_state={}/load_state 无副作用),1:1 对齐 operator/base.py:114-181 + skill_call/base.py:22-117;ApplyResult 补 records/lifecycle_stage/pending_change_id(evolving.rs:230) |
 
-## 3. 完全未实现(missing)—— 2 个
+## 3. 完全未实现(missing)—— 1 个
 
-当前仍有两个能力子模块没有可调用的 Rust 实现:
+当前仍有一个能力子模块没有可调用的 Rust 实现:
 
 | 域 | 模块 | 缺口 |
 | --- | --- | --- |
-| rsi | updater | `multi_dim.py`、`single_dim.py`、`protocol.py` |
 | extensions | vendor_specific | 各厂商专用重排/嵌入实现 |
 
 原先标记为 missing 的其他模块均已至少有 seam、插件、确定性逻辑或部分真实路径,
@@ -167,6 +166,7 @@ skill_creator 均属于此类。rsi/resource、rsi/storage 判 excluded(见 §3b
 | member_optimizer | 20 | LLM role/mechanism 归因、action_groups、修复 agent |
 | dataset_generator | 15 | capability graph/case spec/维度/质量评审 |
 | orchestrator | 10 | 多阶段编排、usage ledger、run report |
+| updater | 60 | **已提供 Rust 实现**:`ah-plugins-evolving/src/updater.rs` 提供统一 `Updater`、`SingleDimUpdater`、`MultiDimUpdater`、离线 `EvaluatedCase` 转换、域路由、结构化更新映射和版本化状态恢复；RSI trainer/orchestrator 的正式接线与 Python differential 留待后续 |
 
 ### 4.6 extensions(9 子模块,42%)
 
@@ -179,7 +179,7 @@ skill_creator 均属于此类。rsi/resource、rsi/storage 判 excluded(见 §3b
 | store | 50 | ES 向量存储、GaussDB 方言 |
 | sys_operation | 40 | JiuwenBox/Yuanrong 远程 provider |
 | context_evolver | 30 | Milvus/多算法/轨迹生成/演化 Agent |
-| vendor_specific | 30 | Dashscope/Aliyun 云端适配 |
+| vendor_specific | 60 | DashScope 原生 embedding/rerank、Qwen OpenAI-compatible provider 和 credentials/env 配置已实现并有本地协议测试;真实厂商凭据 E2E 仍待验证 |
 | harness | 10 | Python 侧为空命名空间 |
 
 ### 4.7 dev_tools(3 子模块,24%)

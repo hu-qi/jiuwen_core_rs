@@ -16,6 +16,9 @@
 //! | openai.api_key | OPENAI_API_KEY |
 //! | openai.base_url | OPENAI_BASE_URL |
 //! | openai.model | OPENAI_MODEL |
+//! | dashscope.api_key | DASHSCOPE_API_KEY |
+//! | dashscope.base_url | DASHSCOPE_BASE_URL |
+//! | dashscope.model | DASHSCOPE_MODEL |
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -34,6 +37,15 @@ fn default_mapping() -> HashMap<String, String> {
     mapping.insert("openai.api_key".to_string(), "OPENAI_API_KEY".to_string());
     mapping.insert("openai.base_url".to_string(), "OPENAI_BASE_URL".to_string());
     mapping.insert("openai.model".to_string(), "OPENAI_MODEL".to_string());
+    mapping.insert(
+        "dashscope.api_key".to_string(),
+        "DASHSCOPE_API_KEY".to_string(),
+    );
+    mapping.insert(
+        "dashscope.base_url".to_string(),
+        "DASHSCOPE_BASE_URL".to_string(),
+    );
+    mapping.insert("dashscope.model".to_string(), "DASHSCOPE_MODEL".to_string());
     mapping
 }
 
@@ -290,6 +302,18 @@ mod tests {
         assert_eq!(
             mapping.get("openai.model").map(String::as_str),
             Some("OPENAI_MODEL")
+        );
+        assert_eq!(
+            mapping.get("dashscope.api_key").map(String::as_str),
+            Some("DASHSCOPE_API_KEY")
+        );
+        assert_eq!(
+            mapping.get("dashscope.base_url").map(String::as_str),
+            Some("DASHSCOPE_BASE_URL")
+        );
+        assert_eq!(
+            mapping.get("dashscope.model").map(String::as_str),
+            Some("DASHSCOPE_MODEL")
         );
     }
 

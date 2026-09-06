@@ -258,6 +258,8 @@ dependencies = [
  "ah-plugins-evolving",
  "ah-plugins-git",
  "ah-plugins-mock",
+ "ah-plugins-operator",
+ "ah-plugins-optimizer",
  "ah-plugins-rsi",
  "ah-plugins-session-log",
  "ah-plugins-subagent",
@@ -420,7 +422,10 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "ah-plugins-mock",
+ "ah-plugins-operator",
+ "ah-plugins-optimizer",
  "ah-plugins-session-log",
+ "ah-plugins-store",
  "ah-plugins-sysop",
  "ah-plugins-tools",
  "async-trait",
@@ -582,6 +587,7 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "ah-plugins-store",
  "ah-plugins-tools",
  "async-trait",
  "serde_json",
@@ -802,6 +808,7 @@ dependencies = [
  "ah-contracts",
  "ah-hub",
  "serde_json",
+ "ureq",
 ]
 
 [[package]]
@@ -820,11 +827,13 @@ version = "0.1.0"
 dependencies = [
  "ah-contracts",
  "ah-hub",
+ "ah-plugins-store",
  "ah-plugins-tools",
  "async-trait",
  "serde",
  "serde_json",
  "tokio",
+ "ureq",
 ]
 
 [[package]]
@@ -860,7 +869,10 @@ dependencies = [
  "ah-hub",
  "ah-plugins-evolving",
  "ah-plugins-mock",
+ "ah-plugins-operator",
+ "ah-plugins-optimizer",
  "ah-plugins-session-log",
+ "ah-plugins-store",
  "ah-plugins-subagent",
  "ah-plugins-sysop",
  "ah-plugins-tools",
@@ -932,6 +944,7 @@ dependencies = [
  "async-trait",
  "serde_json",
  "tokio",
+ "ureq",
 ]
 
 [[package]]
@@ -1968,7 +1981,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots",
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]
@@ -2612,7 +2625,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots",
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]
@@ -2655,6 +2668,7 @@ version = "0.23.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0283386ce02abc0151e1761d08802dfe86c173b0b494af5cbc086574e453da06"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -3232,7 +3246,10 @@ dependencies = [
  "base64",
  "log",
  "once_cell",
+ "rustls",
+ "rustls-pki-types",
  "url",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -3396,6 +3413,15 @@ checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "0.26.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
+dependencies = [
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]

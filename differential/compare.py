@@ -38,6 +38,8 @@ SEAMS = [
     "tool_retry",
     "task_completion",
     "task_planning",
+    "task_lifecycle",
+    "subagents",
 ]
 
 

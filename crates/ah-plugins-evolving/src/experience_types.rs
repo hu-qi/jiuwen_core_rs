@@ -61,7 +61,7 @@ fn unique_8hex() -> String {
 }
 
 /// 待审批演进快照(对齐 PendingChange)。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PendingChange {
     pub operator_id: String,
     pub skill_name: String,

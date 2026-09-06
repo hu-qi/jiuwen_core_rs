@@ -37,8 +37,8 @@
 | operator(8 类) | partial | LLM/tool/memory/skill 四算子 + freeze + 回调 + 检查点 | legacy(llm_call) |
 | runner(46 类) | partial | 回调链(优先级/retry/timeout/break/rollback + 指标);资源标签管理(TagMgr) | resources_manager(agent/tool/model/workflow/sys_operation 管理器与取消)、drunner(dmessage_queue/dsubscription/remote_client/server_adapter)、spawn |
 | context_engine(72 文件) | partial | 预算组装/摘录压缩+LLM 总结/offload/reinject + 精确 tokenizer(BPE-lite) | forked 处理器(compressor/offloader/rule_compression)、token 子模块、schema、向量化 |
-| memory(104 文件) | partial | JSON 文件记忆 + 图记忆(实体/关系/episode)+ memory-lite 原语(frontmatter/chunk/write) | manage(21 文件:index/mem_model/search/update)、migration(14 文件:migrator/operation)、process(extract/refine)、external(8 文件)、dreaming、codec、common、config、prompts |
-| retrieval(84 文件) | partial | BM25 + 本地确定性向量(哈希 n-gram TF + 余弦)+ rerank(词法+向量融合+多样性惩罚) | embedding(7)、indexing(38 文件:indexer/processor chunker·extractor·parser·splitter)、query_rewriter、vector_store(6)、retriever(7)、reranker 细化、外部模型 embedding |
+| memory(104 文件) | partial | JSON 文件记忆 + Redis-backed KV JSON 记忆(provider/search/list/remove E2E)+ 图记忆(实体/关系/episode)+ memory-lite 原语(frontmatter/chunk/write) | manage(21 文件:index/mem_model/search/update)、migration(14 文件:migrator/operation)、process(extract/refine)、external(8 文件)、dreaming、codec、common、config、prompts |
+| retrieval(84 文件) | partial | BM25 + 本地确定性向量(哈希 n-gram TF + 余弦)+ rerank(词法+向量融合+多样性惩罚)+ OpenAI-compatible HTTP embedding + Redis-backed vector index + 生产 profile 真实 vector 检索 | embedding(7)、indexing(38 文件:indexer/processor chunker·extractor·parser·splitter)、query_rewriter、vector_store(6)、retriever(7)、reranker 细化、其他真实厂商 embedding |
 | security(20 类) | partial | 规则 guardrails + pre-execute rail | LLM 后端、builtin guardrail 上下文/模型/enums/backends |
 | sys_operation(56 类) | partial | 本地 fs/shell/code(隔离 scratch + python3)/sandbox 策略 | 远程沙箱 provider(9 个:AIO/jiuwenbox/yuanrong 等)、protocal、gateway/launchers |
 
@@ -55,7 +55,7 @@
 | lsp | partial(第 128 回合) | ah-plugins-lsp:状态机/诊断注册表六步算法/file_uri/5 语言 server 配置 | stdio JSON-RPC 客户端(spawn/读写/握手)留待进程接线 |
 | resources | partial(第 128 回合) | ah-plugins-resources:Spec 模型/MCP 归一化/模板渲染/路径校验/ExtensionParts 解析 | manifest 发现/文件读取(FS 接线) |
 | schema | partial | 部分类型 | stop_condition/task/config/interaction/agent_mode/loop_event/extension_spec/build_context/deep_agent_spec/state 字段对等 |
-| security(harness) | partial | ah-plugins-security 规则 | suggestions/patterns/models/host/tiered_policy/core/factory/file_guard/shell_ast/checker/files registry/extract |
+| security(harness) | partial | ah-plugins-security 规则 + file_guard/shell_ast/checker/files registry/extract + tiered_policy 的 shell/network URL/query 分层匹配 | suggestions/patterns/models/host/core/factory 完整语义; tiered_policy 仍缺更多 Python rail 类型 |
 | task_loop | **partial** | agent-loop、runner、queue、subagent 已覆盖部分循环/队列/委派语义 | event_manager/loop_coordinator/loop_queues/session_spawn_executor/task_loop_controller/task_loop_event_executor/task_loop_event_handler 的完整 task-loop 生命周期与事件接线仍未对等 |
 | cli | done | Claude Code 风格渲染 + ah-cli 子命令 | (done,无缺口) |
 
@@ -113,14 +113,14 @@ dataset_generator(确定性+LLM)、dataset_curator、data_loader 分批、rsi-co
 
 | Python 子模块 | 状态 | 已落地 | 未完成(缺口) |
 | --- | --- | --- | --- |
-| checkpointer(Redis) | partial(第 128 回合) | ah-plugins-checkpointer:TTL/key 构造/四存储/钩子编排(RedisStore seam 注入) | 真实 Redis 进程集成测试 |
+| checkpointer(Redis) | partial(第 128 回合) | ah-plugins-checkpointer:TTL/key 构造/四存储/钩子编排 + RedisStore 真实 set/get/claim/prefix/pipeline 路径 | Pulsar/Elasticsearch/GaussDB/Milvus 等其他外部后端 |
 | message_queue(Pulsar) | partial | Redis LIST+INCR+游标 | Pulsar |
-| store(GaussDB/ES) | partial | PostgreSQL/GaussDB 兼容 SQL | Elasticsearch |
+| store(GaussDB/ES) | partial | PostgreSQL KV/message store 真实 SQL + Redis/file seam 互换 | GaussDB 部署验证、Elasticsearch |
 | sys_operation(远程沙箱 9 provider) | partial | 4 个白名单命令 | AIO/jiuwenbox/yuanrong 等远程 provider |
 | external_provider(OpenAI OAuth) | done | 设备码 + 模型目录 | — |
 | context_evolver | partial | 任务记忆 JSONL/检索/摘要/注入 | Milvus 向量后端 |
 | a2a / tracer_otel / mcp | done | server/client+SSE / JSONL+OTLP+semconv / stdio+http | — |
-| vendor_specific | **missing** | 词法 fallback | 各厂商重排/嵌入 |
+| vendor_specific | partial | DashScope 原生 embedding/rerank、Qwen OpenAI-compatible provider、credentials/env 解析和协议校验 | 真实厂商凭据 E2E |
 
 ## 7. dev_tools(141 符号 / 94 文件)
 
