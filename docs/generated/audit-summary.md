@@ -1,6 +1,6 @@
 # Generated capability audit summary
 
-> Generated from `audit/ledger.json`; recorded at 2026-09-03; code revision `38ed1a5`; reference revision `aeb88cd8`.
+> Generated from `audit/ledger.json`; recorded at 2026-09-06; code revision `b7b179a`; reference revision `aeb88cd8`.
 
 Percentages below are status shares, not weighted capability completion.
 
@@ -8,8 +8,8 @@ Percentages below are status shares, not weighted capability completion.
 
 | Status | Count | Share |
 | --- | ---: | ---: |
-| done | 20 | 76.9% |
-| partial | 6 | 23.1% |
+| done | 21 | 80.8% |
+| partial | 5 | 19.2% |
 | missing | 0 | 0.0% |
 | excluded | 0 | 0.0% |
 | **total** | **26** | **100.0%** |
@@ -32,7 +32,7 @@ Percentages below are status shares, not weighted capability completion.
 | retrieval | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | rsi | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | session | 1 | 1 | 0 | 0 | 0 | 100.0% |
-| subagents | 1 | 0 | 1 | 0 | 0 | 0.0% |
+| subagents | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | teams | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | tools | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | workflow | 1 | 1 | 0 | 0 | 0 | 100.0% |
@@ -41,7 +41,6 @@ Percentages below are status shares, not weighted capability completion.
 
 | ID | Phase | Domain | Title | Status |
 | --- | --- | --- | --- | --- |
-| P2-04 | P2 | subagents | Subagents | partial |
 | P2-06 | P2 | retrieval | Production retrieval and memory backends | partial |
 | P3-01 | P3 | evolving | Agent evolving LLM loop | partial |
 | P3-02 | P3 | rsi | RSI orchestration | partial |
@@ -204,10 +203,10 @@ Percentages below are status shares, not weighted capability completion.
 
 ### P2-04 — Subagents
 
-- Status: `partial`
+- Status: `done`
 - Implementation: `crates/ah-contracts/src/llm.rs`, `crates/ah-contracts/src/mcp.rs`, `crates/ah-contracts/src/session.rs`, `crates/ah-plugins-openai/src/lib.rs`, `crates/ah-plugins-anthropic/src/lib.rs`, `crates/ah-plugins-session-log/src/lib.rs`, `crates/ah-plugins-agent-loop/src/lib.rs`, `crates/ah-plugins-mcp/src/client.rs`, `crates/ah-plugins-mcp/src/lib.rs`, `crates/ah-plugins-subagent/src/lib.rs`, `crates/ah-plugins-subagents/src/lib.rs`, `crates/ah-app/src/lib.rs`, `profiles/dev.toml`, `profiles/prod.toml`, `docs/config-catalog.md`, `docs/ROADMAP.md`, `docs/capability-map.md`, `crates/ah-app/tests/differential.rs`, `fixtures/subagents.json`, `fixtures/subagent_lifecycle.json`, `references/subagents.json`, `references/subagent_lifecycle.json`, `differential/run_python.py`, `differential/compare.py`
-- Verification: `cargo test --offline -p ah-plugins-mcp -p ah-plugins-subagents --lib --tests (26 passed)`, `cargo test --offline -p ah-plugins-subagent --lib mobile_subagent_runs_health_grounded_action_and_fresh_screenshot (1 passed)`, `cargo test --offline -p ah-app --test differential (21 passed)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py subagent_lifecycle (Python outcome generated)`, `python differential/compare.py subagent_lifecycle (2 matched, 0 known divergence, 0 mismatch)`, `cargo clippy --offline -p ah-plugins-subagent -p ah-plugins-subagents -p ah-plugins-mcp -p ah-app --all-targets -- -D warnings (passed)`, `cargo fmt --all --check (passed)`, `adb version (36.0.0)`, `adb devices -l (10AC5Z0FL1000NL present but unauthorized)`, `adb -s 10AC5Z0FL1000NL get-state (blocked: device unauthorized; confirmation required on device)`, `Rust fake MCP stdio server initialize/list_tools/call_tool protocol smoke passed`, `subagent mobile fixture flow health -> screenshot -> grounded tap -> fresh screenshot passed`, `Python mobile DeviceLifecycleRail and coordinate action fixture flow passed`, `Python browser capability/probe lifecycle fixture passed`
-- Production: Rust browser proxy and Android ADB paths are implemented; request-scoped mobile serial binding, health-before-action, grounded action and post-action screenshot are verified with a deterministic com.example.todo fixture. Real Android smoke is currently blocked because 10AC5Z0FL1000NL is unauthorized and requires confirmation on the device.
+- Verification: `cargo test --offline -p ah-plugins-mcp -p ah-plugins-subagents --lib --tests (26 passed)`, `cargo test --offline -p ah-plugins-subagent --lib mobile_subagent_runs_health_grounded_action_and_fresh_screenshot (1 passed)`, `cargo test --offline -p ah-app --test differential (21 passed)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py subagent_lifecycle (Python outcome generated)`, `python differential/compare.py subagent_lifecycle (2 matched, 0 known divergence, 0 mismatch)`, `cargo clippy --offline -p ah-plugins-subagent -p ah-plugins-subagents -p ah-plugins-mcp -p ah-app --all-targets -- -D warnings (passed)`, `cargo fmt --all --check (passed)`, `AH_MOBILE_REAL=1 DEVICE_SERIAL=emulator-5556 cargo test --offline -p ah-plugins-subagents real_android_settings_flow_smoke_when_requested -- --nocapture (1 passed)`, `adb -s emulator-5556 shell getprop ro.product.model (sdk_gphone64_arm64)`, `adb -s emulator-5556 exec-out screencap -p (15580 bytes)`, `Rust MobileAdbPlugin Settings flow: launch Settings -> health -> screenshot -> tap Network & internet -> fresh screenshot (passed)`, `adb version (36.0.0)`, `adb devices -l (emulator-5556 online; physical 10AC5Z0FL1000NL unauthorized and excluded from this smoke)`, `AH_MOBILE_REAL=1 DEVICE_SERIAL=emulator-5556 AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py subagent_lifecycle (real AVD flow completed)`, `Rust fake MCP stdio server initialize/list_tools/call_tool protocol smoke passed`, `subagent mobile fixture flow health -> screenshot -> grounded tap -> fresh screenshot passed`, `Python mobile DeviceLifecycleRail and coordinate action fixture flow passed`, `Python browser capability/probe lifecycle fixture passed`, `Python real AVD DeviceLifecycleRail health -> coordinate action -> screenshot flow passed`
+- Production: Rust and Python browser/mobile paths are implemented; request-scoped mobile serial binding, health-before-action, grounded action and post-action screenshot are verified with a deterministic com.example.todo fixture plus a real Android AVD Settings flow on emulator-5556 (sdk_gphone64_arm64). The physical target 10AC5Z0FL1000NL remains unauthorized and was excluded from this verified AVD smoke.
 - Differential: agent-core@aeb88cd8 matched 5 cases with 0 known divergence and 0 mismatch: browser capability/probe lifecycle (1), mobile application flow (1), and existing browser capability cases (3).
 
 ### P2-05 — Multi-agent and messager

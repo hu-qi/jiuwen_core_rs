@@ -491,13 +491,26 @@ impl AdbTool {
     }
 
     fn foreground_app(output: &[u8]) -> Option<String> {
-        String::from_utf8_lossy(output)
-            .split_whitespace()
-            .map(|token| token.trim_matches(|ch: char| "{}()".contains(ch)))
-            .find(|token| token.contains('/') && !token.starts_with("Window"))
-            .and_then(|token| token.split('/').next())
-            .filter(|package| !package.is_empty())
-            .map(str::to_string)
+        let text = String::from_utf8_lossy(output);
+        let package_from_token = |token: &str| {
+            let token = token.trim_matches(|ch: char| "{}()[]".contains(ch));
+            let slash = token.find('/')?;
+            let start = token[..slash]
+                .rfind(|ch: char| "{}()[]= ".contains(ch))
+                .map(|index| index + 1)
+                .unwrap_or(0);
+            let package = token[start..slash].trim_matches(|ch: char| "{}()[]".contains(ch));
+            package.contains('.').then(|| package.to_string())
+        };
+        let mut segments = Vec::new();
+        for marker in ["mCurrentFocus=", "mFocusedApp="] {
+            segments.extend(text.split(marker).skip(1));
+        }
+        segments.push(text.as_ref());
+        segments
+            .into_iter()
+            .flat_map(|segment| segment.split_whitespace())
+            .find_map(package_from_token)
     }
 
     fn parameters_for(name: &str) -> Value {
@@ -1331,13 +1344,70 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(root);
     }
+    #[tokio::test]
+    async fn real_android_settings_flow_smoke_when_requested() {
+        if std::env::var("AH_MOBILE_REAL").as_deref() != Ok("1") {
+            return;
+        }
+        let adb = std::env::var("ANDROID_ADB_COMMAND").unwrap_or_else(|_| "adb".into());
+        let serial = std::env::var("DEVICE_SERIAL").unwrap_or_else(|_| "emulator-5554".into());
+        let launch = tokio::process::Command::new(&adb)
+            .args([
+                "-s",
+                serial.as_str(),
+                "shell",
+                "am",
+                "start",
+                "-a",
+                "android.settings.SETTINGS",
+            ])
+            .output()
+            .await
+            .expect("launch Settings");
+        assert!(launch.status.success(), "launch Settings failed");
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        let health = AdbTool::new("device_health", adb.clone(), serial.clone())
+            .invoke(json!({}))
+            .await
+            .expect("device health");
+        assert_eq!(health["ok"], true);
+        assert_eq!(health["device_serial"], serial);
+        assert!(!health["model"].as_str().unwrap_or_default().is_empty());
+
+        let screenshot = AdbTool::new("screenshot", adb.clone(), serial.clone())
+            .invoke(json!({}))
+            .await
+            .expect("Settings screenshot");
+        assert_eq!(screenshot["device_serial"], serial);
+        assert!(
+            screenshot["data"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("data:image/png;base64,")
+        );
+        assert_eq!(screenshot["foreground_app"], "com.android.settings");
+
+        let tap = AdbTool::new("tap_coordinate", adb.clone(), serial.clone())
+            .invoke(json!({"x":540,"y":666}))
+            .await
+            .expect("tap Network & internet row");
+        assert_eq!(tap["device_serial"], serial);
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let final_screen = AdbTool::new("screenshot", adb, serial.clone())
+            .invoke(json!({}))
+            .await
+            .expect("final Settings screenshot");
+        assert_eq!(final_screen["device_serial"], serial);
+        assert_eq!(final_screen["foreground_app"], "com.android.settings");
+    }
 
     #[test]
     fn parses_foreground_android_package_from_dumpsys() {
-        let output = b"mCurrentFocus=Window{123 u0 com.example.app/.MainActivity}";
+        let output = b"mCurrentFocus=Window{123 u0 qwerty/v/v} mFocusedApp=AppWindowToken{com.android.settings/com.android.settings.homepage.SettingsHomepageActivity}";
         assert_eq!(
             AdbTool::foreground_app(output).as_deref(),
-            Some("com.example.app")
+            Some("com.android.settings")
         );
     }
 }

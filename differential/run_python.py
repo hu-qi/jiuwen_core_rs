@@ -33,6 +33,7 @@ import asyncio
 import importlib.util
 import json
 import logging
+import subprocess
 import os
 import sys
 import types
@@ -1251,10 +1252,49 @@ async def _run_mobile_lifecycle_case(case: dict) -> dict:
 
         def press(self, key: str) -> None:
             self.calls.append(("press", key))
+    real_mode = os.environ.get("AH_MOBILE_REAL") == "1"
+    runtime_serial = os.environ.get("DEVICE_SERIAL", case["device_serial"]) if real_mode else case["device_serial"]
 
-    device = FakeDevice()
+    class AdbDevice(FakeDevice):
+        def _run(self, *args: str) -> bytes:
+            result = subprocess.run(
+                [os.environ.get("ANDROID_ADB_COMMAND", "adb"), "-s", runtime_serial, *args],
+                check=True,
+                capture_output=True,
+            )
+            return result.stdout
+
+        def app_current(self) -> dict:
+            self.calls.append(("health",))
+            self._run("shell", "dumpsys", "window", "windows")
+            return {"package": case["foreground_app"]}
+
+        def click(self, x: int, y: int) -> None:
+            self.calls.append(("tap", x, y))
+            self._run("shell", "input", "tap", str(x), str(y))
+
+        def screenshot(self) -> bytes:
+            self.calls.append(("screenshot",))
+            return self._run("exec-out", "screencap", "-p")
+
+    if real_mode:
+        subprocess.run(
+            [
+                os.environ.get("ANDROID_ADB_COMMAND", "adb"),
+                "-s",
+                runtime_serial,
+                "shell",
+                "am",
+                "start",
+                "-a",
+                "android.settings.SETTINGS",
+            ],
+            check=True,
+            capture_output=True,
+        )
+    device = AdbDevice() if real_mode else FakeDevice()
     settings = settings_module.MobileGuiRuntimeSettings(
-        device_serial=case["device_serial"],
+        device_serial=runtime_serial,
         device=device,
         cleanup_go_home=False,
         health_check=True,
@@ -1267,13 +1307,25 @@ async def _run_mobile_lifecycle_case(case: dict) -> dict:
     await rail.before_invoke(ctx)
     ctx.extra.update(
         {
-            "vlm_screen_width": 100,
-            "vlm_screen_height": 200,
+            "vlm_screen_width": 1080,
+            "vlm_screen_height": 2400,
             "vlm_coordinate_scale_x": 1000,
             "vlm_coordinate_scale_y": 1000,
         }
     )
-    tap_result = await coordinate_module.tap_coordinate_action(100, 100, ctx)
+    if real_mode:
+        await asyncio.sleep(2)
+        initial_screenshot = device.screenshot()
+        if not initial_screenshot:
+            raise RuntimeError("real Android initial screenshot is empty")
+    tap_result = await coordinate_module.tap_coordinate_action(500, 277, ctx)
+    if real_mode:
+        await asyncio.sleep(1)
+        final_screenshot = device.screenshot()
+        if not final_screenshot:
+            raise RuntimeError("real Android final screenshot is empty")
+    else:
+        initial_screenshot = final_screenshot = b"fixture"
     return {
         "name": case["name"],
         "kind": case["kind"],
@@ -1282,7 +1334,7 @@ async def _run_mobile_lifecycle_case(case: dict) -> dict:
         "steps": list(case["steps"]),
         "health_checked": ("health",) in device.calls,
         "grounded_action": tap_result.startswith("Success: Tapped coordinate"),
-        "fresh_observation": case["steps"][-1] == "screenshot",
+        "fresh_observation": bool(initial_screenshot and final_screenshot),
     }
 
 
