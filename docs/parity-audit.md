@@ -1,6 +1,6 @@
 # 对等审计基线(parity-audit.md)
 
-> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;P2-04 实现快照 HEAD:`0c3b057`。
+> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;P2-06 实现快照 HEAD:`55d46f6`。
 > 旧快照之后已有功能提交,包括 AgentBuilder、A2A、数据加载/策展、模型分配、交互路由、入站渲染、桥接和提示附件;原文“无功能面变化”已失效。
 > 本文的百分比与 `done/partial/missing` 账目仍是旧快照结果,未由当前 HEAD 的结构化账本重新计算,不得作为当前完成度。
 > 当前代码复核确认:新增插件多数只有确定性子集;阶段一已将 **10 个新增插件加入 Cargo workspace members**,阶段二已全部接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并通过 targeted mount/resolve/invoke/unmount 集成测试,不能升级为严格 done。
@@ -180,7 +180,7 @@ skill_creator 均属于此类。rsi/resource、rsi/storage 判 excluded(见 §3b
 | store | 50 | ES 向量存储、GaussDB 方言 |
 | sys_operation | 40 | JiuwenBox/Yuanrong 远程 provider |
 | context_evolver | 30 | Milvus/多算法/轨迹生成/演化 Agent |
-| vendor_specific | 60 | DashScope 原生 embedding/rerank、Qwen OpenAI-compatible provider 和 credentials/env 配置已实现并有本地协议测试;真实厂商凭据 E2E 仍待验证 |
+| vendor_specific | 60 | DashScope 原生 embedding/rerank、Qwen OpenAI-compatible provider 和 credentials/env 配置已实现;P2-06 已完成 production profile 协议 E2E,真实厂商凭据 E2E 仍由 P3-04 负责 |
 | harness | 10 | Python 侧为空命名空间 |
 
 ### 4.7 dev_tools(3 子模块,24%)

@@ -1,6 +1,6 @@
 # Generated capability audit summary
 
-> Generated from `audit/ledger.json`; recorded at 2026-09-06; code revision `0c3b057`; reference revision `aeb88cd8`.
+> Generated from `audit/ledger.json`; recorded at 2026-09-07; code revision `55d46f6`; reference revision `aeb88cd8`.
 
 Percentages below are status shares, not weighted capability completion.
 
@@ -8,8 +8,8 @@ Percentages below are status shares, not weighted capability completion.
 
 | Status | Count | Share |
 | --- | ---: | ---: |
-| done | 21 | 80.8% |
-| partial | 5 | 19.2% |
+| done | 22 | 84.6% |
+| partial | 4 | 15.4% |
 | missing | 0 | 0.0% |
 | excluded | 0 | 0.0% |
 | **total** | **26** | **100.0%** |
@@ -29,7 +29,7 @@ Percentages below are status shares, not weighted capability completion.
 | production | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | providers | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | rails | 1 | 1 | 0 | 0 | 0 | 100.0% |
-| retrieval | 1 | 0 | 1 | 0 | 0 | 0.0% |
+| retrieval | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | rsi | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | session | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | subagents | 1 | 1 | 0 | 0 | 0 | 100.0% |
@@ -41,7 +41,6 @@ Percentages below are status shares, not weighted capability completion.
 
 | ID | Phase | Domain | Title | Status |
 | --- | --- | --- | --- | --- |
-| P2-06 | P2 | retrieval | Production retrieval and memory backends | partial |
 | P3-01 | P3 | evolving | Agent evolving LLM loop | partial |
 | P3-02 | P3 | rsi | RSI orchestration | partial |
 | P3-03 | P3 | external | External infrastructure | partial |
@@ -219,11 +218,11 @@ Percentages below are status shares, not weighted capability completion.
 
 ### P2-06 — Production retrieval and memory backends
 
-- Status: `partial`
-- Implementation: `crates/ah-plugins-retrieval/src/lib.rs`, `crates/ah-plugins-retrieval/Cargo.toml`, `crates/ah-plugins-memory/src/lib.rs`, `crates/ah-plugins-store/src/redis_store.rs`, `crates/ah-plugins-queue/src/redis_queue.rs`, `crates/ah-app/src/main.rs`
-- Verification: `CARGO_TARGET_DIR=/tmp/ah-target-retrieval cargo test --offline -p ah-plugins-retrieval --lib external_http_embedding_and_redis_vector_index_roundtrip (1 passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-retrieval cargo test --offline -p ah-plugins-retrieval --lib (13 passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-retrieval-tls cargo test --offline -p ah-plugins-retrieval --lib (13 passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-retrieval-tls cargo clippy --offline -p ah-plugins-retrieval --lib --tests -- -D warnings (passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-memory cargo test --offline -p ah-plugins-memory --lib redis_memory_provider_roundtrips_searches_and_removes (1 passed against Docker Redis)`, `CARGO_TARGET_DIR=/tmp/ah-target-memory cargo test --offline -p ah-plugins-memory --lib (6 passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-memory cargo clippy --offline -p ah-plugins-memory --lib --tests -- -D warnings (passed)`, `cargo test -p ah-plugins-store --lib redis_kv_roundtrip_with_scan_and_delete (1 passed against Docker Redis)`, `cargo test -p ah-plugins-queue --lib redis_queue_publish_consume_backlog_and_channels (1 passed against Docker Redis)`, `docker exec cc-redis redis-cli ping (PONG)`, `AH_ENV_FILE=$PWD/.env cargo run --offline -q -p ah-app --bin ah-app -- profiles/prod.toml (production boot, real embedding ingest/vector search, 1 vector hit)`
-- Production: Production profile booted with the configured OpenAI-compatible embedding service and real Redis-backed vector index; application ingest and vector search both returned one hit, and external JSON memory also passed against Docker Redis; other vendor embedding protocols remain pending
-- Differential: not verified
+- Status: `done`
+- Implementation: `crates/ah-plugins-retrieval/src/lib.rs`, `crates/ah-plugins-retrieval/Cargo.toml`, `crates/ah-plugins-rerank/src/lib.rs`, `crates/ah-plugins-rerank/Cargo.toml`, `crates/ah-plugins-memory/src/lib.rs`, `crates/ah-plugins-store/src/redis_store.rs`, `crates/ah-plugins-queue/src/redis_queue.rs`, `crates/ah-app/src/lib.rs`, `crates/ah-app/tests/production_boot.rs`, `profiles/prod.toml`
+- Verification: `CARGO_TARGET_DIR=/tmp/ah-target-p206 cargo test --offline -p ah-plugins-retrieval -p ah-plugins-rerank -p ah-plugins-memory -p ah-plugins-store -p ah-plugins-queue --lib --tests (35 passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-p206-check cargo test --offline -p ah-app --test production_boot production_profile_exercises_p1_application_controller_workflow -- --ignored --nocapture (1 passed; Redis-backed memory/vector restart, OpenAI-compatible embedding, DashScope embedding protocol, query-aware rerank)`, `AH_ENV_FILE=$PWD/.env CARGO_TARGET_DIR=/tmp/ah-target-p206-prod cargo run --offline -q -p ah-app --bin ah-app -- profiles/prod.toml (real OpenAI-compatible embedding ingest/vector search, 1 vector hit)`, `docker exec cc-redis redis-cli ping (PONG)`, `CARGO_TARGET_DIR=/tmp/ah-target-p206-workspace cargo test --offline --workspace (1484 passed, 1 ignored)`, `CARGO_TARGET_DIR=/tmp/ah-target-p206-check cargo clippy --offline -p ah-plugins-retrieval -p ah-plugins-rerank -p ah-plugins-memory -p ah-plugins-store -p ah-plugins-queue -p ah-app --all-targets -- -D warnings (passed)`, `cargo fmt --all --check (passed)`, `git diff --check (passed)`
+- Production: Production profile now mounts Redis KV and queue before memory/retrieval, so external JSON memory and Redis-backed vector indexes are actually selected. The production E2E exercises OpenAI-compatible embedding, DashScope native embedding protocol, query-aware reranking, Redis memory/vector persistence across restart, deletion cleanup, and explicit configuration precedence. The configured .env production run verified the real HTTPS embedding service and Redis vector path; real vendor credential coverage remains owned by P3-04.
+- Differential: not applicable
 
 ### P3-01 — Agent evolving LLM loop
 
