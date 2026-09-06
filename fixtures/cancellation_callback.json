@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "seam": "cancellation_callback",
+  "description": "Cancellation callback stop requests at model/tool checkpoints",
+  "cases": [
+    {"name": "after_model_call_cancel", "phase": "after_model_call", "cancelled": true},
+    {"name": "before_tool_call_cancel", "phase": "before_tool_call", "cancelled": true},
+    {"name": "after_model_call_continue", "phase": "after_model_call", "cancelled": false},
+    {"name": "before_tool_call_continue", "phase": "before_tool_call", "cancelled": false}
+  ]
+}

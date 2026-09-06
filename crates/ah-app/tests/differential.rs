@@ -1615,3 +1615,44 @@ async fn reference_team_inbox_fetch() {
         &json!({"seam": "team_inbox_fetch", "cases": cases}),
     );
 }
+// ---------- cancellation_callback (Python/Rust differential) ----------
+
+#[tokio::test]
+async fn reference_cancellation_callback() {
+    let fixture = load_fixture("cancellation_callback");
+    let manager = ah_plugins_agent_control::LocalAgentCallbackManager::default();
+    let mut outcomes = Vec::new();
+    for case in fixture["cases"].as_array().unwrap() {
+        let cancelled = case["cancelled"].as_bool().unwrap();
+        let control = if cancelled {
+            ah_contracts::agent::AgentControl::Cancel
+        } else {
+            ah_contracts::agent::AgentControl::Continue
+        };
+        manager
+            .request_control("cancellation-diff", control)
+            .expect("request control");
+        let observed = ah_contracts::agent::AgentCallbackManager::notify_checkpoint(
+            &manager,
+            ah_contracts::agent::AgentCallbackContext {
+                session_id: "cancellation-diff".into(),
+                state: ah_contracts::agent::AgentRunState::Running,
+                iteration: 0,
+                payload: json!({"phase": case["phase"]}),
+            },
+        )
+        .await
+        .expect("checkpoint");
+        outcomes.push(json!({
+            "name": case["name"],
+            "phase": case["phase"],
+            "requested": observed != ah_contracts::agent::AgentControl::Continue,
+            "cancelled": observed == ah_contracts::agent::AgentControl::Cancel,
+        }));
+        manager.clear_control("cancellation-diff");
+    }
+    settle(
+        "cancellation_callback",
+        &json!({"seam": "cancellation_callback", "cases": outcomes}),
+    );
+}

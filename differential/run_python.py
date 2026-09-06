@@ -1166,6 +1166,65 @@ def run_subagents() -> dict:
     return {"seam": "subagents", "cases": cases}
 
 
+def shim_cancellation_rail_dependencies() -> None:
+    """Provide narrow import seams while loading the real cancellation rail."""
+    rail_base = types.ModuleType("openjiuwen.core.single_agent.rail.base")
+
+    class AgentCallbackContext:
+        pass
+
+    rail_base.AgentCallbackContext = AgentCallbackContext
+    sys.modules[rail_base.__name__] = rail_base
+
+    harness_base = types.ModuleType("openjiuwen.harness.rails.base")
+
+    class DeepAgentRail:
+        def __init__(self) -> None:
+            pass
+
+    harness_base.DeepAgentRail = DeepAgentRail
+    sys.modules[harness_base.__name__] = harness_base
+
+
+async def _run_cancellation_callback_case(module: types.ModuleType, case: dict) -> dict:
+    class Orchestrator:
+        should_cancel = case["cancelled"]
+
+    class Context:
+        def __init__(self) -> None:
+            self.force_finish = None
+
+        def request_force_finish(self, result: dict) -> None:
+            self.force_finish = result
+
+    rail = module.CancellationRail()
+    rail.bind(Orchestrator())
+    context = Context()
+    if case["phase"] == "after_model_call":
+        await rail.after_model_call(context)
+    elif case["phase"] == "before_tool_call":
+        await rail.before_tool_call(context)
+    else:
+        raise ValueError(f"unknown cancellation phase {case['phase']}")
+    return {
+        "name": case["name"],
+        "phase": case["phase"],
+        "requested": context.force_finish is not None,
+        "cancelled": bool(context.force_finish and context.force_finish.get("cancelled")),
+    }
+
+
+def run_cancellation_callback() -> dict:
+    """Drive the real Python CancellationRail at model/tool checkpoints."""
+    shim_cancellation_rail_dependencies()
+    module = load_module_file("openjiuwen.rsi.auto_harness.rails.cancellation_rail")
+    fixture = load_fixture("cancellation_callback")
+    return {
+        "seam": "cancellation_callback",
+        "cases": [asyncio.run(_run_cancellation_callback_case(module, case)) for case in fixture["cases"]],
+    }
+
+
 def main() -> int:
 
     if not AGENT_CORE_ROOT.exists():
@@ -1192,6 +1251,7 @@ def main() -> int:
         "goal_manager": run_goal_manager,
         "task_lifecycle": run_task_lifecycle,
         "subagents": run_subagents,
+        "cancellation_callback": run_cancellation_callback,
     }
     selected = sys.argv[1:] or list(runners)
     for name in selected:

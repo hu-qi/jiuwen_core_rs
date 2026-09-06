@@ -1,0 +1,29 @@
+{
+  "cases": [
+    {
+      "cancelled": true,
+      "name": "after_model_call_cancel",
+      "phase": "after_model_call",
+      "requested": true
+    },
+    {
+      "cancelled": true,
+      "name": "before_tool_call_cancel",
+      "phase": "before_tool_call",
+      "requested": true
+    },
+    {
+      "cancelled": false,
+      "name": "after_model_call_continue",
+      "phase": "after_model_call",
+      "requested": false
+    },
+    {
+      "cancelled": false,
+      "name": "before_tool_call_continue",
+      "phase": "before_tool_call",
+      "requested": false
+    }
+  ],
+  "seam": "cancellation_callback"
+}
