@@ -4,7 +4,7 @@
   "recorded_at": "2026-09-07",
   "source": {
     "repository": "agent-harness",
-    "code_revision": "55d46f6",
+    "code_revision": "ff0f6e1",
     "reference_revision": "aeb88cd8",
     "status_policy": "done|partial|missing|excluded",
     "percentage_policy": "percentages are status shares, not weighted capability completion"
