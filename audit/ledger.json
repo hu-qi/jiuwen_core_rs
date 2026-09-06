@@ -4,7 +4,7 @@
   "recorded_at": "2026-09-06",
   "source": {
     "repository": "agent-harness",
-    "code_revision": "b7b179a",
+    "code_revision": "0c3b057",
     "reference_revision": "aeb88cd8",
     "status_policy": "done|partial|missing|excluded",
     "percentage_policy": "percentages are status shares, not weighted capability completion"
@@ -444,8 +444,7 @@
         "differential/compare.py"
       ],
       "verification": [
-        "cargo test --offline -p ah-plugins-mcp -p ah-plugins-subagents --lib --tests (26 passed)",
-        "cargo test --offline -p ah-plugins-subagent --lib mobile_subagent_runs_health_grounded_action_and_fresh_screenshot (1 passed)",
+        "cargo test --offline -p ah-plugins-subagent -p ah-plugins-subagents -p ah-plugins-mcp --lib --tests (27 passed)",
         "cargo test --offline -p ah-app --test differential (21 passed)",
         "AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py subagent_lifecycle (Python outcome generated)",
         "python differential/compare.py subagent_lifecycle (2 matched, 0 known divergence, 0 mismatch)",
