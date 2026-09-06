@@ -44,11 +44,7 @@ AGENT_CORE_ROOT=/path/to/agent-core \
 PYTHON=/path/to/python3.11 \
 bash differential/run.sh task_lifecycle
 ```
-CI 的 `rails-differential` job 使用固定的 agent-core commit,执行上述四个
-LLM Rails seam;GoalManager、PromptAttachment、runtime model switching、task lifecycle、subagents
-与 cancellation callback 可按需运行。cancellation callback 将 Python `CancellationRail`
-在 `after_model_call`/`before_tool_call` 的 `force_finish(cancelled=true)` 归一化为 Rust
-callback checkpoint 的停止请求,两端均由真实实现驱动。
+CI 的 `rails-differential` job 使用固定的 agent-core commit,执行上述 LLM Rails seam;GoalManager、PromptAttachment、runtime model switching、task lifecycle、subagents、subagent lifecycle 与 cancellation callback 可按需运行。`subagent_lifecycle` 驱动真实 Python browser capability/probe 构建、`DeviceLifecycleRail` 和 coordinate action fixture,并与 Rust reference 比较。cancellation callback 将 Python `CancellationRail` 在 `after_model_call`/`before_tool_call` 的 `force_finish(cancelled=true)` 归一化为 Rust callback checkpoint 的停止请求,两端均由真实实现驱动。
 
 Rust reference 回归仍可单独运行:
 

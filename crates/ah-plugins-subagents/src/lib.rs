@@ -141,7 +141,7 @@ fn profile_for(kind: SubagentKind) -> SubagentProfile {
             20,
         ),
         SubagentKind::Browser => (
-            "You are a browser automation agent. Preserve browser session continuity, inspect before acting, and only claim completion when the requested outcome is evidenced. Prefer browser_probe_cards for repeated cards/listings and browser_probe_interactives for page controls before broad snapshots. Use browser_batch_interact only for already-grounded deterministic steps; use browser_custom_action only after discovering its contract.",
+            "You are a browser automation agent. Preserve browser session continuity, inspect before acting, and only claim completion when the requested outcome is evidenced. Prefer browser_probe_interactives for page controls and browser_probe_cards for repeated cards/listings before broad snapshots. Use browser_batch_interact only for already-grounded deterministic steps; use browser_custom_action only after discovering its contract; use browser_list_custom_actions to inspect helper contracts. Compact probes must provide actionable evidence such as elements/cards, selector_hint, and bbox before coordinate or batch actions.",
             BROWSER_TOOLS.to_vec(),
             25,
         ),
@@ -508,6 +508,7 @@ impl AdbTool {
                 properties.insert("x".into(), json!({"type":"integer"}));
                 properties.insert("y".into(), json!({"type":"integer"}));
             }
+
             "drag_coordinate" => {
                 for field in ["start_x", "start_y", "end_x", "end_y"] {
                     properties.insert(field.into(), json!({"type":"integer"}));
@@ -876,6 +877,42 @@ mod tests {
         let effects = ctx.mount_all(plugins).expect("mount");
         (ctx, effects)
     }
+    struct MobileFlowModel;
+
+    impl Seam for MobileFlowModel {}
+
+    #[async_trait]
+    impl ah_contracts::llm::ModelProvider for MobileFlowModel {
+        fn name(&self) -> &'static str {
+            "mobile-flow-test-model"
+        }
+
+        async fn chat(
+            &self,
+            request: ah_contracts::llm::ModelRequest,
+        ) -> Result<ah_contracts::llm::ModelResponse, ah_contracts::llm::ModelError> {
+            if request
+                .messages
+                .iter()
+                .any(|message| message.role == ah_contracts::llm::ChatRole::Tool)
+            {
+                return Ok(ah_contracts::llm::ModelResponse {
+                    content: "mobile flow complete".into(),
+                    tool_calls: Vec::new(),
+                    reasoning_content: None,
+                });
+            }
+            Ok(ah_contracts::llm::ModelResponse {
+                content: String::new(),
+                tool_calls: vec![ah_contracts::llm::ToolCall {
+                    id: "tap-add".into(),
+                    name: "tap_coordinate".into(),
+                    arguments: json!({"x":10,"y":20}),
+                }],
+                reasoning_content: None,
+            })
+        }
+    }
 
     #[tokio::test]
     async fn typed_subagent_injects_kind_prompt_and_runs() {
@@ -1213,6 +1250,84 @@ mod tests {
         assert_eq!(
             home.parameters()["properties"]["device_serial"]["type"],
             "string"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn mobile_subagent_runs_health_grounded_action_and_fresh_screenshot() {
+        let root = std::env::temp_dir().join(format!("ah-mobile-flow-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let marker = root.join("args");
+        let script = root.join("adb");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\nif [ \"$3\" = exec-out ]; then printf '\\\\211PNG\\\\r\\\\n'; elif [ \"$4\" = getprop ]; then printf 'V2199A'; elif [ \"$4\" = dumpsys ]; then printf 'mCurrentFocus=Window{{1 u0 com.example.todo/.Main}}'; fi\n",
+                marker.display()
+            ),
+        )
+        .unwrap();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let ctx = Context::new();
+        let manager = Arc::new(
+            ah_plugins_session_log::SessionManagerImpl::new(root.join("sessions"), ctx.clone())
+                .unwrap(),
+        );
+        let tools = Arc::new(ah_plugins_tools::LocalToolRegistry::new(ctx));
+        let _tool_effects = [
+            tools.register(Arc::new(AdbTool::new(
+                "device_health",
+                script.display().to_string(),
+                "default-device".into(),
+            ))),
+            tools.register(Arc::new(AdbTool::new(
+                "screenshot",
+                script.display().to_string(),
+                "default-device".into(),
+            ))),
+            tools.register(Arc::new(AdbTool::new(
+                "tap_coordinate",
+                script.display().to_string(),
+                "default-device".into(),
+            ))),
+        ];
+        let runtime = ah_plugins_subagent::LocalSubagentRuntime::new(
+            Arc::new(MobileFlowModel),
+            tools,
+            manager,
+            None,
+        );
+        let result = runtime
+            .run(SubagentSpec {
+                id: "mobile-flow".into(),
+                task: "open the todo app and tap the add button".into(),
+                context: Some(
+                    "Android device serial: requested-device. Include this exact value as device_serial in every Android GUI tool call.".into(),
+                ),
+                budget: Some(3),
+                allowed_tools: Some(
+                    ["device_health", "screenshot", "tap_coordinate"]
+                        .into_iter()
+                        .map(str::to_string)
+                        .collect(),
+                ),
+            })
+            .await
+            .expect("mobile flow");
+        assert_eq!(result.answer, "mobile flow complete");
+        let args = std::fs::read_to_string(&marker).unwrap();
+        assert!(args.contains("-s requested-device shell getprop ro.product.model"));
+        assert!(args.contains("-s requested-device exec-out screencap -p"));
+        assert!(args.contains("-s requested-device shell input tap 10 20"));
+        assert!(
+            args.matches("-s requested-device exec-out screencap -p")
+                .count()
+                >= 2
         );
         let _ = std::fs::remove_dir_all(root);
     }

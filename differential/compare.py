@@ -41,6 +41,7 @@ SEAMS = [
     "task_lifecycle",
     "subagents",
     "cancellation_callback",
+    "subagent_lifecycle",
 ]
 
 

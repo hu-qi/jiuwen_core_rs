@@ -28,7 +28,7 @@ Usage:
 """
 
 from __future__ import annotations
-
+import ast
 import asyncio
 import importlib.util
 import json
@@ -101,6 +101,23 @@ def shim_logging() -> None:
     _LOADED.add("openjiuwen.core.common.logging")
 
 
+
+def load_python_constant(relative_path: str, name: str):
+    tree = ast.parse((AGENT_CORE_ROOT / relative_path).read_text(encoding="utf-8"))
+    for node in tree.body:
+        value = None
+        targets = []
+        if isinstance(node, ast.Assign):
+            value = node.value
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            value = node.value
+            targets = [node.target]
+        if value is not None and any(
+            isinstance(target, ast.Name) and target.id == name for target in targets
+        ):
+            return ast.literal_eval(value)
+    raise ValueError(f"constant {name} not found in {relative_path}")
 def load_fixture(name: str) -> dict:
     with (FIXTURES / f"{name}.json").open(encoding="utf-8") as fh:
         return json.load(fh)
@@ -1165,6 +1182,151 @@ def run_subagents() -> dict:
         })
     return {"seam": "subagents", "cases": cases}
 
+def shim_mobile_lifecycle_dependencies() -> None:
+    """Keep mobile rail loading focused while executing its real source code."""
+    base_name = "openjiuwen.core.single_agent.rail.base"
+    if base_name not in sys.modules:
+        base = types.ModuleType(base_name)
+
+        class AgentRail:
+            def __init__(self, *args, **kwargs) -> None:
+                pass
+
+        class InvokeInputs:
+            def __init__(self, query=None, result=None, **kwargs) -> None:
+                self.query = query
+                self.result = result
+
+        class AgentCallbackContext:
+            def __init__(self, agent=None, inputs=None, **kwargs) -> None:
+                self.agent = agent
+                self.inputs = inputs
+                self.extra = {}
+
+        base.AgentRail = AgentRail
+        base.InvokeInputs = InvokeInputs
+        base.AgentCallbackContext = AgentCallbackContext
+        sys.modules[base_name] = base
+        _LOADED.add(base_name)
+
+    tool_name = "openjiuwen.core.foundation.tool"
+    if tool_name not in sys.modules:
+        tool = types.ModuleType(tool_name)
+
+        class Tool:
+            def __init__(self, *args, **kwargs) -> None:
+                pass
+
+        class ToolCard:
+            def __init__(self, *args, **kwargs) -> None:
+                pass
+
+        tool.Tool = Tool
+        tool.ToolCard = ToolCard
+        sys.modules[tool_name] = tool
+        _LOADED.add(tool_name)
+
+
+async def _run_mobile_lifecycle_case(case: dict) -> dict:
+    """Exercise the real mobile lifecycle rail and coordinate action helpers."""
+    shim_mobile_lifecycle_dependencies()
+    base = sys.modules["openjiuwen.core.single_agent.rail.base"]
+    settings_module = load_module_file("openjiuwen.harness.tools.mobile_gui.config")
+    load_module_file("openjiuwen.harness.tools.mobile_gui.state")
+    rail_module = load_module_file("openjiuwen.harness.tools.mobile_gui.rails.device_lifecycle_rail")
+    load_module_file("openjiuwen.harness.tools.mobile_gui.coordinate_utils")
+    load_module_file("openjiuwen.harness.tools.mobile_gui.tool_support")
+    coordinate_module = load_module_file("openjiuwen.harness.tools.mobile_gui.coordinate_action_tools")
+
+    class FakeDevice:
+        def __init__(self) -> None:
+            self.calls: list[tuple] = []
+
+        def app_current(self) -> dict:
+            self.calls.append(("health",))
+            return {"package": case["foreground_app"]}
+
+        def click(self, x: int, y: int) -> None:
+            self.calls.append(("tap", x, y))
+
+        def press(self, key: str) -> None:
+            self.calls.append(("press", key))
+
+    device = FakeDevice()
+    settings = settings_module.MobileGuiRuntimeSettings(
+        device_serial=case["device_serial"],
+        device=device,
+        cleanup_go_home=False,
+        health_check=True,
+    )
+    rail = rail_module.DeviceLifecycleRail(settings)
+    ctx = base.AgentCallbackContext(
+        agent=None,
+        inputs=base.InvokeInputs(query="open the todo app and tap add"),
+    )
+    await rail.before_invoke(ctx)
+    ctx.extra.update(
+        {
+            "vlm_screen_width": 100,
+            "vlm_screen_height": 200,
+            "vlm_coordinate_scale_x": 1000,
+            "vlm_coordinate_scale_y": 1000,
+        }
+    )
+    tap_result = await coordinate_module.tap_coordinate_action(100, 100, ctx)
+    return {
+        "name": case["name"],
+        "kind": case["kind"],
+        "device_serial": case["device_serial"],
+        "foreground_app": case["foreground_app"],
+        "steps": list(case["steps"]),
+        "health_checked": ("health",) in device.calls,
+        "grounded_action": tap_result.startswith("Success: Tapped coordinate"),
+        "fresh_observation": case["steps"][-1] == "screenshot",
+    }
+
+
+def run_subagent_lifecycle() -> dict:
+    """Drive browser probes and mobile lifecycle helpers from agent-core."""
+    fixture = load_fixture("subagent_lifecycle")
+    capabilities = load_module_file(
+        "openjiuwen.harness.tools.browser_move.playwright_runtime.browser_capabilities"
+    )
+    probes = load_module_file("openjiuwen.harness.tools.browser_move.playwright_runtime.probes")
+    browser_prompt = load_python_constant(
+        "openjiuwen/harness/subagents/browser_agent.py",
+        "DEFAULT_BROWSER_AGENT_SYSTEM_PROMPT_EN",
+    )
+    cases = []
+    for case in fixture["cases"]:
+        if case["kind"] == "browser":
+            resolved = capabilities.resolve_browser_capabilities(case["requested"])
+            prompt = browser_prompt
+            interactive_js = probes.build_interactive_probe_js(max_items=30, query="search")
+            cards_js = probes.build_card_probe_js(max_cards=10, query="todo")
+            helper_order = list(case["required_helpers"])
+            prompt_positions = [prompt.index(helper) for helper in helper_order]
+            cases.append({
+                "name": case["name"],
+                "kind": case["kind"],
+                "requested": list(resolved.requested_names),
+                "selected": list(resolved.selected_names),
+                "rejected": list(resolved.rejected_names),
+                "allowed_has_vision": all(
+                    tool in resolved.allowed_tool_names
+                    for tool in ("browser_mouse_click_xy", "browser_mouse_wheel")
+                ),
+                "helper_order_enforced": prompt_positions == sorted(prompt_positions),
+                "probe_evidence": all(
+                    term in interactive_js + cards_js for term in case["probe_evidence"]
+                ),
+            })
+        elif case["kind"] == "mobile_gui":
+            cases.append(asyncio.run(_run_mobile_lifecycle_case(case)))
+        else:
+            raise ValueError(f"unknown subagent lifecycle kind {case['kind']}")
+    return {"seam": "subagent_lifecycle", "cases": cases}
+
 
 def shim_cancellation_rail_dependencies() -> None:
     """Provide narrow import seams while loading the real cancellation rail."""
@@ -1252,6 +1414,7 @@ def main() -> int:
         "task_lifecycle": run_task_lifecycle,
         "subagents": run_subagents,
         "cancellation_callback": run_cancellation_callback,
+        "subagent_lifecycle": run_subagent_lifecycle,
     }
     selected = sys.argv[1:] or list(runners)
     for name in selected:

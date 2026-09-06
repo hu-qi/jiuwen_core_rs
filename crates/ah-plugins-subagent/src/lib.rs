@@ -34,6 +34,22 @@ pub struct LocalSubagentRuntime {
 }
 
 impl LocalSubagentRuntime {
+    /// Create a runtime with explicit model, tools, session manager and controls.
+    pub fn new(
+        llm: Arc<dyn ModelProvider>,
+        tools: Arc<dyn ToolRegistry>,
+        manager: Arc<dyn SessionManager>,
+        interrupt: Option<Arc<dyn InterruptRuntime>>,
+    ) -> Self {
+        Self {
+            llm,
+            tools,
+            manager,
+            context: None,
+            token_budget: 8192,
+            interrupt,
+        }
+    }
     /// 挂载 context seam 消费(可选)。
     pub fn with_context(mut self, context: Arc<dyn ContextEngine>, token_budget: usize) -> Self {
         self.context = Some(context);
@@ -106,6 +122,38 @@ fn control_message(control: AgentControl) -> &'static str {
         AgentControl::Cancel => "cancelled",
         AgentControl::Continue => "control raced unexpectedly",
     }
+}
+fn mobile_serial_from_context(context: Option<&str>) -> &str {
+    context
+        .and_then(|value| value.split_once("Android device serial: "))
+        .map(|(_, value)| value.split('.').next().unwrap_or(value).trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("emulator-5554")
+}
+
+fn scoped_mobile_arguments(name: &str, arguments: &Value, serial: &str) -> Value {
+    if !matches!(
+        name,
+        "tap_coordinate"
+            | "double_tap_coordinate"
+            | "long_press_coordinate"
+            | "drag_coordinate"
+            | "type_text"
+            | "scroll"
+            | "press_back"
+            | "press_home"
+            | "press_enter"
+            | "wait_gui_load"
+            | "screenshot"
+            | "device_health"
+    ) {
+        return arguments.clone();
+    }
+    let Value::Object(mut object) = arguments.clone() else {
+        return arguments.clone();
+    };
+    object.insert("device_serial".into(), Value::String(serial.to_string()));
+    Value::Object(object)
 }
 
 fn observation_payload(output: &Value, serial: &str) -> Option<Value> {
@@ -185,18 +233,31 @@ impl SubagentRuntime for LocalSubagentRuntime {
             .as_ref()
             .is_some_and(|allowed| allowed.iter().any(|name| name == "screenshot"));
         if mobile_observation {
-            let serial = spec
-                .context
-                .as_deref()
-                .and_then(|context| context.split("Android device serial: ").nth(1))
-                .map(|value| value.split('.').next().unwrap_or(value).trim())
-                .filter(|value| !value.is_empty())
-                .unwrap_or("emulator-5554");
+            let serial = mobile_serial_from_context(spec.context.as_deref());
+            let health = self
+                .race_control(
+                    &spec.id,
+                    self.tools.invoke(
+                        "device_health",
+                        scoped_mobile_arguments("device_health", &json!({}), serial),
+                    ),
+                )
+                .await?
+                .map_err(|error| {
+                    SubagentError(format!("Android device health check failed: {error}"))
+                })?;
+            if health.get("ok").and_then(Value::as_bool) != Some(true) {
+                return Err(SubagentError(
+                    "Android device health check returned not-ready".into(),
+                ));
+            }
             let screenshot = self
                 .race_control(
                     &spec.id,
-                    self.tools
-                        .invoke("screenshot", json!({"device_serial": serial})),
+                    self.tools.invoke(
+                        "screenshot",
+                        scoped_mobile_arguments("screenshot", &json!({}), serial),
+                    ),
                 )
                 .await?
                 .map_err(|error| {
@@ -305,11 +366,17 @@ impl SubagentRuntime for LocalSubagentRuntime {
                         Vec::new(),
                     )
                 } else {
-                    let tool_result = match self
-                        .race_control(
-                            &spec.id,
-                            self.tools.invoke(&call.name, call.arguments.clone()),
+                    let tool_arguments = if mobile_observation {
+                        scoped_mobile_arguments(
+                            &call.name,
+                            &call.arguments,
+                            mobile_serial_from_context(spec.context.as_deref()),
                         )
+                    } else {
+                        call.arguments.clone()
+                    };
+                    let tool_result = match self
+                        .race_control(&spec.id, self.tools.invoke(&call.name, tool_arguments))
                         .await
                     {
                         Ok(result) => result,
@@ -337,6 +404,37 @@ impl SubagentRuntime for LocalSubagentRuntime {
                 session
                     .append(SessionEventKind::ToolResult, event)
                     .map_err(|e| SubagentError(format!("append failed: {e}")))?;
+                if mobile_observation
+                    && status == "completed"
+                    && call.name != "screenshot"
+                    && call.name != "device_health"
+                {
+                    let serial = mobile_serial_from_context(spec.context.as_deref());
+                    let screenshot = self
+                        .race_control(
+                            &spec.id,
+                            self.tools.invoke(
+                                "screenshot",
+                                scoped_mobile_arguments("screenshot", &json!({}), serial),
+                            ),
+                        )
+                        .await?
+                        .map_err(|error| {
+                            SubagentError(format!("post-action Android screenshot failed: {error}"))
+                        })?;
+                    let payload = observation_payload(&screenshot, serial).ok_or_else(|| {
+                        SubagentError(
+                            "post-action Android screenshot returned no image payload".into(),
+                        )
+                    })?;
+                    session
+                        .append(SessionEventKind::User, payload)
+                        .map_err(|e| {
+                            SubagentError(format!(
+                                "append post-action Android screenshot failed: {e}"
+                            ))
+                        })?;
+                }
             }
             // 日志即真相:记录本轮步进(继续循环)。
             session

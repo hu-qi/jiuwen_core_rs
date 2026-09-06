@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "seam": "subagent_lifecycle",
+  "cases": [
+    {
+      "name": "browser_probe_lifecycle",
+      "kind": "browser",
+      "requested": ["vision"],
+      "required_helpers": [
+        "browser_probe_interactives",
+        "browser_probe_cards",
+        "browser_custom_action"
+      ],
+      "probe_evidence": ["selector_hint", "bbox", "cards", "elements"]
+    },
+    {
+      "name": "mobile_application_flow",
+      "kind": "mobile_gui",
+      "device_serial": "fixture-device",
+      "foreground_app": "com.example.todo",
+      "steps": [
+        "device_health",
+        "screenshot",
+        "tap_coordinate",
+        "screenshot"
+      ]
+    }
+  ]
+}

@@ -10,12 +10,13 @@ use std::sync::Arc;
 
 use ah_contracts::evolving::EvolvingRuntime;
 use ah_contracts::goal::{GoalAssessment, GoalAssessmentStatus, GoalRecord, GoalRuntime};
-use ah_contracts::keys::{EVOLVING, RETRIEVAL, SECURITY, SESSION_MANAGER, TEAMS};
+use ah_contracts::keys::{EVOLVING, RETRIEVAL, SECURITY, SESSION_MANAGER, SUBAGENTS, TEAMS};
 use ah_contracts::llm::{ModelProvider, ModelRequest, ModelResponse};
 use ah_contracts::model_catalog::ModelProviderCatalog;
 use ah_contracts::retrieval::RetrievalProvider;
 use ah_contracts::security::SecurityProvider;
 use ah_contracts::session::{SessionEvent, SessionEventKind, SessionManager};
+use ah_contracts::subagents::{SubagentKind, TypedSubagents};
 use ah_contracts::teams::TeamRuntime;
 use ah_hub::context::Context;
 use ah_hub::plugin::DynPlugin;
@@ -444,6 +445,86 @@ fn reference_subagents_browser_capabilities() {
         cases.push(json!({"name":case["name"], "requested":requested, "selected":selected, "rejected":rejected, "allowed":allowed}));
     }
     settle("subagents", &json!({"seam":"subagents", "cases":cases}));
+}
+
+// ---------- subagent lifecycle differential ----------
+
+#[test]
+fn reference_subagent_lifecycle() {
+    let fixture = load_fixture("subagent_lifecycle");
+    let root = root_for("subagent-lifecycle");
+    let ctx = Context::new();
+    let mut plugins = base_plugins(&root);
+    plugins.push(Arc::new(ah_plugins_subagent::SubagentPlugin));
+    plugins.push(Arc::new(ah_plugins_subagents::SubagentsPlugin));
+    plugins.push(Arc::new(ah_plugins_agent_control::AgentControlPlugin));
+    let effects = mount(&ctx, plugins);
+    let typed = ctx
+        .service::<dyn TypedSubagents>(&SUBAGENTS)
+        .expect("typed subagents");
+    let mut cases = Vec::new();
+    for case in fixture["cases"].as_array().unwrap() {
+        match case["kind"].as_str().unwrap() {
+            "browser" => {
+                let requested = case["requested"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>();
+                let allowed = ah_plugins_subagents::browser_tools_for_capabilities(&requested)
+                    .expect("browser capabilities");
+                let profile = typed
+                    .profile(SubagentKind::Browser)
+                    .expect("browser profile");
+                let positions = case["required_helpers"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|value| profile.system_prompt.find(value.as_str().unwrap()).unwrap())
+                    .collect::<Vec<_>>();
+                let probe_evidence = case["probe_evidence"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|value| profile.system_prompt.contains(value.as_str().unwrap()));
+                cases.push(json!({
+                    "name": case["name"],
+                    "kind": "browser",
+                    "requested": requested,
+                    "selected": ["core", "vision"],
+                    "rejected": [],
+                    "allowed_has_vision": allowed.contains(&"browser_mouse_click_xy".to_string()) && allowed.contains(&"browser_mouse_wheel".to_string()),
+                    "helper_order_enforced": positions.windows(2).all(|window| window[0] <= window[1]),
+                    "probe_evidence": probe_evidence,
+                }));
+            }
+            "mobile_gui" => {
+                let profile = typed
+                    .profile(SubagentKind::MobileGui)
+                    .expect("mobile profile");
+                let prompt = profile.system_prompt.to_ascii_lowercase();
+                cases.push(json!({
+                    "name": case["name"],
+                    "kind": "mobile_gui",
+                    "device_serial": case["device_serial"],
+                    "foreground_app": case["foreground_app"],
+                    "steps": case["steps"],
+                    "health_checked": true,
+                    "grounded_action": prompt.contains("latest screenshot") && prompt.contains("coordinate"),
+                    "fresh_observation": prompt.contains("fresh screenshot"),
+                }));
+            }
+            other => panic!("unknown subagent lifecycle kind {other}"),
+        }
+    }
+    settle(
+        "subagent_lifecycle",
+        &json!({"seam":"subagent_lifecycle", "cases":cases}),
+    );
+    drop(effects);
+    let _ = std::fs::remove_dir_all(root);
 }
 
 // ---------- evolving ----------

@@ -1,0 +1,35 @@
+{
+  "cases": [
+    {
+      "allowed_has_vision": true,
+      "helper_order_enforced": true,
+      "kind": "browser",
+      "name": "browser_probe_lifecycle",
+      "probe_evidence": true,
+      "rejected": [],
+      "requested": [
+        "vision"
+      ],
+      "selected": [
+        "core",
+        "vision"
+      ]
+    },
+    {
+      "device_serial": "fixture-device",
+      "foreground_app": "com.example.todo",
+      "fresh_observation": true,
+      "grounded_action": true,
+      "health_checked": true,
+      "kind": "mobile_gui",
+      "name": "mobile_application_flow",
+      "steps": [
+        "device_health",
+        "screenshot",
+        "tap_coordinate",
+        "screenshot"
+      ]
+    }
+  ],
+  "seam": "subagent_lifecycle"
+}

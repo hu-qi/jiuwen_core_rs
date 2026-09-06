@@ -11,6 +11,7 @@
 本回合聚焦证据: `ah-plugins-mcp` 的 browser probe、runtime health、custom drag/action 已通过 6 个单元测试; `ah-plugins-subagents` 已通过 8 个单元测试,覆盖真实 adb 工具注册、设备序列号覆盖、截图与 dumpsys 前台包名; `ah-plugins-subagent` 已通过 5 个单元测试,覆盖初始截图观察与工具图像提取; `ah-plugins-session-log` 的 user/tool 图像恢复 2 个测试通过; `ah-plugins-context` 全部 8 个单元测试通过,含新增图像预算测试。当前仍是 Rust 侧协议/插件与聚焦回归证据,不升级 Python parity 或 production verification 状态。
 本回合 Rails 长尾证据: `ah-plugins-security/src/tiered_policy.rs` 实现参数规则、`approval_overrides`、整工具/默认优先级和 Shell AST 安全下限;`TieredPolicyRailPlugin` 以 `tools/pre-execute` fail-closed 接线。`ah-plugins-security`、`ah-plugins-rails`、`ah-plugins-agent-loop` 及安全 crate Clippy 通过。
 当前 Rails differential 已由 `differential/run_python.py` 驱动真实 Python `LLMRetryRail`、`ToolCallResilienceRail`、`TaskCompletionRail`、`TaskPlanningRail`、`CancellationRail` 与生命周期 fixtures,并与 Rust normalized references 比较通过(10/9/3/4/2/1/2/1/3/4,共 39 matched);GoalManager lifecycle、完整 prompt attachment lifecycle、runtime model switching、task lifecycle、subagents 和 cancellation callback 均已有 parity evidence。
+P2-04 新增 `subagent_lifecycle` differential: browser capability/probe ordering 与 mobile `DeviceLifecycleRail`/coordinate action fixture 共 2 matched、0 known divergence、0 mismatch;Rust mobile runtime 现在在模型调用前执行 `device_health`,对请求上下文中的 `device_serial` 强制注入每个 Android 工具调用,每次成功动作后追加 fresh screenshot observation,并通过 `com.example.todo` fixture 验证。真实设备 `10AC5Z0FL1000NL` 当前为 unauthorized,因此生产 Android smoke 尚不能宣称通过。
 
 ## 0. 总览
 
