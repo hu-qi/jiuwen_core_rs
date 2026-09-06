@@ -1,7 +1,7 @@
 //! telemetry seam:span 记录与导出(OTel 基础的本地落地)。
 //!
 //! 契约零实现:span 的存储与导出由插件提供(如 ah-plugins-telemetry 的
-//! JSONL 文件导出)。OTLP 导出留待后续,由插件侧扩展。
+//! JSONL 文件导出)。OTLP/JSON HTTP 导出由 `ah-plugins-telemetry` 提供。
 
 use serde_json::Value;
 

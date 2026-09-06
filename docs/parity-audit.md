@@ -180,7 +180,7 @@ skill_creator 均属于此类。rsi/resource、rsi/storage 判 excluded(见 §3b
 | store | 50 | ES 向量存储、GaussDB 方言 |
 | sys_operation | 40 | JiuwenBox/Yuanrong 远程 provider |
 | context_evolver | 30 | Milvus/多算法/轨迹生成/演化 Agent |
-| vendor_specific | 60 | DashScope 原生 embedding/rerank、Qwen OpenAI-compatible provider 和 credentials/env 配置已实现;P2-06 已完成 production profile 协议 E2E,真实厂商凭据 E2E 仍由 P3-04 负责 |
+| vendor_specific | 60 | DashScope 原生 embedding/rerank、Qwen OpenAI-compatible provider、Anthropic provider 与 credentials/env 配置已实现;真实配置 vendor HTTPS production smoke 已通过,协议客户端测试覆盖 DashScope/Anthropic |
 | harness | 10 | Python 侧为空命名空间 |
 
 ### 4.7 dev_tools(3 子模块,24%)

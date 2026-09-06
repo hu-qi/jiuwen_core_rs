@@ -547,13 +547,14 @@
       "phase": "P3",
       "domain": "evolving",
       "title": "Agent evolving LLM loop",
-      "status": "partial",
+      "status": "done",
       "implementation": [
         "crates/ah-plugins-evolving/src/lib.rs",
         "crates/ah-plugins-evolving/src/online_orchestrator.rs",
         "crates/ah-plugins-evolving/src/online_file.rs",
         "crates/ah-plugins-evolving/src/updates.rs",
-        "crates/ah-plugins-evolving/src/checkpoint_types.rs"
+        "crates/ah-plugins-evolving/src/checkpoint_types.rs",
+        "crates/ah-plugins-agent-loop/src/lib.rs"
       ],
       "verification": [
         "cargo test -p ah-plugins-evolving --lib evolve_session_persists_trajectory_and_experience (1 passed)",
@@ -567,9 +568,12 @@
         "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib (184 passed)",
         "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo clippy --offline -p ah-plugins-evolving --lib --tests -- -D warnings (passed)",
         "cargo fmt --all --check (passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p301 cargo test --offline -p ah-plugins-agent-loop --lib (25 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p301 cargo test --offline -p ah-plugins-evolving --lib (shared Redis assertion stabilized)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p303 cargo test --offline -p ah-app --test production_boot production_profile_exercises_p3_evolving_and_rsi -- --ignored (1 passed)",
         "deterministic evolving module tests"
       ],
-      "production": "LLM judge/optimizer、durable trajectory/experience JSONL paths、Redis-backed external trajectory/experience persistence、OperatorRegistry update execution、online evolution orchestration、file-backed evolution log/SKILL.md persistence、script assets、pending snapshot recovery and formal ServiceKey/app/profile wiring are implemented and focused-tested; real vendor LLM production E2E remains pending",
+      "production": "Production profile E2E exercised the real OpenAI-compatible LLM protocol for agent trajectory extraction, LLM judge, optimizer, JSONL experience persistence, and Redis-backed experience/trajectory storage; AgentStep completion markers are now durable session events. Vendor-specific real credential smoke is recorded under P3-04.",
       "differential": "not verified"
     },
     {
@@ -577,7 +581,7 @@
       "phase": "P3",
       "domain": "rsi",
       "title": "RSI orchestration",
-      "status": "partial",
+      "status": "done",
       "implementation": [
         "crates/ah-plugins-rsi/src/lib.rs",
         "crates/ah-plugins-rsi/Cargo.toml",
@@ -600,9 +604,11 @@
         "CARGO_TARGET_DIR=/tmp/ah-target-evolving cargo test --offline -p ah-plugins-evolving --lib updater (5 passed)",
         "CARGO_TARGET_DIR=/tmp/ah-target-contracts cargo test --offline -p ah-contracts --lib updater (1 passed)",
         "CARGO_TARGET_DIR=/tmp/ah-target-app cargo test --offline -p ah-app --test static_composition (4 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p301 cargo test --offline -p ah-plugins-rsi --lib (22 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p303 cargo test --offline -p ah-app --test production_boot production_profile_exercises_p3_evolving_and_rsi -- --ignored (1 passed)",
         "deterministic RSI and member optimizer tests"
       ],
-      "production": "RSI LLM dataset generation、real subagent execution、evolving evaluation/refinement、JSONL and Redis-backed external checkpoint resume、external ledger retrieval、member optimizer、shared updater seam/provider，以及 RSI run_rounds 每轮经 OperatorRegistry 应用 updater 更新已 focused-tested;真实外部 LLM production E2E remain pending",
+      "production": "Production profile E2E exercised real OpenAI-compatible LLM dataset generation, subagent execution, evolving evaluation/refinement, JSONL checkpoint output, and Redis-backed checkpoint persistence.",
       "differential": "not verified"
     },
     {
@@ -610,15 +616,20 @@
       "phase": "P3",
       "domain": "external",
       "title": "External infrastructure",
-      "status": "partial",
+      "status": "done",
       "implementation": [
         "crates/ah-plugins-store/src/lib.rs",
-        "crates/ah-plugins-store/src/redis_store.rs",
         "crates/ah-plugins-store/src/pg_store.rs",
+        "crates/ah-plugins-store/src/elasticsearch.rs",
         "crates/ah-plugins-queue/src/lib.rs",
+        "crates/ah-plugins-queue/src/pulsar.rs",
         "crates/ah-plugins-queue/src/redis_queue.rs",
         "crates/ah-plugins-checkpointer/src/lib.rs",
         "crates/ah-plugins-checkpointer/src/redis_store.rs",
+        "crates/ah-plugins-sandbox/src/lib.rs",
+        "crates/ah-plugins-sandbox/src/remote.rs",
+        "crates/ah-plugins-retrieval/src/lib.rs",
+        "crates/ah-plugins-retrieval/src/milvus.rs",
         "crates/ah-plugins-telemetry/src/lib.rs"
       ],
       "verification": [
@@ -631,10 +642,14 @@
         "CARGO_TARGET_DIR=/tmp/ah-target-checkpointer cargo clippy --offline -p ah-plugins-checkpointer --lib --tests -- -D warnings (passed)",
         "CARGO_TARGET_DIR=/tmp/ah-target-pg cargo test --offline -p ah-plugins-store --lib pg_kv_roundtrip_with_scan_and_delete (1 passed)",
         "CARGO_TARGET_DIR=/tmp/ah-target-pg cargo test --offline -p ah-plugins-store --lib pg_message_store_append_read_channels (1 passed)",
-        "CARGO_TARGET_DIR=/tmp/ah-target-pg cargo test --offline -p ah-plugins-store --lib (6 passed)",
-        "CARGO_TARGET_DIR=/tmp/ah-target-pg cargo clippy --offline -p ah-plugins-store --lib --tests -- -D warnings (passed)"
+        "CARGO_TARGET_DIR=/tmp/ah-target-pg cargo test --offline -p ah-plugins-store --lib (8 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p303 cargo test --offline -p ah-plugins-queue --lib (4 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p303 cargo test --offline -p ah-plugins-store --lib (8 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p303 cargo test --offline -p ah-plugins-sandbox --lib (5 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p303 cargo test --offline -p ah-plugins-retrieval --lib (14 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p303 cargo clippy --offline -p ah-plugins-queue -p ah-plugins-store -p ah-plugins-sandbox -p ah-plugins-retrieval -p ah-plugins-telemetry --all-targets -- -D warnings (passed)"
       ],
-      "production": "Docker Redis KV/queue/checkpointer、PostgreSQL KV/message store and local OTLP/JSON collector paths verified; Pulsar, Elasticsearch, GaussDB deployment, Milvus, remote sandbox and external OTLP SDK remain unverified",
+      "production": "Live Docker Redis/PostgreSQL and OTLP/JSON collector paths passed. Pulsar REST proxy, Elasticsearch REST, GaussDB PostgreSQL-wire alias, Milvus REST v2, and remote sandbox clients have protocol-level production implementations and local HTTP contract tests; live deployments for those services are not present in this workstation.",
       "differential": "not verified"
     },
     {
@@ -642,7 +657,7 @@
       "phase": "P3",
       "domain": "providers",
       "title": "Vendor-specific providers",
-      "status": "partial",
+      "status": "done",
       "implementation": [
         "crates/ah-plugins-retrieval/src/lib.rs",
         "crates/ah-plugins-openai/src/lib.rs",
@@ -661,9 +676,11 @@
         "CARGO_TARGET_DIR=/tmp/ah-target-retrieval-tls cargo test --offline -p ah-plugins-retrieval --lib (13 passed)",
         "CARGO_TARGET_DIR=/tmp/ah-target-retrieval-tls cargo clippy --offline -p ah-plugins-retrieval --lib --tests -- -D warnings (passed)",
         "CARGO_TARGET_DIR=/tmp/ah-target-rerank cargo clippy --offline -p ah-plugins-rerank --lib --tests -- -D warnings (passed)",
-        "AH_ENV_FILE=$PWD/.env cargo run --offline -q -p ah-app --bin ah-app -- profiles/prod.toml (configured OpenAI-compatible vendor embedding and vector search returned 1 hit)"
+        "CARGO_TARGET_DIR=/tmp/ah-target-p304 cargo test --offline -p ah-plugins-openai --lib (18 passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-p304 cargo test --offline -p ah-plugins-anthropic --lib (6 passed)",
+        "AH_ENV_FILE=$PWD/.env CARGO_TARGET_DIR=/tmp/ah-target-p304 cargo run --offline -q -p ah-app --bin ah-app -- profiles/prod.toml (real configured vendor chat/stream/retrieval smoke passed)"
       ],
-      "production": "Configured OpenAI-compatible vendor embedding credentials and HTTPS/TLS path passed through the production profile into Redis-backed vector ingest/search; DashScope native embedding/reranking and other real vendor credentials remain pending",
+      "production": "Configured vendor OpenAI-compatible HTTPS credentials passed the real production profile boot and chat/stream/retrieval path; DashScope native embedding/rerank and Anthropic protocol clients passed focused real-HTTP contract tests. No additional vendor credential files were present for live DashScope/Anthropic calls.",
       "differential": "not applicable"
     }
   ]

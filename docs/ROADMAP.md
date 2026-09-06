@@ -98,5 +98,5 @@ Python parity 标记为 verified。
 | 10 | P2-02 rails 长尾 | ✅ 已完成:`ah-plugins-rails` planning/completion/retry/approval 与安全 rail;`ah-plugins-security` tiered policy/overrides、shell/network 分层匹配、HITL `PermissionApprovalProvider` 和 fail-closed pre-execute 已接线;GoalManager、Prompt Attachment、runtime model switching、cancellation callback checkpoints、task lifecycle、subagent 与 cancellation callback differential 已验证;P2-02 Rust 核心回归 189 passed、Python differential 39 matched、生产 profile smoke 通过 |
 | 11 | P2-03 context round/dialogue 压缩 | ✅ 已落地:`ah-plugins-context` 按完整 user→assistant final round 保留窗口,不切断 tool-call/tool-result;SessionMemoryManager 缓存相同 session 前缀摘要;ContextEngine 消费 prompt attachment window mutator;context 7/7、AgentLoop 21/21、app contract 15/15、workspace 1376 通过 |
 | 12 | P2-04/05/06 | subagents browser/mobile、messager pyzmq 跨进程 + handoff、retrieval embedding/vector store 生产后端 |
-| 13 | P3-01/02 | evolving LLM 闭环(judge/experience/optimizer/updater);RSI 主编排(updater seam、orchestrator、dataset generator) |
-| 14 | P3-03/04 | 外部基础设施(Pulsar/ES/GaussDB/Milvus/远程沙箱/OTel SDK);vendor-specific provider(各厂商生产 E2E) |
+| 13 | P3-01/02 | ✅ 已完成:生产 profile 真实 OpenAI-compatible LLM 闭环;AgentStep 完成事件持久化;evolving judge/experience/optimizer/updater;RSI dataset generation、真实 subagent 执行、evolving 评估/精化、Redis checkpoint resume |
+| 14 | P3-03/04 | ✅ 已完成: Pulsar REST proxy、Elasticsearch REST、GaussDB PostgreSQL-wire alias、Milvus REST v2、远程 sandbox fail-closed 与 OTLP/JSON;真实配置 vendor HTTPS smoke、DashScope/Anthropic 协议测试。Pulsar/ES/GaussDB/Milvus/远程沙箱的现场部署 E2E 仍需对应服务环境 |

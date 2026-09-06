@@ -1,8 +1,8 @@
 //! queue seam:消息队列(发布/消费/积压)。
 //!
 //! 对应 openjiuwen 的 messager/queue:本地真实队列为日志+游标模型
-//! (每 channel 一个 append-only JSONL + 消费游标),外部传输
-//! (Pulsar/ZMQ ROUTER-DEALER)留待后续,文档注明。
+//! (每 channel 一个 append-only JSONL);外部 Redis 与 Pulsar REST proxy
+//! provider 由插件提供。
 
 use serde_json::Value;
 

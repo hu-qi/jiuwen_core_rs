@@ -8,6 +8,8 @@
 //!   fs 工具查路径、run_shell 查命令。
 //!
 //! 远程沙箱(容器/VM)留待后续,文档注明。
+pub mod remote;
+pub use remote::RemoteSandboxProvider;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -159,19 +161,35 @@ impl Plugin for SandboxRailPlugin {
                             .get("path")
                             .and_then(Value::as_str)
                             .unwrap_or_default();
-                        if let Ok(fs) = sandbox.check_fs(path)
-                            && !fs.allow
-                        {
-                            return ToolDecision::deny(decision.arguments, fs.reason);
+                        match sandbox.check_fs(path) {
+                            Ok(fs) if !fs.allow => {
+                                return ToolDecision::deny(decision.arguments, fs.reason);
+                            }
+                            Err(error) => {
+                                return ToolDecision::deny(
+                                    decision.arguments,
+                                    format!("sandbox unavailable: {error}"),
+                                );
+                            }
+                            _ => {}
                         }
                     }
                     if event.name == "run_shell"
                         && let Some(command) =
                             decision.arguments.get("command").and_then(Value::as_str)
-                        && let Ok(cmd) = sandbox.check_command(command)
-                        && !cmd.allow
                     {
-                        return ToolDecision::deny(decision.arguments, cmd.reason);
+                        match sandbox.check_command(command) {
+                            Ok(command) if !command.allow => {
+                                return ToolDecision::deny(decision.arguments, command.reason);
+                            }
+                            Err(error) => {
+                                return ToolDecision::deny(
+                                    decision.arguments,
+                                    format!("sandbox unavailable: {error}"),
+                                );
+                            }
+                            _ => {}
+                        }
                     }
                     next.next(decision).await
                 }
@@ -206,12 +224,20 @@ impl Plugin for SandboxPlugin {
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
-        let provider =
-            FileSandboxProvider::open(self.dir.clone()).map_err(|e| PluginError::Apply {
+        let provider: std::sync::Arc<dyn SandboxProvider> = if let Some(remote) =
+            RemoteSandboxProvider::from_env().map_err(|error| PluginError::Apply {
                 plugin: self.name(),
-                message: e.0,
-            })?;
-        let provider: std::sync::Arc<dyn SandboxProvider> = std::sync::Arc::new(provider);
+                message: error.0,
+            })? {
+            remote
+        } else {
+            std::sync::Arc::new(FileSandboxProvider::open(self.dir.clone()).map_err(|e| {
+                PluginError::Apply {
+                    plugin: self.name(),
+                    message: e.0,
+                }
+            })?)
+        };
         Ok(vec![ctx.register(SANDBOX, provider)])
     }
 }
@@ -337,5 +363,52 @@ mod tests {
 
         drop(effects);
         let _ = std::fs::remove_dir_all(&root);
+    }
+    struct FailingSandbox;
+
+    impl Seam for FailingSandbox {}
+
+    impl SandboxProvider for FailingSandbox {
+        fn check_fs(&self, _path: &str) -> Result<FsDecision, SandboxError> {
+            Err(SandboxError("remote offline".into()))
+        }
+
+        fn check_command(&self, _command: &str) -> Result<CommandDecision, SandboxError> {
+            Err(SandboxError("remote offline".into()))
+        }
+
+        fn policy(&self) -> Result<SandboxPolicy, SandboxError> {
+            Err(SandboxError("remote offline".into()))
+        }
+
+        fn set_policy(&self, _policy: SandboxPolicy) -> Result<(), SandboxError> {
+            Err(SandboxError("remote offline".into()))
+        }
+    }
+
+    #[tokio::test]
+    async fn rail_fails_closed_when_remote_sandbox_is_unavailable() {
+        let root = std::env::temp_dir().join(format!("ah-sb-fail-{}", std::process::id()));
+        let ctx = Context::new();
+        let sandbox_effect = ctx.register(
+            SANDBOX,
+            Arc::new(FailingSandbox) as Arc<dyn SandboxProvider>,
+        );
+        let effects = ctx
+            .mount_all(vec![
+                Arc::new(ah_plugins_tools::ToolsPlugin) as DynPlugin,
+                Arc::new(ah_plugins_sysop::SysopPlugin::new(&root)) as DynPlugin,
+                Arc::new(SandboxRailPlugin) as DynPlugin,
+            ])
+            .expect("mount");
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let error = registry
+            .invoke("read_file", json!({"path":"safe.txt"}))
+            .await
+            .expect_err("remote failure must deny execution");
+        assert!(error.0.contains("sandbox unavailable: remote offline"));
+        drop(effects);
+        drop(sandbox_effect);
+        let _ = std::fs::remove_dir_all(root);
     }
 }

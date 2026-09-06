@@ -99,6 +99,24 @@ pub struct AgentLoop {
 }
 impl AgentLoop {
     /// 构建循环。
+    fn record_step(
+        &self,
+        session: &Arc<dyn SessionLog>,
+        iteration: usize,
+        tool_calls: usize,
+        done: bool,
+    ) {
+        let _ = session.append(
+            SessionEventKind::AgentStep,
+            json!({"iteration": iteration, "tool_calls": tool_calls, "done": done}),
+        );
+        self.ctx.emit(AgentStep {
+            iteration,
+            tool_calls,
+            done,
+        });
+    }
+
     pub fn new(
         llm: Arc<dyn ModelProvider>,
         tools: Arc<dyn ToolRegistry>,
@@ -1232,18 +1250,10 @@ impl AgentLoop {
                     .is_some_and(|rails| rails.config().completion_promise.is_some())
                     && completion_decision.action != RailAction::Stop
                 {
-                    self.ctx.emit(AgentStep {
-                        iteration,
-                        tool_calls: 0,
-                        done: false,
-                    });
+                    self.record_step(&session, iteration, 0, false);
                     continue;
                 }
-                self.ctx.emit(AgentStep {
-                    iteration,
-                    tool_calls: 0,
-                    done: true,
-                });
+                self.record_step(&session, iteration, 0, true);
                 let _ = self
                     .notify(
                         &session_id,
@@ -1394,11 +1404,7 @@ impl AgentLoop {
                 }
             }
 
-            self.ctx.emit(AgentStep {
-                iteration,
-                tool_calls: response.tool_calls.len(),
-                done: false,
-            });
+            self.record_step(&session, iteration, response.tool_calls.len(), false);
         }
         let _ = self
             .notify(
@@ -1664,8 +1670,10 @@ mod tests {
                 ah_contracts::session::SessionEventKind::System,
                 ah_contracts::session::SessionEventKind::Assistant,
                 ah_contracts::session::SessionEventKind::ToolResult,
+                ah_contracts::session::SessionEventKind::AgentStep,
                 ah_contracts::session::SessionEventKind::System,
                 ah_contracts::session::SessionEventKind::Assistant,
+                ah_contracts::session::SessionEventKind::AgentStep,
             ]
         );
         let messages = sessions.derive_messages();

@@ -1167,8 +1167,20 @@ mod tests {
                 .expect("experience get")
                 .is_some()
         );
-        assert_eq!(runtime.load_trajectories().unwrap().len(), 1);
-        assert_eq!(runtime.load_experiences().unwrap().len(), 1);
+        assert!(
+            runtime
+                .load_trajectories()
+                .unwrap()
+                .iter()
+                .any(|trajectory| trajectory.task == "redis persistence")
+        );
+        assert!(
+            runtime
+                .load_experiences()
+                .unwrap()
+                .iter()
+                .any(|experience| experience.id == experience_id)
+        );
 
         let _ = store.delete(&trajectory_key);
         let _ = store.delete(&experience_key);

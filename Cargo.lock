@@ -759,6 +759,7 @@ dependencies = [
  "ah-hub",
  "redis",
  "serde_json",
+ "ureq",
 ]
 
 [[package]]
@@ -923,6 +924,7 @@ dependencies = [
  "ah-plugins-tools",
  "serde_json",
  "tokio",
+ "ureq",
 ]
 
 [[package]]
@@ -1015,6 +1017,7 @@ dependencies = [
  "redis",
  "serde_json",
  "tokio",
+ "ureq",
 ]
 
 [[package]]
@@ -3248,6 +3251,8 @@ dependencies = [
  "once_cell",
  "rustls",
  "rustls-pki-types",
+ "serde",
+ "serde_json",
  "url",
  "webpki-roots 0.26.11",
 ]

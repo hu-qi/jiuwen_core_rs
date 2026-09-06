@@ -27,24 +27,24 @@
 | llm | `llm` | `ModelProvider`(已实现;`OpenAiConfig` 支持从 credentials seam 解析 key/base_url,credentials 优先、环境变量兜底) | done(契约)/ partial(openai-compatible + anthropic 真实协议已落地;其余 provider 未实现) |
 | tools | `tools` | `Tool` + `ToolRegistry`(已实现) | done(契约)/ partial(已有真实工具,注册表通用) |
 | prompt | `prompt` | `PromptRegistry`(已实现:版本化注册 + {{var}} 渲染 + 缺失变量显式报错 + 文件持久化);agent-loop 消费方注入渲染系统提示 | done(契约+消费)/ partial(无结构化 schema prompt) |
-| store | `store` | `BaseKVStore`/`BaseMessageStore`(已实现,文件后端);DB/Vector 留待后续 | done(契约,本地文件+Redis+PostgreSQL 后端)/ partial(ES/Milvus) |
+| store | `store` | `BaseKVStore`/`BaseMessageStore`(文件后端);Redis/PostgreSQL 与 Elasticsearch REST KV;GaussDB PostgreSQL-wire alias | done(契约+文件+Redis+PostgreSQL+Elasticsearch);live ES/GaussDB deployment 需外部环境 |
 | session | `sessions` + `session-manager` | `SessionLog` append-only 日志 + JSONL 持久化 + 投影;`SessionManager` 多会话 create/open/fork/list(已实现) | done(契约)/ partial(无分布式/跨进程会话) |
 | context | `context` | `ContextEngine`(预算组装/完整 dialogue round 压缩/工具轮次边界保护/LLM 摘要缓存/offload/reinject;动态 prompt attachment 最终窗口注入;agent-loop 与 subagent 消费) | done(契约+消费)/ partial(精确 tokenizer) |
 | memory | `memory` | `MemoryProvider`(JSON 文件或已注册 KV seam 的外部 JSON 记录);remember/recall/forget 工具;graph-memory 知识图谱记忆(实体/关系/episode + 检索/邻居) | done(P2-06 外部 Redis JSON memory 的 store/retrieve/search/list/remove 与重启恢复 E2E);partial(Python memory manage/migration 等更广能力) |
-| retrieval | `retrieval` | `RetrievalProvider` + `Reranker`/`QueryReranker`(BM25 + 本地确定性向量或 OpenAI-compatible/DashScope 外部 embedding + KV-backed 向量索引 + DashScope query-aware rerank + JSON 文档持久化 + ingest/search 工具 + 词法/向量融合重排) | done(P2-06 production profile 的 OpenAI-compatible/DashScope embedding、Redis vector index、query-aware rerank 与重启清理 E2E);partial(P3-04 真实厂商凭据 E2E) |
+| retrieval | `retrieval` | `RetrievalProvider` + `Reranker`/`QueryReranker`(BM25 + 本地确定性向量或 OpenAI-compatible/DashScope 外部 embedding + KV-backed 向量索引 + Milvus REST v2 + DashScope query-aware rerank + JSON 文档持久化 + ingest/search 工具) | done(P2-06 production profile + Milvus protocol client);live Milvus deployment 需外部环境 |
 | fs | `fs` | `FsProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | shell | `shell` | `ShellProvider`(已实现,真实本地) | done(契约)/ partial(仅本地) |
 | code | `code` | `CodeProvider`(已实现:隔离 scratch + python3 子进程 + 超时强杀 + 输出/退出码) | done(契约)/ partial(仅 python3,无沙箱容器) |
-| sandbox | `sandbox` | `SandboxProvider`(已实现:策略化,sandbox.json 允许前缀/拒绝命令模式/绝对路径开关 + pre-execute rail 消费) | done(契约+消费,本地)/ partial(远程沙箱容器/VM) |
+| sandbox | `sandbox` | `SandboxProvider`(本地 sandbox.json 或 `SANDBOX_REMOTE_URL` 远程 JSON provider + pre-execute rail) | done(本地+远程协议+fail-closed rail);live remote sandbox deployment 需外部环境 |
 | security | `security` | `SecurityProvider`(规则 guardrails + 可选 HTTP 外部模型 guardrail + pre-execute rail) | done(契约)/ partial(外部模型协议已接入,生产 endpoint E2E 待验证) |
 | agent-loop | `agent-loop` + `rails` | `AgentLoop` | **partial**:基础日志驱动 ReAct、工具结果回灌、context/prompt/control、planning/completion/retry/approval rails 已有;相对 Python `ReActAgent.invoke` 仍缺 HITL/workflow interrupt 恢复、steering、并行 tool call、multimodal、完整 stream 和取消清理语义 |
 | workflow | `workflow` | `WorkflowEngine` | **partial**:基础引擎、节点、条件边、子工作流/并行、`WorkflowStreamSink`、LLM 增量 `workflow_delta`、节点/恢复/最终 chunk、stream manager 背压/END_FRAME/cancel、`stream_checkpointed`、`WorkflowComponentRegistry` 和 `NodeKind::Component` 四种 invoke/stream/collect/transform 能力已有;Python ActorManager 多 producer stream-edge/source-group、节点级中断恢复和 differential 仍缺 |
 | subagent | `subagent` + `ah-plugins-subagent` + `ah-plugins-subagents` + `ah-plugins-mcp` | `SubagentRuntime`, Browser MCP proxy, Android ADB tools | **done**:隔离会话、预算、父上下文、取消、聚合、模型调用中断事件记录、browser_agent/mobile_gui_agent 工厂与真实 Playwright MCP/ADB 命令路径;请求级 Android serial 绑定、health-before-action、grounded action、post-action screenshot、browser probe lifecycle、Python DeviceLifecycleRail/coordinate action fixture 与真实 Android AVD Settings flow 均已验证 |
 | teams | `teams` | `TeamRuntime`(内存 + SQLite 持久化:任务板/依赖门控/成员校验/review/settle/run_task 真实委派/teams/task 事件/消息传输) | done(团队任务契约、内存/SQLite 持久化、消息与 Python task create/claim/update/dependency/review lifecycle differential); partial(外部 CLI 进程/ZMQ handoff 的生产环境验证) |
-| evolving | `evolving` | `EvolvingRuntime`(轨迹抽取、持久化 checkpoint、确定性评估 + LLM judge、确定性 + LLM optimizer、Experience JSONL、完整 evolve_session 闭环) | done(闭环契约)/ partial(Redis 外部轨迹/经验持久化已验证,真实 vendor LLM E2E 仍待验证) |
-| rsi | `rsi` | `RsiRuntime`(LLM/确定性数据集生成 + 用例真实执行 + evolving 评估 + 报告 + 提示精化 + checkpoint 落盘续跑) | done(主循环契约)/ partial(Redis 外部 checkpoint resume 已验证,member optimizer/experience ledger 外部 E2E/updater 仍有缺口) |
-| telemetry | `telemetry` | `TelemetryProvider`(已实现:内存 span 记录 + JSONL 文件导出,挂 agent/step 与 tools/post-execute 监听生成真实 span) | done(契约+JSONL+OTLP/JSON 导出+semconv 语义约定) |
-| queue | `queue` | `MessageQueue`(已实现:文件后端,每 channel append-only JSONL + 消费游标 offset 语义,重启恢复;teams 消息消费方) | done(契约+消费,本地+Redis 外部后端)/ partial(外部 Pulsar) |
+| evolving | `evolving` | `EvolvingRuntime`(轨迹抽取、持久化 checkpoint、确定性评估 + LLM judge、确定性 + LLM optimizer、Experience JSONL、完整 evolve_session 闭环) | done(生产 profile LLM judge/optimizer E2E、Redis 外部轨迹/经验、AgentStep 完成事件持久化) |
+| rsi | `rsi` | `RsiRuntime`(LLM/确定性数据集生成 + 用例真实执行 + evolving 评估 + 报告 + 提示精化 + checkpoint 落盘续跑) | done(生产 profile LLM dataset/subagent/evolving/run_rounds + Redis checkpoint E2E) |
+| telemetry | `telemetry` | `TelemetryProvider`(内存 span + JSONL 文件导出 + OTLP/JSON HTTP collector) | done(契约+JSONL+OTLP/JSON 导出+semconv 语义约定) |
+| queue | `queue` | `MessageQueue`(文件/Redis + Pulsar REST proxy provider) | done(契约+文件+Redis+Pulsar REST protocol client);live Pulsar deployment 需外部环境 |
 | mcp | `mcp` | `McpClient`(已实现:真实 stdio 子进程 + newline-delimited JSON-RPC 2.0,握手/list_tools/call_tool/shutdown) | done(契约+stdio+http 客户端) |
 | transport | `transport` | A2A 风格传输(JSON-RPC 2.0 + SSE 流式 over HTTP;ureq 客户端 + 本地 HTTP/1.1 服务端) | done(契约+客户端+服务端+流式)/ partial(加密传输) |
 | credentials | `credentials` | `CredentialProvider`(已实现:真实环境变量 provider,映射可配置,默认含 OpenAI 与 DashScope api_key/base_url/model；`get`/`list` 真实读进程环境,`set`/`remove` 显式报错 env 只读) | done(契约)/ partial:仅 `ah-app::boot` 允许通过 env 文件建立 provider 配置;env 文件覆盖同名进程变量,未声明的全局 provider 配置不参与 boot |

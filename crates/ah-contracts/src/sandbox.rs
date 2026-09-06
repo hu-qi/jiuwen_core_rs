@@ -1,8 +1,8 @@
 //! sandbox seam:策略化沙箱(路径/命令访问决策)。
 //!
 //! 对应 openjiuwen 的 sandbox:本地策略后端为 sandbox.json(允许路径前缀、
-//! 拒绝命令模式、绝对路径开关),消费方为 tools/pre-execute rail。
-//! 远程沙箱(容器/VM)留待后续,文档注明。
+//! 拒绝命令模式、绝对路径开关),消费方为 tools/pre-execute rail;远程
+//! JSON HTTP sandbox provider 由插件提供。
 
 use crate::seam::Seam;
 

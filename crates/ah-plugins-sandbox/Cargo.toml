@@ -9,6 +9,7 @@ description = "Real policy-driven sandbox: sandbox.json (path prefixes, denied c
 ah-contracts = { workspace = true }
 ah-hub = { workspace = true }
 serde_json = "1"
+ureq = { version = "2.12", default-features = false, features = ["json", "tls"] }
 
 [dev-dependencies]
 ah-plugins-tools = { workspace = true }

@@ -226,6 +226,9 @@ impl Plugin for PgStorePlugin {
         ])
     }
 }
+/// GaussDB 使用 PostgreSQL wire protocol 时复用同一参数化 SQL 后端。
+pub type GaussDbStore = PgStore;
+pub type GaussDbStorePlugin = PgStorePlugin;
 
 #[cfg(test)]
 mod tests {

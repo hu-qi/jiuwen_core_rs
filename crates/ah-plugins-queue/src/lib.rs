@@ -19,7 +19,9 @@ use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use serde_json::Value;
 
+pub mod pulsar;
 pub mod redis_queue;
+pub use pulsar::{PulsarRestQueue, PulsarRestQueuePlugin};
 
 fn now_ms() -> u64 {
     SystemTime::now()

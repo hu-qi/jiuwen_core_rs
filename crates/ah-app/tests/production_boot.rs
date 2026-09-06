@@ -14,12 +14,14 @@ use std::thread;
 
 use ah_contracts::agent::{AgentRequest, AgentRunState, ApplicationRuntime};
 use ah_contracts::controller::{Controller, TaskExecutor, TaskStatus};
+use ah_contracts::evolving::EvolvingRuntime;
 use ah_contracts::keys::{
-    APPLICATION, CONTROLLER, KV_STORE, LLM, QUERY_RERANK, QUEUE, RETRIEVAL, TOOLS,
+    APPLICATION, CONTROLLER, EVOLVING, KV_STORE, LLM, QUERY_RERANK, QUEUE, RETRIEVAL, RSI, TOOLS,
 };
 use ah_contracts::queue::MessageQueue;
 use ah_contracts::rerank::QueryReranker;
 use ah_contracts::retrieval::{RetrievalHit, RetrievalProvider};
+use ah_contracts::rsi::RsiRuntime;
 use ah_contracts::seam::Seam;
 use ah_contracts::store::BaseKVStore;
 use ah_contracts::tools::ToolRegistry;
@@ -145,6 +147,24 @@ fn model_response(request_line: &str, body: &str) -> (String, String) {
             "application/json".to_string(),
             r#"{"output":{"results":[{"index":1,"relevance_score":0.9},{"index":0,"relevance_score":0.1}]}}"#
                 .to_string(),
+        );
+    }
+    if body.contains("Generate ") && body.contains("task variations") {
+        return (
+            "application/json".to_string(),
+            r#"{"choices":[{"message":{"role":"assistant","content":"[{\"task\":\"fixture generated task\"}]"}}]}"#.to_string(),
+        );
+    }
+    if body.contains("strict evaluator") {
+        return (
+            "application/json".to_string(),
+            r#"{"choices":[{"message":{"role":"assistant","content":"{\"verdict\":\"pass\",\"score\":0.9,\"feedback\":\"fixture judge accepted\"}"}}]}"#.to_string(),
+        );
+    }
+    if body.contains("You are an optimizer") {
+        return (
+            "application/json".to_string(),
+            r#"{"choices":[{"message":{"role":"assistant","content":"[{\"target\":\"prompt\",\"suggestion\":\"fixture refinement\",\"rationale\":\"fixture feedback\",\"confidence\":0.8}]"}}]}"#.to_string(),
         );
     }
     if body.contains("Classify the request") {
@@ -723,6 +743,118 @@ async fn production_profile_exercises_p1_application_controller_workflow() {
         "DashScope native embedding endpoint must be used when compatible endpoint is empty"
     );
     drop(native_effects);
+    drop(fixture);
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+#[ignore = "requires a real Redis service; CI runs this test explicitly"]
+async fn production_profile_exercises_p3_evolving_and_rsi() {
+    let fixture = start_model_fixture();
+    let root = std::env::temp_dir().join(format!("ah-prod-p3-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("boot root");
+    let env_file = root.join("production.env");
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".to_string());
+    std::fs::write(
+        &env_file,
+        format!(
+            "OPENAI_API_KEY=fixture-key\nOPENAI_BASE_URL={}\nOPENAI_MODEL=test-model\nREDIS_URL={}\n",
+            fixture.base_url, redis_url
+        ),
+    )
+    .expect("production env file");
+    let _env = EnvGuard::set(&[
+        ("AH_ENV_FILE", env_file.display().to_string()),
+        ("REDIS_URL", redis_url),
+    ]);
+    let profile = concat!(env!("CARGO_MANIFEST_DIR"), "/../../profiles/prod.toml");
+    let session_path = root.join("default.jsonl");
+    let session_dir = root.join("sessions");
+    let memory_dir = root.join("memory");
+    let retrieval_dir = root.join("retrieval");
+    let telemetry_dir = root.join("telemetry");
+    let (ctx, effects) = ah_app::boot(
+        profile,
+        &root,
+        &session_path,
+        &session_dir,
+        &memory_dir,
+        &retrieval_dir,
+        &telemetry_dir,
+    )
+    .expect("production profile boot");
+
+    let (agent, manager) = ah_app::agent_and_manager(&ctx).expect("agent and session manager");
+    let session = manager
+        .create("p3-evolving")
+        .expect("create evolving session");
+    let result = agent
+        .run_in_session(session, "produce a concise production answer")
+        .await;
+    assert_eq!(result.state, AgentRunState::Completed);
+
+    let evolving = ctx
+        .service::<dyn EvolvingRuntime>(&EVOLVING)
+        .expect("evolving runtime");
+    let evolution = evolving
+        .evolve_session("produce a concise production answer", "p3-evolving")
+        .await
+        .expect("production evolving loop");
+    assert_eq!(
+        evolution.evaluation.verdict,
+        ah_contracts::evolving::Verdict::Pass
+    );
+    assert!(
+        evolution
+            .evaluation
+            .feedback
+            .contains("fixture judge accepted")
+    );
+    assert!(
+        evolution
+            .refinements
+            .iter()
+            .any(|refinement| refinement.suggestion == "fixture refinement")
+    );
+    let experiences = evolving.load_experiences().expect("load experience");
+    assert!(
+        experiences
+            .iter()
+            .any(|experience| { experience.task == "produce a concise production answer" })
+    );
+
+    let rsi = ctx.service::<dyn RsiRuntime>(&RSI).expect("rsi runtime");
+    let kv = ctx
+        .service::<dyn BaseKVStore>(&KV_STORE)
+        .expect("production KV");
+    kv.delete("rsi:checkpoint:latest")
+        .expect("clear RSI checkpoint");
+    let dataset = rsi
+        .generate_dataset_llm(vec!["summarize the production trace".to_string()], 1)
+        .await
+        .expect("LLM dataset generation");
+    assert_eq!(dataset.source, "llm");
+    assert_eq!(dataset.cases.len(), 1);
+    let reports = rsi
+        .run_rounds(
+            vec!["summarize the production trace".to_string()],
+            1,
+            "Return a final answer and stop.",
+        )
+        .await
+        .expect("production RSI rounds");
+    assert_eq!(reports.len(), 1);
+    assert_eq!(reports[0].total, 1);
+    assert!(
+        kv.get("rsi:checkpoint:latest")
+            .expect("checkpoint lookup")
+            .is_some()
+    );
+    assert!(root.join("rsi/rsi_checkpoints.jsonl").exists());
+
+    drop(effects);
     drop(fixture);
     let _ = std::fs::remove_dir_all(root);
 }

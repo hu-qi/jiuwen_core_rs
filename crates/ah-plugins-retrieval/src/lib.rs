@@ -22,6 +22,8 @@ use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+pub mod milvus;
+pub use milvus::MilvusRetrievalProvider;
 
 /// 一个分块:文本 + 词频 + 向量(摄入时计算;旧文档为空则检索时补算)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -869,18 +871,34 @@ impl Plugin for RetrievalPlugin {
     }
 
     fn apply(&self, ctx: &Context) -> Result<Vec<Effect>, PluginError> {
-        let vector_store = ctx.service::<dyn BaseKVStore>(&KV_STORE);
-        let provider: std::sync::Arc<dyn RetrievalProvider> = std::sync::Arc::new(
-            LocalRetrievalProvider::open_with_embedder_and_store(
-                &self.dir,
-                configured_embedder(ctx),
-                vector_store,
-            )
-            .map_err(|e| PluginError::Apply {
-                plugin: self.name(),
-                message: e.0,
-            })?,
-        );
+        let embedder = configured_embedder(ctx);
+        let provider: std::sync::Arc<dyn RetrievalProvider> =
+            if let Ok(url) = std::env::var("MILVUS_URL") {
+                let collection = std::env::var("MILVUS_COLLECTION")
+                    .unwrap_or_else(|_| "agent_harness".to_string());
+                let token = std::env::var("MILVUS_TOKEN").ok();
+                std::sync::Arc::new(
+                    MilvusRetrievalProvider::new(url, collection, token, embedder).map_err(
+                        |error| PluginError::Apply {
+                            plugin: self.name(),
+                            message: error.0,
+                        },
+                    )?,
+                )
+            } else {
+                let vector_store = ctx.service::<dyn BaseKVStore>(&KV_STORE);
+                std::sync::Arc::new(
+                    LocalRetrievalProvider::open_with_embedder_and_store(
+                        &self.dir,
+                        embedder,
+                        vector_store,
+                    )
+                    .map_err(|error| PluginError::Apply {
+                        plugin: self.name(),
+                        message: error.0,
+                    })?,
+                )
+            };
         let mut effects = vec![ctx.register(RETRIEVAL, provider.clone())];
 
         let registry =

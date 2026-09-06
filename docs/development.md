@@ -77,6 +77,21 @@ DASHSCOPE_RERANK_MODEL=gte-rerank-v2
 请求、响应、结果索引和分数均经过校验；缺少 DashScope 凭据时保留确定性的本地
 hybrid reranker，真实厂商路径需通过 production E2E 验证。
 
+
+可选外部基础设施 provider:
+
+```sh
+MILVUS_URL=https://milvus.example
+MILVUS_TOKEN=...
+MILVUS_COLLECTION=agent_harness
+SANDBOX_REMOTE_URL=https://sandbox.example
+SANDBOX_REMOTE_TOKEN=...
+```
+
+`MILVUS_URL` 选择 Milvus REST v2 向量 provider;`SANDBOX_REMOTE_URL` 选择远程 JSON
+策略 provider。远程 sandbox 请求或响应失败时 pre-execute rail fail closed。Pulsar
+REST、Elasticsearch REST 和 GaussDB PostgreSQL-wire provider 通过对应插件构造器
+接入;没有配置时 production profile 仍使用已声明的 Redis/文件组合,不会静默切换。
 安全策略可选挂载一个外部 JSON guardrail endpoint。响应需包含
 `has_risk`、可选 `risk_type`/`risk_level`/`details`；请求或解析失败会 fail closed:
 
