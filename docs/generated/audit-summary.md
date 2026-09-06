@@ -8,8 +8,8 @@ Percentages below are status shares, not weighted capability completion.
 
 | Status | Count | Share |
 | --- | ---: | ---: |
-| done | 19 | 73.1% |
-| partial | 7 | 26.9% |
+| done | 20 | 76.9% |
+| partial | 6 | 23.1% |
 | missing | 0 | 0.0% |
 | excluded | 0 | 0.0% |
 | **total** | **26** | **100.0%** |
@@ -28,7 +28,7 @@ Percentages below are status shares, not weighted capability completion.
 | lifecycle | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | production | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | providers | 1 | 0 | 1 | 0 | 0 | 0.0% |
-| rails | 1 | 0 | 1 | 0 | 0 | 0.0% |
+| rails | 1 | 1 | 0 | 0 | 0 | 100.0% |
 | retrieval | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | rsi | 1 | 0 | 1 | 0 | 0 | 0.0% |
 | session | 1 | 1 | 0 | 0 | 0 | 100.0% |
@@ -41,7 +41,6 @@ Percentages below are status shares, not weighted capability completion.
 
 | ID | Phase | Domain | Title | Status |
 | --- | --- | --- | --- | --- |
-| P2-02 | P2 | rails | Rails and security policy | partial |
 | P2-04 | P2 | subagents | Subagents | partial |
 | P2-06 | P2 | retrieval | Production retrieval and memory backends | partial |
 | P3-01 | P3 | evolving | Agent evolving LLM loop | partial |
@@ -189,11 +188,11 @@ Percentages below are status shares, not weighted capability completion.
 
 ### P2-02 — Rails and security policy
 
-- Status: `partial`
-- Implementation: `crates/ah-contracts/src/agent.rs`, `crates/ah-contracts/src/prompt_attachment.rs`, `crates/ah-contracts/src/model_catalog.rs`, `crates/ah-plugins-rails/src/lib.rs`, `crates/ah-plugins-security/src/lib.rs`, `crates/ah-plugins-security/src/tiered_policy.rs`, `crates/ah-plugins-prompt-attachment/src/lib.rs`, `crates/ah-plugins-agent-loop/src/lib.rs`, `crates/ah-plugins-agent-control/src/lib.rs`, `crates/ah-plugins-workflow/src/lib.rs`, `crates/ah-app/src/lib.rs`, `profiles/dev.toml`, `profiles/prod.toml`, `fixtures/goal_manager.json`, `fixtures/prompt_attachment.json`, `fixtures/runtime_model_switching.json`, `differential/run_python.py`, `references/goal_manager.json`, `references/prompt_attachment.json`, `references/runtime_model_switching.json`
-- Verification: `cargo test --offline -p ah-plugins-rails -p ah-plugins-prompt-attachment -p ah-app (109 passed)`, `cargo test --offline -p ah-plugins-agent-control --lib callback_checkpoint_can_request_cancellation (1 passed)`, `cargo test --offline -p ah-plugins-agent-loop --lib cancellation_callback_stops_after_model_checkpoint (1 passed)`, `cargo test --offline -p ah-plugins-workflow --lib llm_node_drains_bounded_stream_before_awaiting_producer (1 passed)`, `cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml (boot and end-to-end smoke passed)`, `AH_ENV_FILE=.env cargo run --offline -p ah-app --bin ah-app -- profiles/prod.toml (full boot, real model chat/stream, agent, workflow and remaining demo paths passed)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core bash differential/run.sh llm_retry tool_retry task_completion task_planning (26 matched; 0 known divergence; 0 mismatch)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py goal_manager + python differential/compare.py goal_manager (2 matched; 0 known divergence; 0 mismatch)`, `AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_goal_manager -- --nocapture (reference generated)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py prompt_attachment + python differential/compare.py prompt_attachment (1 matched; 0 known divergence; 0 mismatch)`, `cargo test --offline -p ah-app --test differential reference_prompt_attachment (1 passed)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py runtime_model_switching + python differential/compare.py runtime_model_switching (2 matched; 0 known divergence; 0 mismatch)`, `AH_REFGEN=1 cargo test --offline -p ah-app --test differential reference_runtime_model_switching (1 passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-security cargo test --offline -p ah-plugins-security --lib network_rule_matches_url_argument (1 passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-security cargo test --offline -p ah-plugins-security --lib (26 passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-security cargo clippy --offline -p ah-plugins-security --lib --tests -- -D warnings (passed)`, `cargo fmt --all --check (passed)`
-- Production: prod.toml with the repository .env completed the full deterministic application demo; real OpenAI-compatible chat and stream, agent/tool, workflow, telemetry and symphony paths passed; tiered network URL/query policy matching now has regression coverage
-- Differential: Python reference agent-core@aeb88cd8 and Rust reference compared successfully: Rails 26 cases matched, GoalManager 2 cases matched, PromptAttachment lifecycle 1 case matched, and runtime model switching 2 cases matched; total 31 matched, 0 known divergence, 0 mismatch. Rust cancellation callback checkpoint has a focused test, but agent-core Python has no equivalent callback-control seam, so no Python differential is claimed
+- Status: `done`
+- Implementation: `crates/ah-contracts/src/agent.rs`, `crates/ah-contracts/src/prompt_attachment.rs`, `crates/ah-contracts/src/model_catalog.rs`, `crates/ah-plugins-rails/src/lib.rs`, `crates/ah-plugins-security/src/lib.rs`, `crates/ah-plugins-security/src/tiered_policy.rs`, `crates/ah-plugins-prompt-attachment/src/lib.rs`, `crates/ah-plugins-agent-loop/src/lib.rs`, `crates/ah-plugins-agent-control/src/lib.rs`, `crates/ah-plugins-workflow/src/lib.rs`, `crates/ah-app/src/lib.rs`, `profiles/dev.toml`, `profiles/prod.toml`, `fixtures/goal_manager.json`, `fixtures/prompt_attachment.json`, `fixtures/runtime_model_switching.json`, `differential/run_python.py`, `references/goal_manager.json`, `references/prompt_attachment.json`, `references/runtime_model_switching.json`, `crates/ah-app/tests/differential.rs`
+- Verification: `CARGO_TARGET_DIR=/tmp/ah-target-p2-02 cargo test --offline -p ah-plugins-rails -p ah-plugins-prompt-attachment -p ah-plugins-agent-control -p ah-plugins-agent-loop -p ah-plugins-workflow -p ah-plugins-security -p ah-app (189 passed; 1 ignored)`, `CARGO_TARGET_DIR=/tmp/ah-target-p2-02 cargo clippy --offline -p ah-plugins-rails -p ah-plugins-prompt-attachment -p ah-plugins-agent-control -p ah-plugins-agent-loop -p ah-plugins-workflow -p ah-plugins-security -p ah-app --all-targets -- -D warnings (passed)`, `cargo fmt --all --check (passed)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py llm_retry tool_retry task_completion task_planning task_lifecycle subagents (Python outcomes generated)`, `python differential/compare.py llm_retry tool_retry task_completion task_planning task_lifecycle subagents (30 matched, 0 known divergence, 0 mismatch)`, `AGENT_CORE_ROOT=/Volumes/coder/开源/rs_jiuwen/agent-core python differential/run_python.py goal_manager prompt_attachment runtime_model_switching (Python outcomes generated)`, `python differential/compare.py goal_manager prompt_attachment runtime_model_switching (5 matched, 0 known divergence, 0 mismatch)`, `CARGO_TARGET_DIR=/tmp/ah-target-security cargo test --offline -p ah-plugins-security --lib network_rule_matches_url_argument (1 passed)`, `cargo run --offline -p ah-app --bin ah-app -- profiles/dev.toml (boot and end-to-end smoke passed)`, `AH_ENV_FILE=.env cargo run --offline -p ah-app --bin ah-app -- profiles/prod.toml (real model chat/stream, agent, workflow, telemetry, symphony and vector policy demo passed)`
+- Production: prod.toml with the repository .env completed the full deterministic application demo; real OpenAI-compatible chat/stream, agent/tool, workflow, telemetry, symphony, Redis-backed vector retrieval and tiered network policy paths passed
+- Differential: Python reference agent-core@aeb88cd8 and Rust reference compared successfully: 35 cases matched, 0 known divergence, 0 mismatch across Rails, GoalManager, PromptAttachment, runtime model switching, task lifecycle and subagent fixtures; cancellation callback control has no Python equivalent and is not claimed
 
 ### P2-03 — Context engine
 

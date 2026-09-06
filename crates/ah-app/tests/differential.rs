@@ -331,7 +331,7 @@ fn reference_task_lifecycle() {
                             .map(|v| v.as_str().unwrap().to_string())
                             .collect(),
                     );
-                    operations.push(json!({"name":"create", "ok":result.is_ok(), "status":result.as_ref().ok().map(|task| status(task))}));
+                    operations.push(json!({"name":"create", "ok":result.is_ok(), "status":result.as_ref().ok().map(status)}));
                 }
                 "update" => {
                     let result = teams.update_task(
