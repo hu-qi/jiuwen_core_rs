@@ -27,6 +27,14 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn postgres_error(operation: &str, error: postgres::Error) -> StoreError {
+    let detail = error
+        .as_db_error()
+        .map(|db| format!("{} (code {:?})", db.message(), db.code()))
+        .unwrap_or_else(|| error.to_string());
+    StoreError(format!("{operation}: {detail}"))
+}
+
 /// 真实 PostgreSQL 后端 store(KV + message)。
 pub struct PgStore {
     conn: Mutex<Client>,
@@ -36,7 +44,7 @@ impl PgStore {
     /// 连接 PostgreSQL(URL 如 postgres://user:pass@127.0.0.1:5432/db)并建表。
     pub fn open(url: &str) -> Result<Self, StoreError> {
         let mut client =
-            Client::connect(url, NoTls).map_err(|e| StoreError(format!("connect pg: {e}")))?;
+            Client::connect(url, NoTls).map_err(|error| postgres_error("connect pg", error))?;
         // 幂等建表(真实 SQL)。
         client
             .batch_execute(
@@ -53,7 +61,7 @@ impl PgStore {
                     PRIMARY KEY (channel, seq)
                 );",
             )
-            .map_err(|e| StoreError(format!("create tables: {e}")))?;
+            .map_err(|error| postgres_error("create tables", error))?;
         Ok(Self {
             conn: Mutex::new(client),
         })
@@ -84,8 +92,12 @@ impl BaseKVStore for PgStore {
         let text = serde_json::to_string(&value)
             .map_err(|e| StoreError(format!("serialize kv json: {e}")))?;
         conn.execute(
-            "INSERT INTO kv (key, value, updated_ms) VALUES ($1, $2, $3)
-             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_ms = EXCLUDED.updated_ms",
+            "MERGE INTO kv AS target
+             USING (VALUES ($1::text, $2::text, $3::bigint)) AS source(key, value, updated_ms)
+             ON target.key = source.key
+             WHEN MATCHED THEN UPDATE SET value = source.value, updated_ms = source.updated_ms
+             WHEN NOT MATCHED THEN INSERT (key, value, updated_ms)
+                 VALUES (source.key, source.value, source.updated_ms)",
             &[&key, &text, &(now_ms() as i64)],
         )
         .map_err(|e| StoreError(format!("pg UPSERT kv {key}: {e}")))?;
