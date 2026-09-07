@@ -120,9 +120,19 @@ mod tests {
         let handle = thread::spawn(move || {
             for _ in 0..3 {
                 let (mut stream, _) = listener.accept().expect("accept");
-                let mut bytes = [0_u8; 2048];
-                let size = stream.read(&mut bytes).expect("request");
-                let request = String::from_utf8_lossy(&bytes[..size]);
+                let mut bytes = Vec::with_capacity(2048);
+                let mut chunk = [0_u8; 512];
+                loop {
+                    let size = stream.read(&mut chunk).expect("request");
+                    if size == 0 {
+                        break;
+                    }
+                    bytes.extend_from_slice(&chunk[..size]);
+                    if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let request = String::from_utf8_lossy(&bytes);
                 let body = if request.starts_with("GET /policy") {
                     r#"{"allowed_path_prefixes":["src/"],"denied_command_patterns":["rm -rf"],"allow_absolute_paths":false}"#
                 } else if request.starts_with("POST /check/fs") {
@@ -136,6 +146,7 @@ mod tests {
                     body
                 );
                 stream.write_all(response.as_bytes()).expect("response");
+                stream.flush().expect("flush response");
             }
         });
         let provider =

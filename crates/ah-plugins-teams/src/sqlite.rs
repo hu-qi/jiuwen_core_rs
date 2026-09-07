@@ -797,7 +797,7 @@ mod tests {
     #[tokio::test]
     async fn sqlite_lifecycle_persists_across_reopen() {
         let root = std::env::temp_dir().join(format!("ah-sqlite-life-{}", std::process::id()));
-        let (ctx, effects) = build_ctx(&root);
+        let (ctx, _effects) = build_ctx(&root);
         let db = root.join("teams.db");
         let rt =
             SqliteTeamRuntime::open(&db, subagent(&ctx), queue(&ctx), ctx.clone()).expect("open");
