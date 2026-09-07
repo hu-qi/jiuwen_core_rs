@@ -1223,6 +1223,22 @@ fn http_embedding_client_parses_openai_compatible_response() {
                 break;
             }
         }
+        let header_end = request
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .expect("request headers")
+            + 4;
+        let headers = String::from_utf8_lossy(&request[..header_end]);
+        let content_length = headers
+            .lines()
+            .find_map(|line| line.strip_prefix("Content-Length: "))
+            .and_then(|value| value.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        while request.len() < header_end + content_length {
+            let size = stream.read(&mut chunk).expect("request body");
+            assert!(size > 0, "request closed before body");
+            request.extend_from_slice(&chunk[..size]);
+        }
         let body = r#"{"data":[{"embedding":[0.25,-0.5,1.0]}]}"#;
         write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).expect("response");
         stream.flush().expect("flush response");
