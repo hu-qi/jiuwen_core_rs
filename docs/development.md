@@ -210,21 +210,19 @@ implementation 的回归门禁。无法由当前 Rust 环境验证的历史行�
 
 ## 当前最终验收状态
 
-当前实现 revision `f952a29` 的 workspace 门禁已通过:
+当前实现 revision `e3b8f67` 的 workspace 门禁已通过:
 
 - `cargo fmt --all --check`;
 - `cargo clippy --offline --workspace --all-targets -- -D warnings`;
 - `cargo test --offline --workspace` — 1490 passed, 252 suites, 7 ignored。
 
 现场 provider E2E 测试入口为 `crates/ah-app/tests/external_services.rs`。当前本地 Docker 已验证
-Pulsar 3.3.3 broker + REST proxy、Elasticsearch 8.15.5、remote sandbox policy service 和
-Milvus 2.4.15 REST entity insert/search/delete。PostgreSQL wire 兼容服务也已通过 GaussDB
-alias 测试,但这不是 GaussDB 厂商实例。
+Pulsar 3.3.3 broker + REST proxy、Elasticsearch 8.15.5、remote sandbox policy service、
+Milvus 2.6.6 REST entity insert/search/delete 和 openGauss PostgreSQL-wire CRUD。
 
-凭据型 DashScope/Anthropic smoke 必须通过 `AH_ENV_FILE` 提供 `DASHSCOPE_API_KEY`、
-`ANTHROPIC_API_KEY` 等声明配置;当前项目 `.env` 没有这两个 key,不得猜测、输出或伪造生产结果。
-GaussDB 厂商实例和 DashScope/Anthropic live smoke 仍保持 `production unverified`,不能改写为
-`production passed`。
+唯一未完成的现场验收是 DashScope/Anthropic live smoke。必须通过 `AH_ENV_FILE` 提供
+`DASHSCOPE_API_KEY`、`ANTHROPIC_API_KEY` 等声明配置;当前项目 `.env` 没有这两个 key,不得猜测、
+输出或伪造生产结果。缺少真实凭据时保持 `production unverified`,不能改写为 `production passed`。
 
 ## 提交规范
 
