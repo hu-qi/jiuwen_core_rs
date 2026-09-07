@@ -572,14 +572,41 @@ mod tests {
         let address = listener.local_addr().expect("response fixture address");
         std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept response fixture");
-            let mut request = [0_u8; 4096];
-            let _ = std::io::Read::read(&mut stream, &mut request);
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 4096];
+            loop {
+                let size = std::io::Read::read(&mut stream, &mut buffer)
+                    .expect("read response fixture request");
+                assert!(size > 0, "request closed before headers");
+                request.extend_from_slice(&buffer[..size]);
+                if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let header_end = request
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .expect("response fixture headers")
+                + 4;
+            let headers = String::from_utf8_lossy(&request[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| line.strip_prefix("Content-Length: "))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            while request.len() < header_end + content_length {
+                let size = std::io::Read::read(&mut stream, &mut buffer)
+                    .expect("read response fixture body");
+                assert!(size > 0, "request closed before body");
+                request.extend_from_slice(&buffer[..size]);
+            }
             let body = r#"{"jsonrpc":"1.0","id":0,"result":{}}"#;
             let response = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                 body.len()
             );
             std::io::Write::write_all(&mut stream, response.as_bytes()).expect("write response");
+            std::io::Write::flush(&mut stream).expect("flush response");
         });
         let raw = JsonRpcTransport::new(card());
         let error = raw
