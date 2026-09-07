@@ -208,6 +208,20 @@ Rust regression reference 不能替代 production E2E,但不需要 Python runner
 implementation 的回归门禁。无法由当前 Rust 环境验证的历史行为必须单独记录,不能标记为
 已对等。
 
+## 当前最终验收状态
+
+当前实现 revision `39ef084` 的 workspace 门禁已通过:
+
+- `cargo fmt --all --check`;
+- `cargo clippy --offline --workspace --all-targets -- -D warnings`;
+- `cargo test --offline --workspace` — 1490 passed, 251 suites, 2 ignored。
+
+Pulsar、Elasticsearch、GaussDB、Milvus 和 remote sandbox 的 provider 已有真实协议实现与本地
+HTTP contract tests,但现场 E2E 必须在对应服务可访问时执行。凭据型 DashScope/Anthropic smoke
+必须通过 `AH_ENV_FILE` 提供 `DASHSCOPE_API_KEY`、`ANTHROPIC_API_KEY` 等声明配置;没有凭据时
+不得猜测、输出或伪造生产结果。现场服务或凭据缺失应保持 `production unverified`,不能改写为
+production passed。
+
 ## 提交规范
 
 ```text

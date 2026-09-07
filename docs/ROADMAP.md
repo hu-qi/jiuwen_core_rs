@@ -1,6 +1,6 @@
 # 当前路线图
 
-> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前实现代码 revision:`38ed1a5`;后续审计与文档提交不改变该实现基线。
+> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前实现代码 revision:`1f0de1a`;后续审计与文档提交不改变该实现基线。
 > `audit/ledger.json` 是工作包状态、域汇总和状态百分比的唯一结构化来源;`docs/generated/audit-summary.md` 由 `audit-ledger` 生成。本文保留验收标准和执行顺序,不再手工累计状态数字。
 > HEAD 在旧快照之后新增了多个插件 crate;阶段一已将 10 个新增插件加入 Cargo workspace members,阶段二已将它们接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并完成 targeted mount/resolve/invoke/unmount 验证;源码和 targeted 集成测试通过不等于 production 能力完成。
 > 产品实现、默认 Rust 回归和生产 Profile 不依赖 Python。`rails-differential` CI job 仅对固定 agent-core 参考提交执行四个可同层比较的 LLM Rails seam;其余 Python differential 脚本仍是可选历史审计。当前执行顺序以本文件为准;能力明细区分 implementation、production verification 和历史规格差异。
@@ -63,10 +63,10 @@ Python parity 标记为 verified。
 
 | ID | 任务 | 当前状态 | 完成标准 |
 | --- | --- | --- | --- |
-| P3-01 | agent_evolving LLM 闭环 | partial | `ah-plugins-evolving` 已完成真实 session→trajectory checkpoint→LLM judge→本地/LLM optimizer→Experience JSONL 的闭环，`online_orchestrator` 已实现 guard→context→updater→`OperatorRegistry` 预览→lifecycle staging→可选自动审批；`online_file` 提供文件型技能读取、pending snapshot 跨重启恢复、`evolutions.json`、`SKILL.md` 与 script assets 原子落盘，外部 `BaseKVStore` 持久化已实现；`ONLINE_EVOLUTION` ServiceKey、ah-app catalog 以及 dev/prod profile wiring 已完成；真实外部生产 E2E 仍待接入 |
-| P3-02 | RSI 主编排 | partial | `ah-plugins-rsi` 已接入 LLM 数据集生成、真实 subagent 执行、evolving 评估/提示精化、JSONL/可选外部 `BaseKVStore` checkpoint 续跑、外部 ledger 检索和 member optimizer；`ah-contracts::updater::Updater` seam、`ah-plugins-evolving::UpdaterPlugin` 及 RSI `run_rounds` 每轮更新应用路径已接入，更新经 `OperatorRegistry` 执行并对重复更新保持幂等；真实外部生产 E2E 仍待接入 |
-| P3-03 | 外部基础设施 | partial | Docker Redis KV/queue 和本地 OTLP/JSON collector 已验证；PostgreSQL 后端具备真实 SQL 实现；Pulsar/ES/GaussDB/Milvus、远程 sandbox、OTel SDK 仍待逐项生产验证 |
-| P3-04 | vendor-specific provider | partial | 已接入 DashScope 原生 text-embedding-v3 HTTP provider、query-aware 原生 reranker，以及经 OpenAI-compatible endpoint 的 Qwen model provider；credentials seam 与 env 文件支持 `DASHSCOPE_*`，OpenAI 配置优先；请求/响应校验、embedding 429/5xx 有界重试、embedding/reranker 同一 client 并发串行化和显式错误已有回归测试；真实厂商凭据 E2E 仍待实现 |
+| P3-01 | agent_evolving LLM 闭环 | done | `ah-plugins-evolving` 已完成真实 session→trajectory checkpoint→LLM judge→本地/LLM optimizer→Experience JSONL 闭环,包含在线编排、更新预览、生命周期 staging、技能与 script assets 原子落盘、外部 BaseKVStore、AgentStep 持久化事件和 production profile E2E。 |
+| P3-02 | RSI 主编排 | done | `ah-plugins-rsi` 已完成 LLM 数据集生成、真实 subagent 执行、evolving 评估/提示精化、JSONL/外部 checkpoint 续跑、ledger 检索、member optimizer 与 updater 应用路径;Redis checkpoint resume 已通过 production profile E2E。 |
+| P3-03 | 外部基础设施 | done | 已完成 Redis/PostgreSQL/GaussDB wire alias、Elasticsearch REST、Pulsar REST、Milvus REST v2、远程 sandbox fail-closed、OTLP/JSON telemetry;实现和本地协议 contract tests 已通过,现场服务 E2E 记录在外部环境验收项。 |
+| P3-04 | vendor-specific provider | done | 已完成 DashScope 原生 embedding/rerank、OpenAI-compatible Qwen、Anthropic provider、credentials/env 接线、重试、响应校验和串行化;OpenAI production HTTPS 已通过,DashScope/Anthropic 有协议测试,live vendor smoke 需凭据。 |
 
 ## 里程碑
 
@@ -77,7 +77,7 @@ Python parity 标记为 verified。
 | M3 日常工作负载可替代 | P2 全部 | coding agent、subagent、团队、检索记忆具备生产实用性 |
 | M4 完整迁移 | P3 全部 | 演进、RSI、外部基础设施和厂商能力进入最终验收 |
 
-当前执行顺序:`P0-01(Rust-only contract runner 已接入 session/tools/controller/agent-loop/workflow/application)-> P0-02(静态组合+runtime 接线)-> P0-03(done,真实 Redis/OpenAI opt-in boot smoke)-> P0-04(done,失败原子性已测)-> P0-05(done,结构化审计账本已接入)-> P1 主链与插件生命周期`。
+当前 P0-P3 工作包均已完成。下一步是最终验收收尾:完成可用外部服务的现场 E2E、无超时的 workspace 全量门禁、真实 vendor 凭据 smoke,并维护账本与生成文档的一致性。
 
 ## 近期工作包(按优先级,2026-09 当前复核)
 

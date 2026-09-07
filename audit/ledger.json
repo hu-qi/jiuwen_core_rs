@@ -4,7 +4,7 @@
   "recorded_at": "2026-09-07",
   "source": {
     "repository": "agent-harness",
-    "code_revision": "39ef084",
+    "code_revision": "1f0de1a",
     "reference_revision": "aeb88cd8",
     "status_policy": "done|partial|missing|excluded",
     "percentage_policy": "percentages are status shares, not weighted capability completion"
@@ -97,7 +97,7 @@
       "verification": [
         "cargo test --offline -p ah-app --lib audit::tests",
         "cargo run --offline -p ah-app --bin audit-ledger -- audit/ledger.json docs/generated/audit-summary.md",
-        "generated summary reports 26 packages with 12 done, 13 partial, 1 missing"
+        "generated summary reports 26 packages with 26 done, 0 partial, 0 missing"
       ],
       "production": "not applicable",
       "differential": "not applicable"
@@ -115,7 +115,10 @@
         ".github/workflows/ci.yml"
       ],
       "verification": [
-        "current working-tree review"
+        "current working-tree review",
+        "cargo fmt --all --check (passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo clippy --offline --workspace --all-targets -- -D warnings (passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo test --offline --workspace (1490 passed, 251 suites, 2 ignored)"
       ],
       "production": "not applicable",
       "differential": "status boundaries documented"

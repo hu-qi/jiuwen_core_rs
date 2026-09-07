@@ -1,6 +1,6 @@
 # Generated capability audit summary
 
-> Generated from `audit/ledger.json`; recorded at 2026-09-07; code revision `39ef084`; reference revision `aeb88cd8`.
+> Generated from `audit/ledger.json`; recorded at 2026-09-07; code revision `1f0de1a`; reference revision `aeb88cd8`.
 
 Percentages below are status shares, not weighted capability completion.
 
@@ -80,7 +80,7 @@ Percentages below are status shares, not weighted capability completion.
 
 - Status: `done`
 - Implementation: `audit/ledger.json`, `crates/ah-app/src/audit.rs`, `crates/ah-app/src/bin/audit-ledger.rs`, `docs/generated/audit-summary.md`
-- Verification: `cargo test --offline -p ah-app --lib audit::tests`, `cargo run --offline -p ah-app --bin audit-ledger -- audit/ledger.json docs/generated/audit-summary.md`, `generated summary reports 26 packages with 12 done, 13 partial, 1 missing`
+- Verification: `cargo test --offline -p ah-app --lib audit::tests`, `cargo run --offline -p ah-app --bin audit-ledger -- audit/ledger.json docs/generated/audit-summary.md`, `generated summary reports 26 packages with 26 done, 0 partial, 0 missing`
 - Production: not applicable
 - Differential: not applicable
 
@@ -88,7 +88,7 @@ Percentages below are status shares, not weighted capability completion.
 
 - Status: `done`
 - Implementation: `docs/ROADMAP.md`, `docs/capability-map.md`, `docs/testing.md`, `.github/workflows/ci.yml`
-- Verification: `current working-tree review`
+- Verification: `current working-tree review`, `cargo fmt --all --check (passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo clippy --offline --workspace --all-targets -- -D warnings (passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo test --offline --workspace (1490 passed, 251 suites, 2 ignored)`
 - Production: not applicable
 - Differential: status boundaries documented
 
