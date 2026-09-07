@@ -4,7 +4,7 @@
   "recorded_at": "2026-09-07",
   "source": {
     "repository": "agent-harness",
-    "code_revision": "1f0de1a",
+    "code_revision": "f952a29",
     "reference_revision": "aeb88cd8",
     "status_policy": "done|partial|missing|excluded",
     "percentage_policy": "percentages are status shares, not weighted capability completion"
@@ -118,7 +118,7 @@
         "current working-tree review",
         "cargo fmt --all --check (passed)",
         "CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo clippy --offline --workspace --all-targets -- -D warnings (passed)",
-        "CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo test --offline --workspace (1490 passed, 251 suites, 2 ignored)"
+        "CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo test --offline --workspace (1490 passed, 252 suites, 7 ignored)"
       ],
       "production": "not applicable",
       "differential": "status boundaries documented"

@@ -1,6 +1,6 @@
 # Generated capability audit summary
 
-> Generated from `audit/ledger.json`; recorded at 2026-09-07; code revision `1f0de1a`; reference revision `aeb88cd8`.
+> Generated from `audit/ledger.json`; recorded at 2026-09-07; code revision `f952a29`; reference revision `aeb88cd8`.
 
 Percentages below are status shares, not weighted capability completion.
 
@@ -88,7 +88,7 @@ Percentages below are status shares, not weighted capability completion.
 
 - Status: `done`
 - Implementation: `docs/ROADMAP.md`, `docs/capability-map.md`, `docs/testing.md`, `.github/workflows/ci.yml`
-- Verification: `current working-tree review`, `cargo fmt --all --check (passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo clippy --offline --workspace --all-targets -- -D warnings (passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo test --offline --workspace (1490 passed, 251 suites, 2 ignored)`
+- Verification: `current working-tree review`, `cargo fmt --all --check (passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo clippy --offline --workspace --all-targets -- -D warnings (passed)`, `CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo test --offline --workspace (1490 passed, 252 suites, 7 ignored)`
 - Production: not applicable
 - Differential: status boundaries documented
 

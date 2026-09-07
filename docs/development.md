@@ -210,17 +210,20 @@ implementation 的回归门禁。无法由当前 Rust 环境验证的历史行�
 
 ## 当前最终验收状态
 
-当前实现 revision `39ef084` 的 workspace 门禁已通过:
+当前实现 revision `f952a29` 的 workspace 门禁已通过:
 
 - `cargo fmt --all --check`;
 - `cargo clippy --offline --workspace --all-targets -- -D warnings`;
-- `cargo test --offline --workspace` — 1490 passed, 251 suites, 2 ignored。
+- `cargo test --offline --workspace` — 1490 passed, 252 suites, 7 ignored。
 
-Pulsar、Elasticsearch、GaussDB、Milvus 和 remote sandbox 的 provider 已有真实协议实现与本地
-HTTP contract tests,但现场 E2E 必须在对应服务可访问时执行。凭据型 DashScope/Anthropic smoke
-必须通过 `AH_ENV_FILE` 提供 `DASHSCOPE_API_KEY`、`ANTHROPIC_API_KEY` 等声明配置;没有凭据时
-不得猜测、输出或伪造生产结果。现场服务或凭据缺失应保持 `production unverified`,不能改写为
-production passed。
+现场 provider E2E 测试入口为 `crates/ah-app/tests/external_services.rs`。当前本地 Docker 已验证
+Pulsar 3.3.3 broker + REST proxy、Elasticsearch 8.15.5 和 remote sandbox policy service。
+PostgreSQL wire 兼容服务也已通过 GaussDB alias 测试,但这不是 GaussDB 厂商实例。Milvus
+2.4.15 对目标 REST v2 路由返回 404,升级镜像因 Docker registry proxy 不可用而未完成。
+
+凭据型 DashScope/Anthropic smoke 必须通过 `AH_ENV_FILE` 提供 `DASHSCOPE_API_KEY`、
+`ANTHROPIC_API_KEY` 等声明配置;当前项目 `.env` 没有这两个 key,不得猜测、输出或伪造生产结果。
+现场服务或凭据缺失应保持 `production unverified`,不能改写为 `production passed`。
 
 ## 提交规范
 
