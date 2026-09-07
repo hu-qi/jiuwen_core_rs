@@ -220,3 +220,23 @@ fn catalog_resolves_every_declared_plugin() {
         }
     }
 }
+
+#[test]
+fn host_catalog_and_profiles_do_not_own_example_cli_plugin() {
+    let cat = catalog();
+    assert!(
+        !cat.iter().any(|(name, _)| {
+            *name == "ah-plugins-cli" || *name == "ah-plugins-cli-permission-ui"
+        })
+    );
+
+    for profile_name in ["dev.toml", "prod.toml"] {
+        let profile = Profile::load(profile_path(profile_name)).unwrap();
+        assert!(
+            !profile
+                .plugin_names()
+                .iter()
+                .any(|name| { name == "ah-plugins-cli" || name == "ah-plugins-cli-permission-ui" })
+        );
+    }
+}

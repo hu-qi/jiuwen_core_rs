@@ -23,7 +23,6 @@ use ah_plugins_autoharness::AutoHarnessPlugin;
 use ah_plugins_bridge_compose::BridgeComposePlugin;
 use ah_plugins_checkpointer::{CheckpointerPlugin, redis_store::RedisCheckpointerStore};
 use ah_plugins_ci::CiPlugin;
-use ah_plugins_cli::{CliPlugin, TerminalPermissionApprovalPlugin};
 use ah_plugins_code::CodePlugin;
 use ah_plugins_common_tools::CommonToolsPlugin;
 use ah_plugins_context::ContextPlugin;
@@ -367,13 +366,6 @@ pub fn plugin_catalog(
                 RedisCheckpointerStore::open(&info.url)
                     .map(|store| Arc::new(store) as Arc<dyn ah_contracts::checkpointer::RedisStore>)
             }))) as DynPlugin,
-        ),
-        ("ah-plugins-cli", Arc::new(CliPlugin) as DynPlugin),
-        (
-            "ah-plugins-cli-permission-ui",
-            Arc::new(TerminalPermissionApprovalPlugin::new(
-                workspace_root.join("permissions/approval_overrides.json"),
-            )) as DynPlugin,
         ),
         (
             // 真实外部 CLI 运行时:通用流式 adapter(boot 不拉起,首次 start 才 spawn)。

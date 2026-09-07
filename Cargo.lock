@@ -19,7 +19,6 @@ dependencies = [
  "ah-plugins-bridge-compose",
  "ah-plugins-checkpointer",
  "ah-plugins-ci",
- "ah-plugins-cli",
  "ah-plugins-code",
  "ah-plugins-common-tools",
  "ah-plugins-context",
@@ -123,6 +122,25 @@ dependencies = [
  "serde_json",
  "tokio",
  "toml",
+]
+
+[[package]]
+name = "ah-code-cli"
+version = "0.1.0"
+dependencies = [
+ "ah-contracts",
+ "ah-hub",
+ "ah-plugins-agent-control",
+ "ah-plugins-agent-loop",
+ "ah-plugins-cli",
+ "ah-plugins-mock",
+ "ah-plugins-model-backup",
+ "ah-plugins-openai",
+ "ah-plugins-session-log",
+ "ah-plugins-sysop",
+ "ah-plugins-tools",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

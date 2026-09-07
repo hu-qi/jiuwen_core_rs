@@ -68,7 +68,6 @@ members = [
     "crates/ah-plugins-optimizer",
     "crates/ah-plugins-team-prompts",
     "crates/ah-plugins-team-schema",
-    "crates/ah-plugins-cli",
     "crates/ah-plugins-mock",
     "crates/ah-plugins-tools",
     "crates/ah-plugins-common-tools",
@@ -113,6 +112,8 @@ members = [
     "crates/ah-plugins-interaction-router",
     "crates/ah-plugins-model-allocator",
     "crates/ah-plugins-prompt-attachment",
+    "example/ah-code-cli",
+    "example/ah-code-cli/plugins/ah-plugins-cli",
     "crates/ah-app",
 ]
 
@@ -199,7 +200,6 @@ ah-plugins-a2a = { path = "crates/ah-plugins-a2a" }
 ah-plugins-bridge-compose = { path = "crates/ah-plugins-bridge-compose" }
 ah-plugins-team-prompts = { path = "crates/ah-plugins-team-prompts" }
 ah-plugins-team-schema = { path = "crates/ah-plugins-team-schema" }
-ah-plugins-cli = { path = "crates/ah-plugins-cli" }
 ah-plugins-mock = { path = "crates/ah-plugins-mock" }
 ah-plugins-tools = { path = "crates/ah-plugins-tools" }
 ah-plugins-common-tools = { path = "crates/ah-plugins-common-tools" }

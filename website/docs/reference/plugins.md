@@ -1,8 +1,10 @@
 # 内置插件目录
 
-当前 Workspace 共包含 **110 个 ah-plugins-* 插件 crate**。本页由 scripts/generate-plugin-catalog.mjs 根据 Cargo metadata 生成，避免新增插件遗漏在网站目录中。
+当前主 Workspace 共包含 **109 个 ah-plugins-* 插件 crate**。位于 `example/` 下的示例插件不计入主项目目录；本页由 scripts/generate-plugin-catalog.mjs 根据 Cargo metadata 生成。
 
-> 插件的稳定名称、构造方式、提供的 ServiceKey 和 Profile 组合仍以对应 crate、`crates/ah-app/src/lib.rs` 与 `profiles/*.toml` 为准。表格中的 description 来自各插件的 `Cargo.toml`。
+示例插件另见 [CLI 开发工具示例](/guide/cli-example)：`ah-plugins-cli`。
+
+> 主项目插件的稳定名称、构造方式、提供的 ServiceKey 和 Profile 组合仍以对应 crate、`crates/ah-app/src/lib.rs` 与 `profiles/*.toml` 为准。表格中的 description 来自各插件的 `Cargo.toml`。
 
 ## 如何使用目录
 
@@ -136,7 +138,6 @@
 | 插件 crate | Cargo 描述 |
 | --- | --- |
 | ah-plugins-ci | Real CI gate runner: subprocess gate commands with timeout, pass/fail + output |
-| ah-plugins-cli | Real cli renderer: Claude Code style terminal output for agent events (tool calls/results, todo checkboxes, messages) |
 | ah-plugins-graph-memory | Real graph memory: entity/relation/episode knowledge graph with JSONL persistence, deterministic extraction, keyword search and neighbor traversal |
 | ah-plugins-kv-cache | Real KV-cache policy hooks: sticky subagent prefetch/offload/evict signals |
 | ah-plugins-memory | Persistent JSON-file or external KV-backed memory with remember/recall/forget tools |

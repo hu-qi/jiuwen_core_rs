@@ -11,6 +11,7 @@ const required = [
   'guide/index.md',
   'guide/harness.md',
   'guide/plugin.md',
+  'guide/cli-example.md',
   'guide/plugins.md',
   'guide/profile.md',
   'guide/events.md',
@@ -46,13 +47,24 @@ const metadata = JSON.parse(execFileSync(
   ['metadata', '--no-deps', '--format-version', '1'],
   { cwd: repositoryRoot, encoding: 'utf8' },
 ))
-const pluginNames = metadata.packages
-  .filter(({ name }) => name.startsWith('ah-plugins-'))
+const allPluginPackages = metadata.packages.filter(({ name }) => name.startsWith('ah-plugins-'))
+const exampleRoot = `${join(repositoryRoot, 'example')}/`
+const pluginNames = allPluginPackages
+  .filter(({ manifest_path }) => !manifest_path.startsWith(exampleRoot))
+  .map(({ name }) => name)
+const examplePluginNames = allPluginPackages
+  .filter(({ manifest_path }) => manifest_path.startsWith(exampleRoot))
   .map(({ name }) => name)
 const catalog = readFileSync(join(root, 'reference/plugins.md'), 'utf8')
 const missingPlugins = pluginNames.filter((name) => !catalog.includes(`| ${name} |`))
 if (missingPlugins.length) {
   console.error(`Plugin catalog is missing ${missingPlugins.length} workspace plugins:\n${missingPlugins.join('\n')}`)
+  process.exit(1)
+}
+
+const misplacedExamplePlugins = examplePluginNames.filter((name) => catalog.includes(`| ${name} |`))
+if (misplacedExamplePlugins.length) {
+  console.error(`Example-only plugins must not be in the built-in catalog:\n${misplacedExamplePlugins.join('\n')}`)
   process.exit(1)
 }
 

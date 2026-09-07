@@ -73,7 +73,6 @@ ah-plugins-git = { workspace = true }
 ah-plugins-graph-memory = { workspace = true }
 ah-plugins-checkpointer = { workspace = true }
 ah-plugins-ci = { workspace = true }
-ah-plugins-cli = { workspace = true }
 ah-plugins-autoharness = { workspace = true }
 ah-plugins-rl = { workspace = true }
 ah-plugins-rl-step = { workspace = true }

@@ -12,9 +12,12 @@ const metadata = JSON.parse(execFileSync(
   { cwd: repositoryRoot, encoding: 'utf8' },
 ))
 
-const plugins = metadata.packages
+const allPlugins = metadata.packages
   .filter(({ name }) => name.startsWith('ah-plugins-'))
   .sort((a, b) => a.name.localeCompare(b.name))
+const exampleRoot = `${join(repositoryRoot, 'example')}/`
+const plugins = allPlugins.filter(({ manifest_path }) => !manifest_path.startsWith(exampleRoot))
+const examplePlugins = allPlugins.filter(({ manifest_path }) => manifest_path.startsWith(exampleRoot))
 
 const categories = [
   {
@@ -62,9 +65,13 @@ for (const plugin of plugins) grouped.get(categoryFor(plugin.name)).push(plugin)
 const lines = [
   '# 内置插件目录',
   '',
-  `当前 Workspace 共包含 **${plugins.length} 个 ah-plugins-* 插件 crate**。本页由 scripts/generate-plugin-catalog.mjs 根据 Cargo metadata 生成，避免新增插件遗漏在网站目录中。`,
+  `当前主 Workspace 共包含 **${plugins.length} 个 ah-plugins-* 插件 crate**。位于 \`example/\` 下的示例插件不计入主项目目录；本页由 scripts/generate-plugin-catalog.mjs 根据 Cargo metadata 生成。`,
   '',
-  '> 插件的稳定名称、构造方式、提供的 ServiceKey 和 Profile 组合仍以对应 crate、`crates/ah-app/src/lib.rs` 与 `profiles/*.toml` 为准。表格中的 description 来自各插件的 `Cargo.toml`。',
+  examplePlugins.length
+    ? `示例插件另见 [CLI 开发工具示例](/guide/cli-example)：${examplePlugins.map(({ name }) => `\`${name}\``).join('、')}。`
+    : '',
+  '',
+  '> 主项目插件的稳定名称、构造方式、提供的 ServiceKey 和 Profile 组合仍以对应 crate、`crates/ah-app/src/lib.rs` 与 `profiles/*.toml` 为准。表格中的 description 来自各插件的 `Cargo.toml`。',
   '',
   '## 如何使用目录',
   '',

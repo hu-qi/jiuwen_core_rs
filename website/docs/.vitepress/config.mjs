@@ -49,6 +49,7 @@ export default defineConfig({
           text: '开始使用',
           items: [
             { text: '启动 Harness', link: '/guide/' },
+            { text: 'CLI 开发工具示例', link: '/guide/cli-example' },
             { text: '开发插件', link: '/guide/plugin' },
             { text: '内置插件概览', link: '/guide/plugins' },
             { text: 'Profile 组合', link: '/guide/profile' },

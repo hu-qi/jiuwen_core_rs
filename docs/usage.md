@@ -183,6 +183,16 @@ cargo run -q --bin ah-cli -- profiles/dev.toml
 CLI 支持会话、团队、队列、工作区、web、code、RSI 等命令。dev profile 下模型由 mock 提供。
 CLI smoke 证明二进制和命令路由可运行,不证明外部 provider 或 Python parity。
 
+可运行的 Claude Code 风格开发工具示例位于 `example/ah-code-cli/`，使用 `ah-plugins-*` 真实插件链提供 REPL、文件读写、编辑、Shell、Session 和 Agent Loop：
+
+```sh
+cargo run -p ah-code-cli -- --workspace .
+```
+
+示例默认使用离线 Mock Provider；通过 `--model openai` 可切换真实 OpenAI-compatible Provider，缺少凭据时显式失败。
+
+终端渲染插件 `ah-plugins-cli` 位于 `example/ah-code-cli/plugins/`，仅由该示例依赖；主项目 `ah-app` Catalog 和 dev/prod Profile 不注册它。
+
 ## 常见问题
 
 - **解析不到服务**:检查插件是否在 Profile、名称是否在 catalog、provides/inject 是否一致;
