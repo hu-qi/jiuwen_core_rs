@@ -1,6 +1,6 @@
 # 当前路线图
 
-> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;当前实现代码 revision:`e3b8f67`;后续审计与文档提交不改变该实现基线。
+> 审计快照基线:`agent-harness@cc561c0`,`agent-core@aeb88cd8`;实现代码基线:`e3b8f67`;当前验收以工作树代码为准,包含 Anthropic thinking block 解析修复;后续文档提交不改变历史快照基线。
 > `audit/ledger.json` 是工作包状态、域汇总和状态百分比的唯一结构化来源;`docs/generated/audit-summary.md` 由 `audit-ledger` 生成。本文保留验收标准和执行顺序,不再手工累计状态数字。
 > HEAD 在旧快照之后新增了多个插件 crate;阶段一已将 10 个新增插件加入 Cargo workspace members,阶段二已将它们接入 `ah-app::plugin_catalog` 与 dev/prod Profile,并完成 targeted mount/resolve/invoke/unmount 验证;源码和 targeted 集成测试通过不等于 production 能力完成。
 > 产品实现、默认 Rust 回归和生产 Profile 不依赖 Python。`rails-differential` CI job 仅对固定 agent-core 参考提交执行四个可同层比较的 LLM Rails seam;其余 Python differential 脚本仍是可选历史审计。当前执行顺序以本文件为准;能力明细区分 implementation、production verification 和历史规格差异。
@@ -66,7 +66,7 @@ Python parity 标记为 verified。
 | P3-01 | agent_evolving LLM 闭环 | done | `ah-plugins-evolving` 已完成真实 session→trajectory checkpoint→LLM judge→本地/LLM optimizer→Experience JSONL 闭环,包含在线编排、更新预览、生命周期 staging、技能与 script assets 原子落盘、外部 BaseKVStore、AgentStep 持久化事件和 production profile E2E。 |
 | P3-02 | RSI 主编排 | done | `ah-plugins-rsi` 已完成 LLM 数据集生成、真实 subagent 执行、evolving 评估/提示精化、JSONL/外部 checkpoint 续跑、ledger 检索、member optimizer 与 updater 应用路径;Redis checkpoint resume 已通过 production profile E2E。 |
 | P3-03 | 外部基础设施 | done | 已完成 Redis/PostgreSQL/openGauss wire alias、Elasticsearch REST、Pulsar REST、Milvus REST v2、远程 sandbox fail-closed、OTLP/JSON telemetry;Pulsar broker+proxy、Elasticsearch、remote sandbox、openGauss 和 Milvus 2.6.6 的本地 Docker E2E 已通过。 |
-| P3-04 | vendor-specific provider | done | 已完成 DashScope 原生 embedding/rerank、OpenAI-compatible Qwen、Anthropic provider、credentials/env 接线、重试、响应校验和串行化;OpenAI production HTTPS 已通过,DashScope/Anthropic 有协议测试,live vendor smoke 需凭据。 |
+| P3-04 | vendor-specific provider | done | 已完成 DashScope 原生 embedding/rerank、OpenAI-compatible Qwen、Anthropic provider、credentials/env 接线、重试、响应校验和串行化;OpenAI production HTTPS 已通过;Anthropic protocol live smoke 已通过(当前配置 endpoint 为 api.deepseek.com/anthropic,非 api.anthropic.com);用户已明确豁免 DashScope live smoke,此前请求返回 Model.AccessDenied/HTTP 403,不宣称真实 native vendor 结果。|
 
 ## 里程碑
 
@@ -77,7 +77,7 @@ Python parity 标记为 verified。
 | M3 日常工作负载可替代 | P2 全部 | coding agent、subagent、团队、检索记忆具备生产实用性 |
 | M4 完整迁移 | P3 全部 | 演进、RSI、外部基础设施和厂商能力进入最终验收 |
 
-当前 P0-P3 工作包均已完成。唯一未闭环事项是 DashScope/Anthropic 真实 vendor smoke,其余外部 provider 的本地 Docker E2E 和 workspace 全量门禁均已通过。
+当前 P0-P3 工作包实现均已完成。剩余 DashScope 原生 embedding/rerank live smoke 已按用户明确要求豁免,保持 unverified;Anthropic protocol smoke 已通过,其余外部 provider 的本地 Docker E2E 和 workspace 全量门禁均已通过。
 
 ## 近期工作包(按优先级,2026-09 当前复核)
 
@@ -99,4 +99,4 @@ Python parity 标记为 verified。
 | 11 | P2-03 context round/dialogue 压缩 | ✅ 已落地:`ah-plugins-context` 按完整 user→assistant final round 保留窗口,不切断 tool-call/tool-result;SessionMemoryManager 缓存相同 session 前缀摘要;ContextEngine 消费 prompt attachment window mutator;context 7/7、AgentLoop 21/21、app contract 15/15、workspace 1376 通过 |
 | 12 | P2-04/05/06 | subagents browser/mobile、messager pyzmq 跨进程 + handoff、retrieval embedding/vector store 生产后端 |
 | 13 | P3-01/02 | ✅ 已完成:生产 profile 真实 OpenAI-compatible LLM 闭环;AgentStep 完成事件持久化;evolving judge/experience/optimizer/updater;RSI dataset generation、真实 subagent 执行、evolving 评估/精化、Redis checkpoint resume |
-| 14 | P3-03/04 | ✅ 已完成实现、协议验收和外部基础设施 E2E;Pulsar、Elasticsearch、remote sandbox、openGauss wire、Milvus 2.6.6 均已通过本地 Docker 验收;仅 DashScope/Anthropic live smoke 仍受真实凭据前置条件限制 |
+| 14 | P3-03/04 | ✅ 已完成实现、协议验收和外部基础设施 E2E;Pulsar、Elasticsearch、remote sandbox、openGauss wire、Milvus 2.6.6 均已通过本地 Docker 验收;Anthropic protocol live smoke 已通过;DashScope native live smoke 已按用户要求豁免,此前模型权限返回 HTTP 403,保持未验证 |

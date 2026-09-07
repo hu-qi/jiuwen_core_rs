@@ -210,19 +210,21 @@ implementation 的回归门禁。无法由当前 Rust 环境验证的历史行�
 
 ## 当前最终验收状态
 
-当前实现 revision `e3b8f67` 的 workspace 门禁已通过:
+当前工作树的 workspace 门禁已通过:
 
 - `cargo fmt --all --check`;
 - `cargo clippy --offline --workspace --all-targets -- -D warnings`;
-- `cargo test --offline --workspace` — 1490 passed, 252 suites, 7 ignored。
+- `cargo test --offline --workspace` — 1491 passed, 252 suites, 9 ignored, 128 filtered。
 
 现场 provider E2E 测试入口为 `crates/ah-app/tests/external_services.rs`。当前本地 Docker 已验证
 Pulsar 3.3.3 broker + REST proxy、Elasticsearch 8.15.5、remote sandbox policy service、
 Milvus 2.6.6 REST entity insert/search/delete 和 openGauss PostgreSQL-wire CRUD。
 
-唯一未完成的现场验收是 DashScope/Anthropic live smoke。必须通过 `AH_ENV_FILE` 提供
-`DASHSCOPE_API_KEY`、`ANTHROPIC_API_KEY` 等声明配置;当前项目 `.env` 没有这两个 key,不得猜测、
-输出或伪造生产结果。缺少真实凭据时保持 `production unverified`,不能改写为 `production passed`。
+当前现场验收使用 `AH_ENV_FILE` 加载项目 `.env`。Anthropic protocol smoke 已通过,但当前配置的
+`ANTHROPIC_BASE_URL` 是 `https://api.deepseek.com/anthropic`,因此该结果证明的是兼容协议路径,
+不是 `api.anthropic.com` 原生服务。DashScope key 已加载,此前 embedding 与 rerank 请求返回
+`Model.AccessDenied` / HTTP 403。用户已明确要求跳过剩余 DashScope live smoke;因此该结果保持
+`unverified`,不伪造 `passed`。
 
 ## 提交规范
 

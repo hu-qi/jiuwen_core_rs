@@ -81,6 +81,12 @@ enum WireBlock {
         kind: String,
         text: String,
     },
+    Thinking {
+        #[serde(rename = "type")]
+        kind: String,
+        thinking: String,
+        signature: Option<String>,
+    },
     Image {
         #[serde(rename = "type")]
         kind: String,
@@ -307,6 +313,7 @@ impl ModelProvider for AnthropicModelProvider {
         let parsed: WireResponse = serde_json::from_str(&body)
             .map_err(|e| ModelError(format!("invalid provider response: {e}")))?;
         let mut content = String::new();
+        let mut reasoning_content = String::new();
         let mut tool_calls = Vec::new();
         for block in parsed.content {
             match block {
@@ -315,6 +322,12 @@ impl ModelProvider for AnthropicModelProvider {
                         content.push('\n');
                     }
                     content.push_str(&text);
+                }
+                WireBlock::Thinking { thinking, .. } => {
+                    if !reasoning_content.is_empty() {
+                        reasoning_content.push('\n');
+                    }
+                    reasoning_content.push_str(&thinking);
                 }
                 WireBlock::Image { .. } => {
                     return Err(ModelError(
@@ -338,7 +351,7 @@ impl ModelProvider for AnthropicModelProvider {
         Ok(ModelResponse {
             content,
             tool_calls,
-            reasoning_content: None,
+            reasoning_content: (!reasoning_content.is_empty()).then_some(reasoning_content),
         })
     }
 }
@@ -432,6 +445,8 @@ mod tests {
                     r#"{"type":"error","error":{"message":"boom"}}"#.to_string()
                 } else if body.contains("tool") {
                     r#"{"id":"msg-test","type":"message","role":"assistant","model":"test","content":[{"type":"tool_use","id":"toolu_1","name":"read_file","input":{"path":"a.txt"}}],"stop_reason":"tool_use","usage":{"input_tokens":1,"output_tokens":1}}"#.to_string()
+                } else if body.contains("thinking") {
+                    r#"{"id":"msg-test","type":"message","role":"assistant","model":"test","content":[{"type":"thinking","thinking":"inspect the request","signature":"sig"},{"type":"text","text":"hello from anthropic"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}"#.to_string()
                 } else {
                     r#"{"id":"msg-test","type":"message","role":"assistant","model":"test","content":[{"type":"text","text":"hello from anthropic"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}"#.to_string()
                 };
@@ -473,6 +488,24 @@ mod tests {
             .expect("chat");
         assert_eq!(response.content, "hello from anthropic");
         assert!(response.tool_calls.is_empty());
+    }
+
+    #[tokio::test]
+    async fn chat_maps_thinking_blocks_to_reasoning_content() {
+        let base_url = start_test_server();
+        let provider = AnthropicModelProvider::new(config(base_url)).expect("provider");
+        let response = provider
+            .chat(ModelRequest {
+                messages: vec![ChatMessage::new(ChatRole::User, "thinking")],
+                ..Default::default()
+            })
+            .await
+            .expect("chat");
+        assert_eq!(response.content, "hello from anthropic");
+        assert_eq!(
+            response.reasoning_content.as_deref(),
+            Some("inspect the request")
+        );
     }
 
     #[tokio::test]

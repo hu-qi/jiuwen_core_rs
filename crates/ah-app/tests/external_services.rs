@@ -1,8 +1,13 @@
+use ah_contracts::llm::{ChatMessage, ChatRole, ModelProvider, ModelRequest};
 use ah_contracts::queue::MessageQueue;
+use ah_contracts::rerank::QueryReranker;
 use ah_contracts::retrieval::{RetrievalHit, RetrievalProvider};
 use ah_contracts::sandbox::SandboxProvider;
 use ah_contracts::store::BaseKVStore;
+use ah_plugins_anthropic::{AnthropicConfig, AnthropicModelProvider};
 use ah_plugins_queue::PulsarRestQueue;
+use ah_plugins_rerank::DashScopeReranker;
+use ah_plugins_retrieval::DashScopeEmbeddingClient;
 use ah_plugins_retrieval::{EmbeddingBackend, MilvusRetrievalProvider};
 use ah_plugins_sandbox::RemoteSandboxProvider;
 use ah_plugins_store::{ElasticsearchKVStore, PgStore};
@@ -120,5 +125,54 @@ fn remote_sandbox_live_e2e() {
             .check_command("rm -rf /tmp/agent-harness")
             .expect("command decision")
             .allow
+    );
+}
+
+#[test]
+#[ignore = "requires a live DashScope HTTPS API"]
+fn dashscope_live_e2e() {
+    let embedding = DashScopeEmbeddingClient::from_env().expect("DASHSCOPE_API_KEY");
+    let vector = embedding
+        .embed("agent harness live vendor smoke")
+        .expect("embedding");
+    assert!(!vector.is_empty());
+
+    let reranker = DashScopeReranker::from_env()
+        .expect("reranker configuration")
+        .expect("DASHSCOPE_API_KEY");
+    let ranked = reranker
+        .rerank_query(
+            "agent harness",
+            &[RetrievalHit {
+                doc_id: "doc-1".into(),
+                chunk: "agent harness vendor verification".into(),
+                score: 0.5,
+            }],
+            1,
+        )
+        .expect("rerank");
+    assert_eq!(ranked.len(), 1);
+}
+
+#[tokio::test]
+#[ignore = "requires a live Anthropic HTTPS API"]
+async fn anthropic_live_e2e() {
+    let config = AnthropicConfig::from_env().expect("ANTHROPIC_API_KEY");
+    let provider = AnthropicModelProvider::new(config).expect("anthropic provider");
+    let response = provider
+        .chat(ModelRequest {
+            messages: vec![ChatMessage::new(
+                ChatRole::User,
+                "Reply with exactly: anthropic-live-ok",
+            )],
+            ..ModelRequest::default()
+        })
+        .await
+        .expect("anthropic chat");
+    assert!(
+        response
+            .content
+            .to_lowercase()
+            .contains("anthropic-live-ok")
     );
 }

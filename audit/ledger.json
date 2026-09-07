@@ -117,8 +117,10 @@
       "verification": [
         "current working-tree review",
         "cargo fmt --all --check (passed)",
-        "CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo clippy --offline --workspace --all-targets -- -D warnings (passed)",
-        "CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo test --offline --workspace (1490 passed, 252 suites, 7 ignored)"
+        "CARGO_TARGET_DIR=/tmp/ah-target-final-test cargo test --offline --workspace (1491 passed, 252 suites, 9 ignored, 128 filtered)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-final-clippy cargo clippy --offline --workspace --all-targets -- -D warnings (passed)",
+        "CARGO_TARGET_DIR=/tmp/ah-target-final-audit cargo run --offline -q -p ah-app --bin audit-ledger -- audit/ledger.json docs/generated/audit-summary.md (generated)",
+        "git diff --check (passed)"
       ],
       "production": "not applicable",
       "differential": "status boundaries documented"
@@ -657,9 +659,9 @@
         "AH_PULSAR_URL=http://127.0.0.1:18083 cargo test --offline -p ah-app --test external_services pulsar_live_e2e -- --ignored (1 passed through Docker Pulsar 3.3.3 broker and Java REST proxy)",
         "AH_SANDBOX_REMOTE_URL=http://127.0.0.1:18082 cargo test --offline -p ah-app --test external_services remote_sandbox_live_e2e -- --ignored (1 passed against Docker remote policy service)",
         "AH_MILVUS_URL=http://127.0.0.1:19530 AH_MILVUS_COLLECTION=agent_harness_e2e cargo test --offline -p ah-app --test external_services milvus_live_e2e -- --ignored (1 passed against Docker Milvus 2.6.6; collection pre-created via live Milvus SDK)",
-        "DashScope/Anthropic live smoke blocked: .env declares no DASHSCOPE_API_KEY or ANTHROPIC_API_KEY"
+        "User-approved waiver: DashScope native embedding/rerank live smoke was not rerun after the observed Model.AccessDenied / HTTP 403; no native vendor result is claimed"
       ],
-      "production": "Live Docker Redis/PostgreSQL and OTLP/JSON collector paths passed. Current local Docker closure covers Pulsar 3.3.3 broker plus REST proxy, Elasticsearch 8.15.5, remote sandbox policy service, Milvus 2.6.6 REST entity insert/search/delete, and openGauss PostgreSQL-wire CRUD through the real openGauss server. DashScope/Anthropic live smoke remains credential-blocked.",
+      "production": "Live Docker Redis/PostgreSQL and OTLP/JSON collector paths passed. Current local Docker closure covers Pulsar 3.3.3 broker plus REST proxy, Elasticsearch 8.15.5, remote sandbox policy service, Milvus 2.6.6 REST entity insert/search/delete, and openGauss PostgreSQL-wire CRUD through the real openGauss server. Anthropic protocol smoke passed against the configured DeepSeek-compatible endpoint. User explicitly waived the remaining DashScope native live smoke; it remains unverified.",
       "differential": "not verified"
     },
     {
@@ -675,7 +677,8 @@
         "crates/ah-plugins-rerank/src/lib.rs",
         "crates/ah-contracts/src/rerank.rs",
         "crates/ah-contracts/src/keys.rs",
-        "crates/ah-app/src/lib.rs"
+        "crates/ah-app/src/lib.rs",
+        "crates/ah-app/tests/external_services.rs"
       ],
       "verification": [
         "cargo test -p ah-plugins-retrieval --lib dashscope_embedding_client_posts_native_request_and_parses_response (1 passed)",
@@ -687,10 +690,12 @@
         "CARGO_TARGET_DIR=/tmp/ah-target-retrieval-tls cargo clippy --offline -p ah-plugins-retrieval --lib --tests -- -D warnings (passed)",
         "CARGO_TARGET_DIR=/tmp/ah-target-rerank cargo clippy --offline -p ah-plugins-rerank --lib --tests -- -D warnings (passed)",
         "CARGO_TARGET_DIR=/tmp/ah-target-p304 cargo test --offline -p ah-plugins-openai --lib (18 passed)",
-        "CARGO_TARGET_DIR=/tmp/ah-target-p304 cargo test --offline -p ah-plugins-anthropic --lib (6 passed)",
-        "AH_ENV_FILE=$PWD/.env CARGO_TARGET_DIR=/tmp/ah-target-p304 cargo run --offline -q -p ah-app --bin ah-app -- profiles/prod.toml (real configured vendor chat/stream/retrieval smoke passed)"
+        "CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo test --offline -p ah-plugins-anthropic --lib (7 passed; thinking/text/tool response blocks)",
+        "AH_ENV_FILE=$PWD/.env CARGO_TARGET_DIR=/tmp/ah-target-p304 cargo run --offline -q -p ah-app --bin ah-app -- profiles/prod.toml (real configured vendor chat/stream/retrieval smoke passed)",
+        "User-approved waiver: AH_ENV_FILE=$PWD/.env cargo test --offline -p ah-app --test external_services dashscope_live_e2e -- --ignored was not rerun; prior observed embedding/rerank responses were Model.AccessDenied / HTTP 403",
+        "AH_ENV_FILE=$PWD/.env CARGO_TARGET_DIR=/tmp/ah-target-workspace-final cargo test --offline -p ah-app --test external_services anthropic_live_e2e -- --ignored (1 passed against configured HTTPS protocol endpoint; endpoint is api.deepseek.com/anthropic, not api.anthropic.com)"
       ],
-      "production": "Configured vendor OpenAI-compatible HTTPS credentials passed the real production profile boot and chat/stream/retrieval path; DashScope native embedding/rerank and Anthropic protocol clients passed focused real-HTTP contract tests. No additional vendor credential files were present for live DashScope/Anthropic calls.",
+      "production": "Configured vendor OpenAI-compatible HTTPS credentials passed the real production profile boot and chat/stream/retrieval path. Anthropic protocol smoke passed against the configured DeepSeek-compatible endpoint and now parses thinking/text blocks. User explicitly waived DashScope native embedding/rerank live smoke; it remains unverified and no native vendor result is claimed.",
       "differential": "not applicable"
     }
   ]
