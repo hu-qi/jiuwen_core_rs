@@ -34,6 +34,7 @@ cargo run --offline -p ah-app --bin ah-app -- profiles/prod.toml
 ## 文档
 
 - [文档索引](docs/README.md)：阅读顺序和完整文档目录。
+- [使用文档站点](website/README.md)：VitePress 本地开发、构建和预览入口。
 - [架构约束](docs/architecture.md)：依赖方向、Seam、Effect、事件和 Profile 规则。
 - [使用指南](docs/usage.md)：启动、编写插件和定义 Seam。
 - [开发流程](docs/development.md)：测试、CI 和 Definition of Done。

@@ -16,6 +16,7 @@ agent-harness 是插件化 agent harness(参考 DeepSeek Harness / Cordis 理念
 - [docs/development.md](docs/development.md) — 开发流程与 CI 门禁
 - [docs/testing.md](docs/testing.md) — 测试与对等验证(契约 fixtures、差分契约、覆盖率)
 - [docs/usage.md](docs/usage.md) — 用户文档(插件编写、seam 定义、事件、profile)
+- [website/README.md](website/README.md) — VitePress 使用文档站点的开发、构建与预览入口。
 - [docs/glossary.md](docs/glossary.md) — 术语表(全文档集统一术语)
 - [docs/event-catalog.md](docs/event-catalog.md) — 事件目录(事件 × 模式 × 生产者 × 消费者)
 - [docs/config-catalog.md](docs/config-catalog.md) — 配置目录(profile 与插件配置字段)

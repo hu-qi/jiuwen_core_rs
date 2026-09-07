@@ -1,0 +1,19 @@
+{
+  "name": "agent-harness-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate:plugins": "node scripts/generate-plugin-catalog.mjs",
+    "dev": "vitepress dev docs",
+    "predev": "npm run generate:plugins",
+    "build": "vitepress build docs",
+    "prebuild": "npm run generate:plugins",
+    "preview": "vitepress preview docs",
+    "test": "node tests/site-contract.mjs",
+    "pretest": "npm run generate:plugins"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  },
+  "packageManager": "pnpm@10.15.0"
+}
