@@ -656,10 +656,10 @@
         "AH_GAUSSDB_URL=postgres://postgres:ah@127.0.0.1:64329/ah cargo test --offline -p ah-app --test external_services gaussdb_wire_live_e2e -- --ignored (1 passed against Docker PostgreSQL wire compatibility service; not a GaussDB vendor instance)",
         "AH_PULSAR_URL=http://127.0.0.1:18083 cargo test --offline -p ah-app --test external_services pulsar_live_e2e -- --ignored (1 passed through Docker Pulsar 3.3.3 broker and Java REST proxy)",
         "AH_SANDBOX_REMOTE_URL=http://127.0.0.1:18082 cargo test --offline -p ah-app --test external_services remote_sandbox_live_e2e -- --ignored (1 passed against Docker remote policy service)",
-        "Milvus live E2E blocked: cached Docker Milvus 2.4.15 returns 404 for REST v2; pull of v2.6.6 unavailable because Docker registry proxy 127.0.0.1:7890 is unreachable",
+        "AH_MILVUS_URL=http://127.0.0.1:19530 AH_MILVUS_COLLECTION=agent_harness_e2e cargo test --offline -p ah-app --test external_services milvus_live_e2e -- --ignored (1 passed against Docker Milvus 2.4.15; collection pre-created via live Milvus SDK)",
         "DashScope/Anthropic live smoke blocked: .env declares no DASHSCOPE_API_KEY or ANTHROPIC_API_KEY"
       ],
-      "production": "Live Docker Redis/PostgreSQL and OTLP/JSON collector paths passed. Current local Docker closure additionally covers Pulsar through a real 3.3.3 broker plus REST proxy, Elasticsearch 8.15.5, and remote sandbox policy service. The GaussDB task has only PostgreSQL-wire compatibility evidence, not a GaussDB vendor instance; Milvus remains blocked by the available image lacking REST v2 and unavailable registry access.",
+      "production": "Live Docker Redis/PostgreSQL and OTLP/JSON collector paths passed. Current local Docker closure additionally covers Pulsar through a real 3.3.3 broker plus REST proxy, Elasticsearch 8.15.5, remote sandbox policy service, and Milvus 2.4.15 REST entity insert/search/delete through a live pre-created collection. The GaussDB task has only PostgreSQL-wire compatibility evidence, not a GaussDB vendor instance; DashScope/Anthropic live smoke remains credential-blocked.",
       "differential": "not verified"
     },
     {
