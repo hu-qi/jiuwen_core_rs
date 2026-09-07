@@ -65,7 +65,7 @@ Python parity 标记为 verified。
 | --- | --- | --- | --- |
 | P3-01 | agent_evolving LLM 闭环 | done | `ah-plugins-evolving` 已完成真实 session→trajectory checkpoint→LLM judge→本地/LLM optimizer→Experience JSONL 闭环,包含在线编排、更新预览、生命周期 staging、技能与 script assets 原子落盘、外部 BaseKVStore、AgentStep 持久化事件和 production profile E2E。 |
 | P3-02 | RSI 主编排 | done | `ah-plugins-rsi` 已完成 LLM 数据集生成、真实 subagent 执行、evolving 评估/提示精化、JSONL/外部 checkpoint 续跑、ledger 检索、member optimizer 与 updater 应用路径;Redis checkpoint resume 已通过 production profile E2E。 |
-| P3-03 | 外部基础设施 | done | 已完成 Redis/PostgreSQL/GaussDB wire alias、Elasticsearch REST、Pulsar REST、Milvus REST v2、远程 sandbox fail-closed、OTLP/JSON telemetry;实现和本地协议 contract tests 已通过,现场服务 E2E 记录在外部环境验收项。 |
+| P3-03 | 外部基础设施 | done | 已完成 Redis/PostgreSQL/GaussDB wire alias、Elasticsearch REST、Pulsar REST、Milvus REST v2、远程 sandbox fail-closed、OTLP/JSON telemetry;Pulsar broker+proxy、Elasticsearch、remote sandbox 的本地 Docker E2E 已通过,GaussDB 仅有 PostgreSQL-wire 兼容服务证据,Milvus 现场 E2E 受镜像 REST v2 不可用阻塞。 |
 | P3-04 | vendor-specific provider | done | 已完成 DashScope 原生 embedding/rerank、OpenAI-compatible Qwen、Anthropic provider、credentials/env 接线、重试、响应校验和串行化;OpenAI production HTTPS 已通过,DashScope/Anthropic 有协议测试,live vendor smoke 需凭据。 |
 
 ## 里程碑
@@ -99,4 +99,4 @@ Python parity 标记为 verified。
 | 11 | P2-03 context round/dialogue 压缩 | ✅ 已落地:`ah-plugins-context` 按完整 user→assistant final round 保留窗口,不切断 tool-call/tool-result;SessionMemoryManager 缓存相同 session 前缀摘要;ContextEngine 消费 prompt attachment window mutator;context 7/7、AgentLoop 21/21、app contract 15/15、workspace 1376 通过 |
 | 12 | P2-04/05/06 | subagents browser/mobile、messager pyzmq 跨进程 + handoff、retrieval embedding/vector store 生产后端 |
 | 13 | P3-01/02 | ✅ 已完成:生产 profile 真实 OpenAI-compatible LLM 闭环;AgentStep 完成事件持久化;evolving judge/experience/optimizer/updater;RSI dataset generation、真实 subagent 执行、evolving 评估/精化、Redis checkpoint resume |
-| 14 | P3-03/04 | ✅ 已完成: Pulsar REST proxy、Elasticsearch REST、GaussDB PostgreSQL-wire alias、Milvus REST v2、远程 sandbox fail-closed 与 OTLP/JSON;真实配置 vendor HTTPS smoke、DashScope/Anthropic 协议测试。Pulsar/ES/GaussDB/Milvus/远程沙箱的现场部署 E2E 仍需对应服务环境 |
+| 14 | P3-03/04 | ✅ 已完成实现与本地协议验收;Pulsar 真实 broker+REST proxy、Elasticsearch、remote sandbox 本地 Docker E2E 已通过;GaussDB vendor 实例、Milvus REST v2 live E2E 和 DashScope/Anthropic live smoke 仍分别受服务镜像/实例及凭据前置条件限制 |
