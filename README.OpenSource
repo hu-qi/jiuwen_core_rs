@@ -1,0 +1,11 @@
+[
+    {
+        "Name": "agent-harness",
+        "License": "Apache-2.0",
+        "License File": "LICENSE",
+        "Version Number": "0.1.0",
+        "Owner": "next-lyle",
+        "Upstream URL": "https://atomgit.com/openJiuwen/agent-core",
+        "Description": "基于上游 openJiuwen agent-core（Python，Apache-2.0）的公开行为规格，使用 Rust 重构的插件化 agent harness。本仓库不包含上游 Python 源码，不提供 openjiuwen.* Python import 路径或 Python 对象模型兼容；行为对等审计以上游 revision aeb88cd8 为参考基线。上游许可证：Apache-2.0（https://atomgit.com/openJiuwen/agent-core）。"
+    }
+]
