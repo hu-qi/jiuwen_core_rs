@@ -29,6 +29,16 @@ impl McpHttpClient {
 
     /// POST 一个 JSON-RPC 2.0 请求,返回 result 或显式错误。
     async fn call(&self, method: &str, params: Value) -> Result<Value, McpError> {
+        self.call_with_timeout(method, params, Duration::from_secs(10))
+            .await
+    }
+
+    async fn call_with_timeout(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Result<Value, McpError> {
         let request = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -41,14 +51,17 @@ impl McpHttpClient {
         let body = tokio::task::spawn_blocking(move || {
             agent
                 .post(&url)
+                .timeout(timeout)
                 .set("Content-Type", "application/json")
                 .send_string(&payload)
                 .map_err(|e| McpError(format!("mcp http call failed: {e}")))?
                 .into_string()
                 .map_err(|e| McpError(format!("read mcp http body failed: {e}")))
-        })
-        .await
-        .map_err(|e| McpError(format!("mcp http task failed: {e}")))??;
+        });
+        let body = tokio::time::timeout(timeout, body)
+            .await
+            .map_err(|_| McpError(format!("mcp http call timed out after {timeout:?}")))?
+            .map_err(|e| McpError(format!("mcp http task failed: {e}")))??;
         let value: Value = serde_json::from_str(&body)
             .map_err(|e| McpError(format!("parse mcp http body: {e}")))?;
         if let Some(error) = value.get("error") {
@@ -101,13 +114,26 @@ impl McpClient for McpHttpClient {
             .map_err(|e| McpError(format!("parse tools/list: {e}")))
     }
 
-    async fn call_tool(&self, name: &str, arguments: Value) -> Result<McpToolResult, McpError> {
+    async fn call_tool_with_timeout(
+        &self,
+        name: &str,
+        arguments: Value,
+        timeout: Duration,
+    ) -> Result<McpToolResult, McpError> {
         let result = self
-            .call(
+            .call_with_timeout(
                 "tools/call",
                 json!({ "name": name, "arguments": arguments }),
+                timeout,
             )
-            .await?;
+            .await
+            .map_err(|error| {
+                if error.0.contains("timed out") {
+                    McpError(format!("MCP tool '{name}' timed out after {timeout:?}"))
+                } else {
+                    error
+                }
+            })?;
         serde_json::from_value(result).map_err(|e| McpError(format!("parse tools/call: {e}")))
     }
 
@@ -198,6 +224,9 @@ mod tests {
             .get("method")
             .and_then(Value::as_str)
             .unwrap_or_default();
+        if method == "tools/call" && req["params"]["name"].as_str() == Some("hang") {
+            std::thread::sleep(Duration::from_millis(100));
+        }
         let result = match method {
             "initialize" => json!({
                 "protocolVersion": "2025-03-26",
@@ -273,5 +302,17 @@ mod tests {
             .await
             .expect_err("unknown");
         assert!(err.0.contains("method not found"));
+    }
+
+    #[tokio::test]
+    async fn tool_call_timeout_bounds_hanging_http_server() {
+        let (_server, url) = TestMcpServer::spawn();
+        let client = McpHttpClient::new(url);
+        let error = client
+            .call_tool_with_timeout("hang", json!({}), Duration::from_millis(20))
+            .await
+            .expect_err("hanging HTTP tool must time out");
+        assert!(error.0.contains("hang"), "got: {}", error.0);
+        assert!(error.0.contains("20ms"), "got: {}", error.0);
     }
 }

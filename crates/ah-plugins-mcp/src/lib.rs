@@ -515,7 +515,12 @@ mod tests {
         async fn list_tools(&self) -> Result<Vec<McpTool>, McpError> {
             unreachable!()
         }
-        async fn call_tool(&self, name: &str, arguments: Value) -> Result<McpToolResult, McpError> {
+        async fn call_tool_with_timeout(
+            &self,
+            name: &str,
+            arguments: Value,
+            _timeout: std::time::Duration,
+        ) -> Result<McpToolResult, McpError> {
             self.calls
                 .lock()
                 .map_err(|_| McpError("recording MCP lock poisoned".into()))?

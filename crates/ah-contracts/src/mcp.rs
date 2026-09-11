@@ -10,8 +10,13 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
+use std::time::Duration;
 
 use crate::seam::Seam;
+
+/// MCP tool calls are bounded by default so an unresponsive server cannot
+/// suspend an agent turn indefinitely.
+pub const DEFAULT_MCP_TOOL_CALL_TIMEOUT: Duration = Duration::from_secs(30);
 /// 一个由 MCP server 暴露的工具。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct McpTool {
@@ -122,8 +127,19 @@ pub trait McpClient: Seam {
     /// 列出 server 暴露的工具。
     async fn list_tools(&self) -> Result<Vec<McpTool>, McpError>;
 
-    /// 调用一个工具;参数为 JSON 对象。
-    async fn call_tool(&self, name: &str, arguments: Value) -> Result<McpToolResult, McpError>;
+    /// 调用一个工具;参数为 JSON 对象,使用默认有界超时。
+    async fn call_tool(&self, name: &str, arguments: Value) -> Result<McpToolResult, McpError> {
+        self.call_tool_with_timeout(name, arguments, DEFAULT_MCP_TOOL_CALL_TIMEOUT)
+            .await
+    }
+
+    /// 调用一个工具并为本次调用指定超时。
+    async fn call_tool_with_timeout(
+        &self,
+        name: &str,
+        arguments: Value,
+        timeout: Duration,
+    ) -> Result<McpToolResult, McpError>;
 
     /// 关闭连接:`shutdown` 请求 + `notifications/exit`,等待子进程退出。
     async fn shutdown(&self) -> Result<(), McpError>;
