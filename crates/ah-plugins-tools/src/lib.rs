@@ -16,7 +16,8 @@ use ah_contracts::prelude::Effect;
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::tools::{
-    Tool, ToolDecision, ToolError, ToolExecuted, ToolInvocation, ToolRegistry,
+    Tool, ToolDecision, ToolError, ToolExecuted, ToolInvocation, ToolInvocationContext,
+    ToolRegistry,
 };
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
@@ -43,6 +44,7 @@ impl LocalToolRegistry {
         &self,
         name: &str,
         call_id: Option<&str>,
+        context: ToolInvocationContext,
         arguments: Value,
     ) -> Result<Value, ToolError> {
         let decision = self
@@ -51,6 +53,7 @@ impl LocalToolRegistry {
                 ToolInvocation {
                     name: name.to_string(),
                     arguments: arguments.clone(),
+                    context: context.clone(),
                 },
                 ToolDecision::allow(arguments.clone()),
             )
@@ -67,9 +70,11 @@ impl LocalToolRegistry {
             .ok_or_else(|| ToolError(format!("tool not found: {name}")))?;
         let started = Instant::now();
         let output = if let Some(call_id) = call_id {
-            tool.invoke_with_id(call_id, decision.arguments).await?
+            tool.invoke_with_id_and_context(&context, call_id, decision.arguments)
+                .await?
         } else {
-            tool.invoke(decision.arguments).await?
+            tool.invoke_with_context(&context, decision.arguments)
+                .await?
         };
         let elapsed_ms = started.elapsed().as_millis() as u64;
         self.ctx
@@ -78,6 +83,7 @@ impl LocalToolRegistry {
                 arguments,
                 output: output.clone(),
                 elapsed_ms,
+                context,
             })
             .await;
         Ok(output)
@@ -106,7 +112,17 @@ impl ToolRegistry for LocalToolRegistry {
     }
 
     async fn invoke(&self, name: &str, arguments: Value) -> Result<Value, ToolError> {
-        self.invoke_impl(name, None, arguments).await
+        self.invoke_impl(name, None, ToolInvocationContext::default(), arguments)
+            .await
+    }
+
+    async fn invoke_with_context(
+        &self,
+        name: &str,
+        context: ToolInvocationContext,
+        arguments: Value,
+    ) -> Result<Value, ToolError> {
+        self.invoke_impl(name, None, context, arguments).await
     }
 
     async fn invoke_with_id(
@@ -115,7 +131,24 @@ impl ToolRegistry for LocalToolRegistry {
         call_id: &str,
         arguments: Value,
     ) -> Result<Value, ToolError> {
-        self.invoke_impl(name, Some(call_id), arguments).await
+        self.invoke_impl(
+            name,
+            Some(call_id),
+            ToolInvocationContext::default(),
+            arguments,
+        )
+        .await
+    }
+
+    async fn invoke_with_id_and_context(
+        &self,
+        name: &str,
+        call_id: &str,
+        context: ToolInvocationContext,
+        arguments: Value,
+    ) -> Result<Value, ToolError> {
+        self.invoke_impl(name, Some(call_id), context, arguments)
+            .await
     }
 }
 
@@ -242,6 +275,68 @@ mod tests {
         assert_eq!(result["deduplicated"], true);
         assert_eq!(*seen.lock().unwrap(), vec!["call-42"]);
         drop(tool_effect);
+        drop(effects);
+    }
+
+    #[tokio::test]
+    async fn invocation_context_reaches_tool_and_pipeline_events() {
+        struct ContextAwareTool {
+            seen: Arc<Mutex<Vec<ToolInvocationContext>>>,
+        }
+
+        #[async_trait]
+        impl Tool for ContextAwareTool {
+            fn name(&self) -> &'static str {
+                "context_aware"
+            }
+            fn description(&self) -> &'static str {
+                "records invocation context"
+            }
+            async fn invoke(&self, _arguments: Value) -> Result<Value, ToolError> {
+                panic!("context-aware path must be used")
+            }
+            async fn invoke_with_context(
+                &self,
+                context: &ToolInvocationContext,
+                _arguments: Value,
+            ) -> Result<Value, ToolError> {
+                self.seen.lock().unwrap().push(context.clone());
+                Ok(json!({"ok": true}))
+            }
+        }
+
+        let ctx = Context::new();
+        let plugin: DynPlugin = Arc::new(ToolsPlugin);
+        let effects = ctx.mount(&plugin).expect("mount");
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let pre = Arc::new(Mutex::new(Vec::new()));
+        let post = Arc::new(Mutex::new(Vec::new()));
+        let pre_seen = pre.clone();
+        let _pre_listener =
+            ctx.on_waterfall::<ToolInvocation, ToolDecision, _, _>(move |event, decision, next| {
+                pre_seen.lock().unwrap().push(event.context);
+                async move { next.next(decision).await }
+            });
+        let post_seen = post.clone();
+        let _post_listener = ctx.on_serial::<ToolExecuted, _, _>(move |event| {
+            post_seen.lock().unwrap().push(event.context);
+            async {}
+        });
+        let registry = ctx.service::<dyn ToolRegistry>(&TOOLS).expect("tools");
+        let _tool = registry.register(Arc::new(ContextAwareTool { seen: seen.clone() }));
+        let first = ToolInvocationContext::new("session-a", Some("user-a".into()));
+        let second = ToolInvocationContext::new("session-b", Some("user-b".into()));
+        for invocation in [&first, &second] {
+            registry
+                .invoke_with_context("context_aware", invocation.clone(), json!({}))
+                .await
+                .expect("invoke with context");
+        }
+
+        let expected = vec![first, second];
+        assert_eq!(*seen.lock().unwrap(), expected);
+        assert_eq!(*pre.lock().unwrap(), expected);
+        assert_eq!(*post.lock().unwrap(), expected);
         drop(effects);
     }
 

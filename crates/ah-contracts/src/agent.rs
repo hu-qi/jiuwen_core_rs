@@ -147,6 +147,9 @@ pub struct AgentRunConfig {
     /// System context supplied by application rails, such as memory hits.
     #[serde(default)]
     pub system_context: Option<String>,
+    /// Caller identity propagated to tool invocations for this run.
+    #[serde(default)]
+    pub identity: Option<String>,
 }
 
 /// Agent loop execution seam consumed by application routing.

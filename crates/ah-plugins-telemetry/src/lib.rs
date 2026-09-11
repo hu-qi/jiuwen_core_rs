@@ -457,6 +457,7 @@ mod tests {
             arguments: json!({ "path": "x.txt" }),
             output: json!({ "ok": true }),
             elapsed_ms: 5,
+            context: ah_contracts::tools::ToolInvocationContext::default(),
         })
         .await;
 

@@ -370,6 +370,7 @@ impl ApplicationRuntime for LocalApplicationRuntime {
                     model: request.model.clone(),
                     temperature: request.temperature,
                     system_context,
+                    identity: request.user_id.clone(),
                 },
             )
             .await;

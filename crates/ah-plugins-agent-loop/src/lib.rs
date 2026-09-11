@@ -31,7 +31,7 @@ use ah_contracts::rails::{RailAction, RailInput, RailPhase, RailRuntime};
 use ah_contracts::seam::Seam;
 use ah_contracts::service::ServiceKey;
 use ah_contracts::session::{SessionEventKind, SessionLog};
-use ah_contracts::tools::ToolRegistry;
+use ah_contracts::tools::{ToolInvocationContext, ToolRegistry};
 use ah_hub::context::Context;
 use ah_hub::plugin::{Plugin, PluginError};
 use async_trait::async_trait;
@@ -94,6 +94,7 @@ pub struct AgentLoop {
     request_model: Option<String>,
     request_temperature: Option<f32>,
     system_context: Option<String>,
+    request_identity: Option<String>,
     backup: Option<Arc<dyn ModelBackup>>,
     backup_policy: ModelBackupPolicy,
 }
@@ -142,6 +143,7 @@ impl AgentLoop {
             request_model: None,
             request_temperature: None,
             system_context: None,
+            request_identity: None,
             backup: None,
             backup_policy: ModelBackupPolicy::default(),
         }
@@ -383,7 +385,12 @@ impl AgentLoop {
         self.request_model = config.model.clone();
         self.request_temperature = config.temperature;
         self.system_context = config.system_context.clone();
+        self.request_identity = config.identity.clone();
         self
+    }
+
+    fn tool_invocation_context(&self, session_id: &str) -> ToolInvocationContext {
+        ToolInvocationContext::new(session_id, self.request_identity.clone())
     }
 
     /// 统一构造 AgentResult(统计字段由调用方传入)。
@@ -652,9 +659,12 @@ impl AgentLoop {
                 ));
             }
 
-            let invoke = self
-                .tools
-                .invoke_with_id(&call.name, &call.id, call.arguments.clone());
+            let invoke = self.tools.invoke_with_id_and_context(
+                &call.name,
+                &call.id,
+                self.tool_invocation_context(session_id),
+                call.arguments.clone(),
+            );
             let (status, output) = match self.race_control(session_id, deadline, invoke).await? {
                 Ok(value) => ("completed", value.to_string()),
                 Err(error) => ("error", format!("tool error: {error}")),
@@ -1335,9 +1345,12 @@ impl AgentLoop {
                     .is_some_and(|tool| tool.idempotent());
                 let mut tool_attempt = 0_u32;
                 let (status, output) = loop {
-                    let invoke =
-                        self.tools
-                            .invoke_with_id(&call.name, &call.id, call.arguments.clone());
+                    let invoke = self.tools.invoke_with_id_and_context(
+                        &call.name,
+                        &call.id,
+                        self.tool_invocation_context(&session_id),
+                        call.arguments.clone(),
+                    );
                     match self.race_control(&session_id, deadline, invoke).await {
                         Ok(Ok(value)) => {
                             total_tool_calls += 1;
@@ -2862,6 +2875,101 @@ mod tests {
         assert_eq!(result.answer.as_deref(), Some("final answer"));
         assert_eq!(result.iterations, 2, "两轮工具轮 + 一轮作答");
         assert_eq!(result.tool_calls, 2, "两个工具调用均已统计");
+        let _ = std::fs::remove_dir_all(&session_dir);
+    }
+
+    #[tokio::test]
+    async fn agent_loop_propagates_session_and_identity_to_tool() {
+        use ah_contracts::tools::{Tool, ToolError, ToolInvocationContext};
+        use serde_json::Value;
+
+        struct ContextTool(StdArc<std::sync::Mutex<Vec<ToolInvocationContext>>>);
+        #[async_trait]
+        impl Tool for ContextTool {
+            fn name(&self) -> &'static str {
+                "context_tool"
+            }
+            fn description(&self) -> &'static str {
+                "capture tool context"
+            }
+            async fn invoke(&self, _: Value) -> Result<Value, ToolError> {
+                panic!("agent-loop must use contextual invocation")
+            }
+            async fn invoke_with_id_and_context(
+                &self,
+                context: &ToolInvocationContext,
+                _call_id: &str,
+                _arguments: Value,
+            ) -> Result<Value, ToolError> {
+                self.0.lock().unwrap().push(context.clone());
+                Ok(json!({"ok": true}))
+            }
+        }
+
+        struct ToolThenAnswer(AtomicUsize);
+        impl Seam for ToolThenAnswer {}
+        #[async_trait]
+        impl ModelProvider for ToolThenAnswer {
+            fn name(&self) -> &'static str {
+                "tool-then-answer"
+            }
+            async fn chat(
+                &self,
+                _: ModelRequest,
+            ) -> Result<ModelResponse, ah_contracts::llm::ModelError> {
+                if self.0.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Ok(ModelResponse {
+                        tool_calls: vec![ToolCall {
+                            id: "call-context".into(),
+                            name: "context_tool".into(),
+                            arguments: json!({}),
+                        }],
+                        ..Default::default()
+                    })
+                } else {
+                    Ok(ModelResponse {
+                        content: "done".into(),
+                        ..Default::default()
+                    })
+                }
+            }
+        }
+
+        let ctx = Context::new();
+        let session_dir =
+            std::env::temp_dir().join(format!("ah-loop-context-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&session_dir);
+        let session = StdArc::new(
+            ah_plugins_session_log::JsonlSessionLog::open(
+                session_dir.join("session-a.jsonl"),
+                ctx.clone(),
+            )
+            .unwrap(),
+        );
+        let registry = StdArc::new(ah_plugins_tools::LocalToolRegistry::new(ctx.clone()));
+        let seen = StdArc::new(std::sync::Mutex::new(Vec::new()));
+        let _tool = registry.register(StdArc::new(ContextTool(seen.clone())));
+        let agent = AgentLoop::new(
+            StdArc::new(ToolThenAnswer(AtomicUsize::new(0))),
+            registry,
+            session.clone(),
+            ctx,
+            2,
+        )
+        .with_request_config(&ah_contracts::agent::AgentRunConfig {
+            identity: Some("user-a".into()),
+            ..Default::default()
+        });
+
+        let result = agent.run_in_session(session.clone(), "context").await;
+        assert_eq!(result.state, AgentRunState::Completed, "{result:?}");
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![ToolInvocationContext::new(
+                session.id(),
+                Some("user-a".into())
+            )]
+        );
         let _ = std::fs::remove_dir_all(&session_dir);
     }
 
