@@ -306,23 +306,14 @@ impl McpClient for StdioMcpClient {
             .get("content")
             .and_then(Value::as_array)
             .ok_or_else(|| McpError("tools/call result missing content array".to_string()))?;
-        let mut parsed = Vec::with_capacity(content.len());
-        for entry in content {
-            match entry.get("type").and_then(Value::as_str) {
-                Some("text") => {
-                    let text = entry
-                        .get("text")
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| McpError("text content missing text field".to_string()))?
-                        .to_string();
-                    parsed.push(McpContent::Text(text));
-                }
-                Some(other) => {
-                    return Err(McpError(format!("unsupported MCP content type: {other}")));
-                }
-                None => return Err(McpError("MCP content entry missing type field".to_string())),
-            }
-        }
+        let parsed = content
+            .iter()
+            .cloned()
+            .map(|entry| {
+                serde_json::from_value::<McpContent>(entry)
+                    .map_err(|error| McpError(format!("invalid tools/call content: {error}")))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(McpToolResult {
             content: parsed,
             is_error,

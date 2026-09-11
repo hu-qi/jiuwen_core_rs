@@ -6,7 +6,7 @@
 # carry an "id") with a JSON-RPC response on stdout; ignores notifications
 # (messages without "id"); exits when stdin reaches EOF.
 #
-# Requests handled: initialize, tools/list, tools/call (echo / add), shutdown.
+# Requests handled: initialize, tools/list, tools/call (echo / add / screenshot), shutdown.
 # Unknown tools are answered with a JSON-RPC error (code -32602).
 #
 # If MARKER_DIR (or $1) is set, creates "$MARKER_DIR/exited" just before
@@ -40,7 +40,7 @@ while IFS= read -r line; do
             printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"fake-mcp-server","version":"0.1.0"}}}'
             ;;
         tools/list)
-            printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"result":{"tools":[{"name":"echo","description":"echo back a text argument","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}},{"name":"add","description":"add two integers","inputSchema":{"type":"object","properties":{"a":{"type":"integer"},"b":{"type":"integer"}},"required":["a","b"]}}]}}'
+            printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"result":{"tools":[{"name":"echo","description":"echo back a text argument","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}},{"name":"add","description":"add two integers","inputSchema":{"type":"object","properties":{"a":{"type":"integer"},"b":{"type":"integer"}},"required":["a","b"]}},{"name":"screenshot","description":"return a PNG image","inputSchema":{"type":"object","properties":{},"required":[]}}]}}'
             ;;
         tools/call)
             name=$(json_field name "$line")
@@ -54,6 +54,9 @@ while IFS= read -r line; do
                     b=$(json_int b "$line")
                     sum=$((a + b))
                     printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"result":{"content":[{"type":"text","text":"'"$sum"'"}],"isError":false}}'
+                    ;;
+                screenshot)
+                    printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"result":{"content":[{"type":"image","mimeType":"image/png","data":"iVBORw0KGgo="}],"isError":false}}'
                     ;;
                 *)
                     printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"error":{"code":-32602,"message":"Unknown tool: '"$name"'"}}'
