@@ -572,10 +572,10 @@ impl Controller for LocalController {
             TaskStatus::Completed
             | TaskStatus::Failed
             | TaskStatus::Canceled
-            | TaskStatus::Paused => {
-                if working.get(&session_id).is_some_and(|id| id == task_id) {
-                    working.remove(&session_id);
-                }
+            | TaskStatus::Paused
+                if working.get(&session_id).is_some_and(|id| id == task_id) =>
+            {
+                working.remove(&session_id);
             }
             _ => {}
         }

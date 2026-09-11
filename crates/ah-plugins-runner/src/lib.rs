@@ -70,7 +70,7 @@ impl LocalCallbackChain {
                 )
             })
             .collect();
-        entries.sort_by(|a, b| b.1.priority.cmp(&a.1.priority));
+        entries.sort_by_key(|entry| std::cmp::Reverse(entry.1.priority));
         entries
     }
 
