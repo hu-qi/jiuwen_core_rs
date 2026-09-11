@@ -44,7 +44,7 @@ async fn stdio_client_real_subprocess_roundtrip() {
     // list_tools:解析 server 返回的工具与 inputSchema。
     let tools = client.list_tools().await.expect("list_tools");
     let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
-    assert_eq!(names, vec!["echo", "add"]);
+    assert_eq!(names, vec!["echo", "add", "render_image"]);
     assert_eq!(
         tools[0].input_schema["properties"]["text"]["type"],
         "string"
@@ -67,6 +67,23 @@ async fn stdio_client_real_subprocess_roundtrip() {
         .await
         .expect("call add");
     assert_eq!(sum.content, vec![McpContent::Text("42".to_string())]);
+
+    // call_tool:图片内容块(image + text 混合,均被接受而非报错)。
+    let rendered = client
+        .call_tool("render_image", json!({}))
+        .await
+        .expect("call render_image");
+    assert!(!rendered.is_error);
+    assert_eq!(
+        rendered.content,
+        vec![
+            McpContent::Image {
+                mime_type: "image/png".to_string(),
+                data: "aGVsbG8gcG5n".to_string(),
+            },
+            McpContent::Text("rendered".to_string()),
+        ]
+    );
 
     // 真实 shutdown:shutdown 请求 + exit 通知,子进程真实退出。
     client.shutdown().await.expect("shutdown");
@@ -141,7 +158,7 @@ async fn plugin_registers_seam_and_mcp_call_tool() {
     let mcp: Arc<dyn McpClient> = ctx.service(&MCP).expect("mcp seam");
     let info = mcp.initialize().await.expect("initialize via seam");
     assert_eq!(info.server_name, "fake-mcp-server");
-    assert_eq!(mcp.list_tools().await.expect("list_tools").len(), 2);
+    assert_eq!(mcp.list_tools().await.expect("list_tools").len(), 3);
 
     // mcp_call_tool 注册进 tools seam 并可经注册表真实调用。
     let registry = ctx

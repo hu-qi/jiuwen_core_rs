@@ -40,7 +40,7 @@ while IFS= read -r line; do
             printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"fake-mcp-server","version":"0.1.0"}}}'
             ;;
         tools/list)
-            printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"result":{"tools":[{"name":"echo","description":"echo back a text argument","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}},{"name":"add","description":"add two integers","inputSchema":{"type":"object","properties":{"a":{"type":"integer"},"b":{"type":"integer"}},"required":["a","b"]}}]}}'
+            printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"result":{"tools":[{"name":"echo","description":"echo back a text argument","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}},{"name":"add","description":"add two integers","inputSchema":{"type":"object","properties":{"a":{"type":"integer"},"b":{"type":"integer"}},"required":["a","b"]}},{"name":"render_image","description":"return an image content block","inputSchema":{"type":"object"}}]}}'
             ;;
         tools/call)
             name=$(json_field name "$line")
@@ -54,6 +54,9 @@ while IFS= read -r line; do
                     b=$(json_int b "$line")
                     sum=$((a + b))
                     printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"result":{"content":[{"type":"text","text":"'"$sum"'"}],"isError":false}}'
+                    ;;
+                render_image)
+                    printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"result":{"content":[{"type":"image","data":"aGVsbG8gcG5n","mimeType":"image/png"},{"type":"text","text":"rendered"}],"isError":false}}'
                     ;;
                 *)
                     printf '%s\n' '{"jsonrpc":"2.0","id":'"$id"',"error":{"code":-32602,"message":"Unknown tool: '"$name"'"}}'

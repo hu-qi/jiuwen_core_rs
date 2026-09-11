@@ -317,6 +317,21 @@ impl McpClient for StdioMcpClient {
                         .to_string();
                     parsed.push(McpContent::Text(text));
                 }
+                Some("image") => {
+                    let data = entry
+                        .get("data")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| McpError("image content missing data field".to_string()))?
+                        .to_string();
+                    let mime_type = entry
+                        .get("mimeType")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            McpError("image content missing mimeType field".to_string())
+                        })?
+                        .to_string();
+                    parsed.push(McpContent::Image { mime_type, data });
+                }
                 Some(other) => {
                     return Err(McpError(format!("unsupported MCP content type: {other}")));
                 }
