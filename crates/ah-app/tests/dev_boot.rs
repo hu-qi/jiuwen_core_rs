@@ -3,6 +3,8 @@
 
 use std::path::PathBuf;
 
+mod common;
+
 use ah_contracts::agent::{AgentRequest, AgentRunState, ApplicationRuntime};
 use ah_contracts::keys::{APPLICATION, LLM};
 
@@ -23,6 +25,7 @@ async fn dev_profile_boots_without_cloud_credentials_and_invokes_application() {
     let (root, session_path, session_dir, memory_dir, retrieval_dir, telemetry_dir) = paths();
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).expect("boot root");
+    let _env = common::scratch_env_file(&root);
 
     let profile = concat!(env!("CARGO_MANIFEST_DIR"), "/../../profiles/dev.toml");
     let (ctx, effects) = ah_app::boot(

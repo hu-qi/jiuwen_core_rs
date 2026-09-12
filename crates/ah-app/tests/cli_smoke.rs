@@ -12,11 +12,14 @@ fn cli_subcommands_run_for_real() {
     let root = std::env::temp_dir().join(format!("ah-cli-e2e-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).expect("create temp dir");
+    let env_file = root.join("test.env");
+    std::fs::write(&env_file, "# deterministic dev profile fixture\n").expect("write env file");
     let profile = concat!(env!("CARGO_MANIFEST_DIR"), "/../../profiles/dev.toml");
 
     let mut child = Command::new(bin)
         .arg(profile)
         .current_dir(&root)
+        .env("AH_ENV_FILE", &env_file)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

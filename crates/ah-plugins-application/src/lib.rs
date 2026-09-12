@@ -142,7 +142,7 @@ impl ApplicationRuntime for LocalApplicationRuntime {
                     .await
                 {
                     Ok(intent) => intent,
-                    Err(error) if llm.name() == "mock" => {
+                    Err(_error) if llm.name() == "mock" => {
                         controller.recognize_intent(&request.input)
                     }
                     Err(error) => {
@@ -308,11 +308,7 @@ impl ApplicationRuntime for LocalApplicationRuntime {
         let system_context = request
             .user_id
             .as_deref()
-            .and_then(|user_id| {
-                self.ctx
-                    .service::<dyn MemoryProvider>(&MEMORY)
-                    .map(|memory| (user_id, memory))
-            })
+            .zip(self.ctx.service::<dyn MemoryProvider>(&MEMORY))
             .and_then(|(user_id, memory)| memory_context(memory.as_ref(), user_id, &request.input));
         if let Some(workflow) = request.workflow {
             let spec: WorkflowSpec = serde_json::from_value(workflow)

@@ -6,6 +6,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+mod common;
+
 use ah_contracts::agent::{
     AgentFailure, AgentLoopRuntime, AgentRequest, AgentRunState, ApplicationRuntime,
 };
@@ -548,6 +550,7 @@ async fn rust_contract_workflow_fixture() {
 async fn rust_contract_application_fixture() {
     let root = root_for("application");
     std::fs::create_dir_all(&root).expect("application root");
+    let _env = common::scratch_env_file(&root);
     let session_path = root.join("default.jsonl");
     let session_dir = root.join("sessions");
     let profile = concat!(env!("CARGO_MANIFEST_DIR"), "/../../profiles/dev.toml");
