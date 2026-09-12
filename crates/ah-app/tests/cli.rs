@@ -11,8 +11,7 @@ fn cli_runs_task_and_manages_sessions() {
     let _ = std::fs::remove_dir_all(&cwd);
     std::fs::create_dir_all(&cwd).expect("create cwd");
     let env_file = cwd.join("test.env");
-    std::fs::write(&env_file, "# deterministic dev profile fixture\n")
-        .expect("write env file");
+    std::fs::write(&env_file, "# deterministic dev profile fixture\n").expect("write env file");
     let profile = concat!(env!("CARGO_MANIFEST_DIR"), "/../../profiles/dev.toml");
 
     let mut child = Command::new(bin)
