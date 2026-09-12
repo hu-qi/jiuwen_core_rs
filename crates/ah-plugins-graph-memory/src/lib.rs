@@ -98,7 +98,7 @@ fn extract_entities(text: &str) -> Vec<(String, usize)> {
         .into_iter()
         .filter(|(_, count)| *count > 1 || text.len() <= 60)
         .collect();
-    result.sort_by(|a, b| b.1.cmp(&a.1));
+    result.sort_by_key(|entry| std::cmp::Reverse(entry.1));
     result
 }
 

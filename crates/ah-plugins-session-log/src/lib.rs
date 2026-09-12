@@ -198,7 +198,7 @@ fn load_events(file: &mut File) -> Result<Vec<SessionEvent>, SessionError> {
                 Err(error) if error.0.contains("unsupported session log version") => {
                     return Err(error);
                 }
-                Err(error)
+                Err(_error)
                     if text.trim_start().starts_with('{')
                         && (text.contains("\"version\"") || text.contains("\"event\"")) =>
                 {
