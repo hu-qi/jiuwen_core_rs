@@ -138,10 +138,10 @@ impl Runtime {
                 }
             }
             Command::Read(path) => {
-                if let Ok(value) = self.invoke_tool("read_file", json!({"path": path})).await {
-                    if let Some(content) = value.get("content").and_then(Value::as_str) {
-                        println!("\n{content}");
-                    }
+                if let Ok(value) = self.invoke_tool("read_file", json!({"path": path})).await
+                    && let Some(content) = value.get("content").and_then(Value::as_str)
+                {
+                    println!("\n{content}");
                 }
             }
             Command::Write { path, content } => {
@@ -165,15 +165,15 @@ impl Runtime {
                     )
                     .await
                 {
-                    if let Some(stdout) = value.get("stdout").and_then(Value::as_str) {
-                        if !stdout.is_empty() {
-                            println!("{stdout}");
-                        }
+                    if let Some(stdout) = value.get("stdout").and_then(Value::as_str)
+                        && !stdout.is_empty()
+                    {
+                        println!("{stdout}");
                     }
-                    if let Some(stderr) = value.get("stderr").and_then(Value::as_str) {
-                        if !stderr.is_empty() {
-                            eprintln!("{stderr}");
-                        }
+                    if let Some(stderr) = value.get("stderr").and_then(Value::as_str)
+                        && !stderr.is_empty()
+                    {
+                        eprintln!("{stderr}");
                     }
                 }
             }

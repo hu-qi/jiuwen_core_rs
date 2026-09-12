@@ -12,6 +12,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+// Both ignored smoke tests change process-wide configuration during boot.
+static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 use ah_contracts::agent::{AgentRequest, AgentRunState, ApplicationRuntime};
 use ah_contracts::controller::{Controller, TaskExecutor, TaskStatus};
 use ah_contracts::evolving::EvolvingRuntime;
@@ -277,6 +280,7 @@ impl TaskExecutor for ProductionExecutor {
 #[tokio::test]
 #[ignore = "requires a real Redis service; CI runs this test explicitly"]
 async fn production_profile_exercises_p1_application_controller_workflow() {
+    let _env_lock = ENV_LOCK.lock().await;
     let fixture = start_model_fixture();
     let (root, session_path, session_dir, memory_dir, retrieval_dir, telemetry_dir) = paths();
     let _ = std::fs::remove_dir_all(&root);
@@ -750,6 +754,7 @@ async fn production_profile_exercises_p1_application_controller_workflow() {
 #[tokio::test]
 #[ignore = "requires a real Redis service; CI runs this test explicitly"]
 async fn production_profile_exercises_p3_evolving_and_rsi() {
+    let _env_lock = ENV_LOCK.lock().await;
     let fixture = start_model_fixture();
     let root = std::env::temp_dir().join(format!("ah-prod-p3-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);

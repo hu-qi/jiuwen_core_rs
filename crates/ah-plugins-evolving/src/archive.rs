@@ -111,7 +111,6 @@ pub fn list_pairs(archive_names: &BTreeSet<String>) -> Vec<EvolutionArchivePair>
 /// 修剪计数(对齐 prune 的计数逻辑;返回应移除的对数)。
 pub fn prune_count(pairs: &[EvolutionArchivePair], keep_latest: Option<usize>) -> usize {
     let keep = keep_latest.unwrap_or(DEFAULT_ARCHIVE_KEEP_LATEST);
-    let keep = keep.max(0);
     pairs.len().saturating_sub(keep)
 }
 
