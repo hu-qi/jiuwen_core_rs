@@ -52,6 +52,7 @@ payload 约定:
 | --- | --- | --- |
 | name | String | 工具名 |
 | arguments | Value | 参数(监听器可改写) |
+| context | ToolInvocationContext | 请求级 session_id 与可选 caller identity；不进入全局工具 schema |
 
 waterfall 决策值 ToolDecision { allow: bool, reason: Option<String>, arguments: Value }:
 监听器调 Next::next 委托下游(可改写参数);直接返回决策即短路——allow=false 时
@@ -65,6 +66,7 @@ waterfall 决策值 ToolDecision { allow: bool, reason: Option<String>, argument
 | arguments | Value | 实际参数 |
 | output | Value | 执行结果 |
 | elapsed_ms | u64 | 耗时(毫秒) |
+| context | ToolInvocationContext | 与 pre-execute 和实际工具调用相同的请求归属上下文 |
 
 ### teams/swarm — SwarmEvent(swarm.rs)
 

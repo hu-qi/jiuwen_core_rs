@@ -20,6 +20,26 @@ impl core::fmt::Display for ToolError {
 
 impl std::error::Error for ToolError {}
 
+/// Request-scoped attribution carried only during tool execution.
+///
+/// Tool schemas remain global metadata; authorization, audit, and isolation
+/// consumers use this context at invocation time.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ToolInvocationContext {
+    pub session_id: String,
+    #[serde(default)]
+    pub identity: Option<String>,
+}
+
+impl ToolInvocationContext {
+    pub fn new(session_id: impl Into<String>, identity: Option<String>) -> Self {
+        Self {
+            session_id: session_id.into(),
+            identity,
+        }
+    }
+}
+
 /// 模型可见工具(Service Definition)。
 ///
 /// 实现方(插件)提供具体工具;消费方(agent 循环、workflow 组件)
@@ -40,6 +60,16 @@ pub trait Tool: Send + Sync + 'static {
     /// 执行工具,返回 JSON 结果。
     async fn invoke(&self, arguments: Value) -> Result<Value, ToolError>;
 
+    /// Execute with request-scoped attribution. Context-insensitive tools keep
+    /// implementing [`Tool::invoke`] and inherit this adapter.
+    async fn invoke_with_context(
+        &self,
+        _context: &ToolInvocationContext,
+        arguments: Value,
+    ) -> Result<Value, ToolError> {
+        self.invoke(arguments).await
+    }
+
     /// 是否允许在崩溃恢复时重试同一调用。
     ///
     /// 默认 false,采取失败关闭策略。只有工具能以 `call_id` 去重时才可返回 true。
@@ -50,6 +80,17 @@ pub trait Tool: Send + Sync + 'static {
     /// 携带持久化 tool-call id 执行,供幂等工具实现去重。
     async fn invoke_with_id(&self, _call_id: &str, arguments: Value) -> Result<Value, ToolError> {
         self.invoke(arguments).await
+    }
+
+    /// Execute an idempotent call with both its stable ID and attribution.
+    async fn invoke_with_id_and_context(
+        &self,
+        context: &ToolInvocationContext,
+        call_id: &str,
+        arguments: Value,
+    ) -> Result<Value, ToolError> {
+        let _ = context;
+        self.invoke_with_id(call_id, arguments).await
     }
 }
 
@@ -68,6 +109,16 @@ pub trait ToolRegistry: Seam {
     fn names(&self) -> Vec<String>;
 
     async fn invoke(&self, name: &str, arguments: Value) -> Result<Value, ToolError>;
+    /// Invoke with request-scoped attribution.
+    async fn invoke_with_context(
+        &self,
+        name: &str,
+        context: ToolInvocationContext,
+        arguments: Value,
+    ) -> Result<Value, ToolError> {
+        let _ = context;
+        self.invoke(name, arguments).await
+    }
     /// 按名调用工具。
     /// Execute a tool while preserving the stable call ID.
     async fn invoke_with_id(
@@ -78,6 +129,17 @@ pub trait ToolRegistry: Seam {
     ) -> Result<Value, ToolError> {
         let _ = call_id;
         self.invoke(name, arguments).await
+    }
+    /// Invoke with a stable call ID and request-scoped attribution.
+    async fn invoke_with_id_and_context(
+        &self,
+        name: &str,
+        call_id: &str,
+        context: ToolInvocationContext,
+        arguments: Value,
+    ) -> Result<Value, ToolError> {
+        let _ = context;
+        self.invoke_with_id(name, call_id, arguments).await
     }
 }
 
@@ -94,6 +156,7 @@ pub trait ToolRegistry: Seam {
 pub struct ToolInvocation {
     pub name: String,
     pub arguments: Value,
+    pub context: ToolInvocationContext,
 }
 
 impl crate::event::Event for ToolInvocation {
@@ -138,6 +201,7 @@ pub struct ToolExecuted {
     pub arguments: Value,
     pub output: Value,
     pub elapsed_ms: u64,
+    pub context: ToolInvocationContext,
 }
 
 impl crate::event::Event for ToolExecuted {
@@ -323,6 +387,20 @@ mod tests {
     #[test]
     fn validate_accepts_valid_bilingual_meta() {
         assert!(validate_provider(&valid_meta()).is_ok());
+    }
+
+    #[test]
+    fn invocation_context_roundtrips_attribution() {
+        let context = ToolInvocationContext::new("session-a", Some("user-a".into()));
+        let wire = serde_json::to_value(&context).expect("serialize context");
+        assert_eq!(
+            wire,
+            json!({"session_id": "session-a", "identity": "user-a"})
+        );
+        assert_eq!(
+            serde_json::from_value::<ToolInvocationContext>(wire).expect("deserialize context"),
+            context
+        );
     }
 
     #[test]
