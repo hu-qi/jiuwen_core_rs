@@ -101,10 +101,7 @@ impl StreamJsonParser {
     pub fn push(&mut self, chunk: &str) -> Vec<Value> {
         self.buffer.push_str(chunk);
         let mut out = Vec::new();
-        loop {
-            let Some((_, content_start)) = find_fence_start(&self.buffer) else {
-                break;
-            };
+        while let Some((_, content_start)) = find_fence_start(&self.buffer) {
             let content = &self.buffer[content_start..];
             let Some(end_rel) = find_fence_end(content) else {
                 break;

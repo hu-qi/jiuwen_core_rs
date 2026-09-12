@@ -10,11 +10,14 @@ fn cli_runs_task_and_manages_sessions() {
     let cwd = std::env::temp_dir().join(format!("ah-cli-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&cwd);
     std::fs::create_dir_all(&cwd).expect("create cwd");
+    let env_file = cwd.join("test.env");
+    std::fs::write(&env_file, "# deterministic dev profile fixture\n").expect("write env file");
     let profile = concat!(env!("CARGO_MANIFEST_DIR"), "/../../profiles/dev.toml");
 
     let mut child = Command::new(bin)
         .current_dir(&cwd)
         .arg(profile)
+        .env("AH_ENV_FILE", &env_file)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

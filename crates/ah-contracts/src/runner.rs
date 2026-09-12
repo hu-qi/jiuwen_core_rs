@@ -62,11 +62,7 @@ impl CallbackMetrics {
 
     /// 平均耗时(无调用返回 0)。
     pub fn avg_ms(&self) -> u64 {
-        if self.call_count == 0 {
-            0
-        } else {
-            self.total_ms / self.call_count
-        }
+        self.total_ms.checked_div(self.call_count).unwrap_or(0)
     }
 
     /// 错误率(0.0..=1.0)。
