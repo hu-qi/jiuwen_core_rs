@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use ah_contracts::keys::MCP;
 use ah_contracts::mcp::{McpClient, McpContent};
@@ -96,6 +97,25 @@ async fn unknown_tool_maps_to_jsonrpc_error() {
     );
 
     client.shutdown().await.expect("shutdown");
+    let _ = std::fs::remove_dir_all(&marker);
+}
+
+#[tokio::test]
+async fn tool_call_timeout_bounds_hanging_stdio_server() {
+    let marker = marker_dir("timeout");
+    let client = StdioMcpClient::new(fake_server(), vec![marker.to_string_lossy().into_owned()]);
+    client.initialize().await.expect("initialize");
+
+    let error = client
+        .call_tool_with_timeout("hang", json!({}), Duration::from_millis(25))
+        .await
+        .expect_err("hanging tool must time out");
+    assert!(error.0.contains("hang"), "got: {}", error.0);
+    assert!(error.0.contains("25ms"), "got: {}", error.0);
+
+    // A timed-out request leaves this single-flight stdio transport out of sync,
+    // so dropping the kill-on-drop client is the only safe cleanup path.
+    drop(client);
     let _ = std::fs::remove_dir_all(&marker);
 }
 

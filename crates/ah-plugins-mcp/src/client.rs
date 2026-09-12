@@ -290,14 +290,20 @@ impl McpClient for StdioMcpClient {
             .collect()
     }
 
-    async fn call_tool(&self, name: &str, arguments: Value) -> Result<McpToolResult, McpError> {
+    async fn call_tool_with_timeout(
+        &self,
+        name: &str,
+        arguments: Value,
+        timeout: Duration,
+    ) -> Result<McpToolResult, McpError> {
         let transport = self.transport().await?;
-        let result = transport
-            .request(
-                "tools/call",
-                Some(json!({ "name": name, "arguments": arguments })),
-            )
-            .await?;
+        let request = transport.request(
+            "tools/call",
+            Some(json!({ "name": name, "arguments": arguments })),
+        );
+        let result = tokio::time::timeout(timeout, request)
+            .await
+            .map_err(|_| McpError(format!("MCP tool '{name}' timed out after {timeout:?}")))??;
         let is_error = result
             .get("isError")
             .and_then(Value::as_bool)
